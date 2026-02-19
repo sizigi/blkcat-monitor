@@ -14,8 +14,16 @@ export class AgentConnection {
   constructor(private opts: AgentConnectionOptions) {
     this.ws = new WebSocket(opts.serverUrl);
 
-    this.openPromise = new Promise((resolve) => {
+    this.openPromise = new Promise((resolve, reject) => {
       this.ws.addEventListener("open", () => resolve());
+      this.ws.addEventListener("error", (ev) => {
+        const msg = (ev as ErrorEvent).message ?? "unknown error";
+        reject(new Error(`WebSocket error: ${msg}`));
+      });
+      this.ws.addEventListener("close", (ev) => {
+        const { code, reason } = ev as CloseEvent;
+        reject(new Error(`WebSocket closed before open: code=${code} reason=${reason}`));
+      });
     });
 
     this.ws.addEventListener("message", (ev) => {
