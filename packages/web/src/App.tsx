@@ -8,7 +8,7 @@ const WS_URL =
   `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/ws/dashboard`;
 
 export default function App() {
-  const { connected, machines, outputs, sendInput } = useSocket(WS_URL);
+  const { connected, machines, outputs, sendInput, startSession } = useSocket(WS_URL);
   const [selectedMachine, setSelectedMachine] = useState<string>();
   const [selectedSession, setSelectedSession] = useState<string>();
 
@@ -37,6 +37,7 @@ export default function App() {
           setSelectedMachine(m);
           setSelectedSession(s);
         }}
+        onStartSession={startSession}
       />
       <main style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
         {!connected && (

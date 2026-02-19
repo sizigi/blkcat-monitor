@@ -4,6 +4,7 @@ interface AgentConnectionOptions {
   serverUrl: string;
   machineId: string;
   onInput: (msg: { sessionId: string; text?: string; key?: string; data?: string }) => void;
+  onStartSession?: (args?: string) => void;
 }
 
 export class AgentConnection {
@@ -22,6 +23,8 @@ export class AgentConnection {
         const msg: ServerToAgentMessage = JSON.parse(ev.data as string);
         if (msg.type === "input") {
           opts.onInput({ sessionId: msg.sessionId, text: msg.text, key: msg.key, data: msg.data });
+        } else if (msg.type === "start_session") {
+          opts.onStartSession?.(msg.args);
         }
       } catch {}
     });

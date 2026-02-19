@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import type { MachineSnapshot } from "@blkcat/shared";
 
 interface SidebarProps {
@@ -6,6 +6,7 @@ interface SidebarProps {
   selectedMachine?: string;
   selectedSession?: string;
   onSelectSession: (machineId: string, sessionId: string) => void;
+  onStartSession?: (machineId: string, args?: string) => void;
 }
 
 export function Sidebar({
@@ -13,7 +14,10 @@ export function Sidebar({
   selectedMachine,
   selectedSession,
   onSelectSession,
+  onStartSession,
 }: SidebarProps) {
+  const [expandedMachine, setExpandedMachine] = useState<string | null>(null);
+  const [sessionArgs, setSessionArgs] = useState("");
   return (
     <aside
       style={{
@@ -52,8 +56,78 @@ export function Sidebar({
                 display: "inline-block",
               }}
             />
-            {machine.machineId}
+            <span style={{ flex: 1 }}>{machine.machineId}</span>
+            {onStartSession && (
+              <button
+                data-testid={`new-session-${machine.machineId}`}
+                onClick={() => {
+                  setExpandedMachine(
+                    expandedMachine === machine.machineId ? null : machine.machineId,
+                  );
+                  setSessionArgs("");
+                }}
+                style={{
+                  background: "none",
+                  border: "1px solid var(--border)",
+                  borderRadius: 4,
+                  color: "var(--text-muted)",
+                  cursor: "pointer",
+                  fontSize: 14,
+                  lineHeight: 1,
+                  padding: "2px 6px",
+                }}
+              >
+                +
+              </button>
+            )}
           </div>
+          {expandedMachine === machine.machineId && onStartSession && (
+            <form
+              data-testid={`new-session-form-${machine.machineId}`}
+              onSubmit={(e) => {
+                e.preventDefault();
+                onStartSession(machine.machineId, sessionArgs || undefined);
+                setExpandedMachine(null);
+                setSessionArgs("");
+              }}
+              style={{
+                padding: "4px 16px 8px 32px",
+                display: "flex",
+                gap: 4,
+              }}
+            >
+              <input
+                data-testid={`new-session-args-${machine.machineId}`}
+                type="text"
+                value={sessionArgs}
+                onChange={(e) => setSessionArgs(e.target.value)}
+                placeholder="e.g. --model sonnet"
+                style={{
+                  flex: 1,
+                  padding: "4px 8px",
+                  fontSize: 12,
+                  background: "var(--bg)",
+                  color: "var(--text)",
+                  border: "1px solid var(--border)",
+                  borderRadius: 4,
+                }}
+              />
+              <button
+                type="submit"
+                style={{
+                  padding: "4px 8px",
+                  fontSize: 12,
+                  background: "var(--accent)",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 4,
+                  cursor: "pointer",
+                }}
+              >
+                Start
+              </button>
+            </form>
+          )}
           {machine.sessions.map((session) => {
             const isSelected =
               selectedMachine === machine.machineId &&

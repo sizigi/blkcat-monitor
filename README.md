@@ -30,10 +30,16 @@ bun install
 ### 1. Start the server
 
 ```bash
-BLKCAT_SECRET=mysecret bun packages/server/src/index.ts
+bun packages/server/src/index.ts
 ```
 
-The server listens on port 3000 by default (`BLKCAT_PORT` to change).
+The server listens on `0.0.0.0:3000` by default. Use `BLKCAT_HOST` and `BLKCAT_PORT` to change.
+
+To serve the built dashboard as static files:
+
+```bash
+BLKCAT_STATIC_DIR=packages/web/dist bun packages/server/src/index.ts
+```
 
 ### 2. Start an agent
 
@@ -41,20 +47,22 @@ On each machine you want to monitor:
 
 ```bash
 BLKCAT_SERVER_URL=ws://your-server:3000/ws/agent \
-BLKCAT_SECRET=mysecret \
 bun packages/agent/src/index.ts
 ```
 
 The agent auto-discovers local tmux sessions running Claude Code and begins streaming their output.
 
-### 3. Start the dashboard
+### 3. Open the dashboard
+
+If using `BLKCAT_STATIC_DIR`, the dashboard is served at `http://your-server:3000`.
+
+For development, run the Vite dev server:
 
 ```bash
-cd packages/web
-VITE_SECRET=mysecret bunx vite
+cd packages/web && bunx vite
 ```
 
-Open http://localhost:5173 — select a session from the sidebar to view terminal output and send commands.
+Open http://localhost:5173 — select a session from the sidebar to view terminal output and send commands. Use the "+" button next to a machine name to start a new Claude Code session with optional arguments.
 
 ## Packages
 
@@ -71,15 +79,14 @@ Open http://localhost:5173 — select a session from the sidebar to view termina
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `BLKCAT_SECRET` | (required) | Shared authentication token |
 | `BLKCAT_PORT` | `3000` | Server listen port |
+| `BLKCAT_HOST` | `0.0.0.0` | Server bind address |
 | `BLKCAT_STATIC_DIR` | — | Serve static files from this directory |
 
 ### Agent
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `BLKCAT_SECRET` | (required) | Shared authentication token |
 | `BLKCAT_SERVER_URL` | `ws://localhost:3000/ws/agent` | Server WebSocket URL |
 | `BLKCAT_MACHINE_ID` | hostname | Machine identifier |
 | `BLKCAT_POLL_INTERVAL` | `300` | Pane capture interval in ms |
@@ -105,7 +112,6 @@ Open http://localhost:5173 — select a session from the sidebar to view termina
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `VITE_SECRET` | — | Authentication token |
 | `VITE_WS_URL` | auto-detected | WebSocket URL for server |
 
 ## REST API

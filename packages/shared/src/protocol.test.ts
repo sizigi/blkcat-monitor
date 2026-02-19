@@ -51,4 +51,21 @@ describe("parseDashboardMessage", () => {
     }));
     expect(msg?.type).toBe("input");
   });
+
+  it("parses start_session message", () => {
+    const msg = parseDashboardMessage(JSON.stringify({
+      type: "start_session",
+      machineId: "m1",
+      args: "--model sonnet",
+    }));
+    expect(msg?.type).toBe("start_session");
+  });
+
+  it("parses start_session without args", () => {
+    const msg = parseDashboardMessage(JSON.stringify({
+      type: "start_session",
+      machineId: "m1",
+    }));
+    expect(msg?.type).toBe("start_session");
+  });
 });

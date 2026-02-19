@@ -91,4 +91,36 @@ describe("useSocket", () => {
     expect(sent.type).toBe("input");
     expect(sent.data).toBe("\r");
   });
+
+  it("sends start_session message with args", async () => {
+    const { result } = renderHook(() => useSocket("ws://test"));
+
+    await vi.waitFor(() => expect(result.current.connected).toBe(true));
+
+    act(() => {
+      result.current.startSession("m1", "--model sonnet");
+    });
+
+    const ws = MockWebSocket.instances[0];
+    const sent = JSON.parse(ws.sent[0]);
+    expect(sent.type).toBe("start_session");
+    expect(sent.machineId).toBe("m1");
+    expect(sent.args).toBe("--model sonnet");
+  });
+
+  it("sends start_session message without args", async () => {
+    const { result } = renderHook(() => useSocket("ws://test"));
+
+    await vi.waitFor(() => expect(result.current.connected).toBe(true));
+
+    act(() => {
+      result.current.startSession("m1");
+    });
+
+    const ws = MockWebSocket.instances[0];
+    const sent = JSON.parse(ws.sent[0]);
+    expect(sent.type).toBe("start_session");
+    expect(sent.machineId).toBe("m1");
+    expect(sent.args).toBeUndefined();
+  });
 });

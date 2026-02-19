@@ -56,6 +56,20 @@ async function main() {
       else if (text) cap.sendText(sessionId, text);
       if (key) cap.sendKey(sessionId, key);
     },
+    onStartSession: (args?: string) => {
+      const localCap = new TmuxCapture(bunExec);
+      const paneId = localCap.startSession(args);
+      if (!paneId) {
+        console.error("Failed to start new session");
+        return;
+      }
+      captures.set(paneId, localCap);
+      const session: SessionInfo = { id: paneId, name: `claude${args ? ` ${args}` : ""}`, target: "local" };
+      manualSessions.push(session);
+      const all = [...autoSessions, ...manualSessions];
+      conn.updateSessions(all);
+      console.log(`Started new session: ${paneId}`);
+    },
   });
 
   await conn.waitForOpen();

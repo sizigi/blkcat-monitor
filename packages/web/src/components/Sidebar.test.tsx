@@ -37,4 +37,47 @@ describe("Sidebar", () => {
 
     expect(screen.getByText("No machines connected")).toBeInTheDocument();
   });
+
+  it("shows + button when onStartSession is provided", () => {
+    render(
+      <Sidebar machines={machines} onSelectSession={() => {}} onStartSession={() => {}} />,
+    );
+
+    expect(screen.getByTestId("new-session-m1")).toBeInTheDocument();
+  });
+
+  it("does not show + button when onStartSession is not provided", () => {
+    render(<Sidebar machines={machines} onSelectSession={() => {}} />);
+
+    expect(screen.queryByTestId("new-session-m1")).not.toBeInTheDocument();
+  });
+
+  it("shows form on + click and calls onStartSession on submit", () => {
+    const onStart = vi.fn();
+    render(
+      <Sidebar machines={machines} onSelectSession={() => {}} onStartSession={onStart} />,
+    );
+
+    fireEvent.click(screen.getByTestId("new-session-m1"));
+    expect(screen.getByTestId("new-session-form-m1")).toBeInTheDocument();
+
+    const input = screen.getByTestId("new-session-args-m1");
+    fireEvent.change(input, { target: { value: "--model sonnet" } });
+    fireEvent.submit(screen.getByTestId("new-session-form-m1"));
+
+    expect(onStart).toHaveBeenCalledWith("m1", "--model sonnet");
+    expect(screen.queryByTestId("new-session-form-m1")).not.toBeInTheDocument();
+  });
+
+  it("calls onStartSession with undefined when args empty", () => {
+    const onStart = vi.fn();
+    render(
+      <Sidebar machines={machines} onSelectSession={() => {}} onStartSession={onStart} />,
+    );
+
+    fireEvent.click(screen.getByTestId("new-session-m1"));
+    fireEvent.submit(screen.getByTestId("new-session-form-m1"));
+
+    expect(onStart).toHaveBeenCalledWith("m1", undefined);
+  });
 });

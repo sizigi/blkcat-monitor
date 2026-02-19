@@ -53,4 +53,34 @@ describe("TmuxCapture", () => {
     capture.sendKey("dev:0.0", "Enter");
     expect(calls[0]).toEqual(["tmux", "send-keys", "-t", "dev:0.0", "Enter"]);
   });
+
+  it("starts a new session with args", () => {
+    const exec = mockExec({
+      "tmux new-window -P -F #{session_name}:#{window_index}.#{pane_index} claude --model sonnet": {
+        success: true,
+        stdout: "dev:1.0\n",
+      },
+    });
+    const capture = new TmuxCapture(exec);
+    const paneId = capture.startSession("--model sonnet");
+    expect(paneId).toBe("dev:1.0");
+  });
+
+  it("starts a new session without args", () => {
+    const exec = mockExec({
+      "tmux new-window -P -F #{session_name}:#{window_index}.#{pane_index} claude": {
+        success: true,
+        stdout: "dev:1.0\n",
+      },
+    });
+    const capture = new TmuxCapture(exec);
+    const paneId = capture.startSession();
+    expect(paneId).toBe("dev:1.0");
+  });
+
+  it("returns null when startSession fails", () => {
+    const exec = mockExec({});
+    const capture = new TmuxCapture(exec);
+    expect(capture.startSession()).toBeNull();
+  });
 });

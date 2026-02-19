@@ -8,6 +8,7 @@ import {
 
 interface ServerOptions {
   port: number;
+  hostname?: string;
   staticDir?: string;
 }
 
@@ -44,6 +45,7 @@ export function createServer(opts: ServerOptions) {
 
   const server = Bun.serve({
     port: opts.port,
+    hostname: opts.hostname,
     fetch(req, server) {
       const url = new URL(req.url);
       if (url.pathname === "/ws/agent") {
@@ -137,6 +139,13 @@ export function createServer(opts: ServerOptions) {
               if (msg.text) fwd.text = msg.text;
               if (msg.key) fwd.key = msg.key;
               if (msg.data) fwd.data = msg.data;
+              machine.ws.send(JSON.stringify(fwd));
+            }
+          } else if (msg.type === "start_session") {
+            const machine = machines.get(msg.machineId);
+            if (machine) {
+              const fwd: Record<string, any> = { type: "start_session" };
+              if (msg.args) fwd.args = msg.args;
               machine.ws.send(JSON.stringify(fwd));
             }
           }

@@ -16,6 +16,7 @@ export interface UseSocketReturn {
   machines: MachineSnapshot[];
   outputs: OutputLine[];
   sendInput: (machineId: string, sessionId: string, opts: { text?: string; key?: string; data?: string }) => void;
+  startSession: (machineId: string, args?: string) => void;
 }
 
 export function useSocket(url: string): UseSocketReturn {
@@ -56,15 +57,23 @@ export function useSocket(url: string): UseSocketReturn {
             return [...prev, updated];
           });
         } else if (msg.type === "output") {
-          setOutputs((prev) => [
-            ...prev,
-            {
+          setOutputs((prev) => {
+            const entry: OutputLine = {
               machineId: msg.machineId,
               sessionId: msg.sessionId,
               lines: msg.lines,
               timestamp: msg.timestamp,
-            },
-          ]);
+            };
+            const idx = prev.findIndex(
+              (o) => o.machineId === msg.machineId && o.sessionId === msg.sessionId,
+            );
+            if (idx >= 0) {
+              const next = [...prev];
+              next[idx] = entry;
+              return next;
+            }
+            return [...prev, entry];
+          });
         }
       } catch {}
     });
@@ -86,5 +95,17 @@ export function useSocket(url: string): UseSocketReturn {
     [],
   );
 
-  return { connected, machines, outputs, sendInput };
+  const startSession = useCallback(
+    (machineId: string, args?: string) => {
+      const ws = wsRef.current;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        const msg: Record<string, any> = { type: "start_session", machineId };
+        if (args) msg.args = args;
+        ws.send(JSON.stringify(msg));
+      }
+    },
+    [],
+  );
+
+  return { connected, machines, outputs, sendInput, startSession };
 }

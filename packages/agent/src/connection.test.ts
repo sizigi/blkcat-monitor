@@ -38,4 +38,33 @@ describe("AgentConnection", () => {
     conn.close();
     dash.close();
   });
+
+  it("receives start_session message", async () => {
+    const startArgs: (string | undefined)[] = [];
+    const conn = new AgentConnection({
+      serverUrl: `ws://localhost:${server.port}/ws/agent`,
+      machineId: "test-agent-start",
+      onInput: () => {},
+      onStartSession: (args) => startArgs.push(args),
+    });
+
+    await conn.waitForOpen();
+    conn.register([{ id: "s1", name: "dev", target: "local" }]);
+    await Bun.sleep(50);
+
+    const dash = new WebSocket(`ws://localhost:${server.port}/ws/dashboard`);
+    await new Promise<void>((r) => dash.addEventListener("open", () => r()));
+    await Bun.sleep(50);
+
+    dash.send(JSON.stringify({
+      type: "start_session", machineId: "test-agent-start", args: "--model sonnet",
+    }));
+    await Bun.sleep(100);
+
+    expect(startArgs.length).toBeGreaterThanOrEqual(1);
+    expect(startArgs[0]).toBe("--model sonnet");
+
+    conn.close();
+    dash.close();
+  });
 });

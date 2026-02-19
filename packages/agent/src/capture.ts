@@ -64,6 +64,14 @@ export class TmuxCapture {
     this.exec(cmd);
   }
 
+  startSession(args?: string): string | null {
+    const claudeCmd = args ? `claude ${args}` : "claude";
+    const cmd = [...this.sshPrefix, "tmux", "new-window", "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}", claudeCmd];
+    const result = this.exec(cmd);
+    if (!result.success) return null;
+    return result.stdout.trim();
+  }
+
   static forSSH(host: string, key?: string): TmuxCapture {
     const sshCmd = ["ssh", "-o", "ControlMaster=auto",
       "-o", "ControlPath=~/.ssh/blkcat-%r@%h:%p",

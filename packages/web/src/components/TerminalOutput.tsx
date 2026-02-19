@@ -57,11 +57,13 @@ export function TerminalOutput({ lines, onData }: TerminalOutputProps) {
   useEffect(() => {
     const term = termRef.current;
     if (!term) return;
-    if (lines !== prevLinesRef.current) {
-      term.reset();
-      term.write(lines.join("\r\n"));
-      prevLinesRef.current = lines;
-    }
+    if (lines === prevLinesRef.current) return;
+    // Clear scrollback buffer (non-visual), then move cursor home +
+    // clear visible area + write content in a single write() call
+    // so xterm.js renders it atomically in one frame (no blank flash).
+    term.clear();
+    term.write("\x1b[H\x1b[2J" + lines.join("\r\n"));
+    prevLinesRef.current = lines;
   }, [lines]);
 
   return (

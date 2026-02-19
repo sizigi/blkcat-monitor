@@ -50,7 +50,12 @@ export interface ServerInputMessage {
   data?: string;
 }
 
-export type ServerToAgentMessage = ServerInputMessage;
+export interface ServerStartSessionMessage {
+  type: "start_session";
+  args?: string;
+}
+
+export type ServerToAgentMessage = ServerInputMessage | ServerStartSessionMessage;
 
 // --- Server -> Dashboard messages ---
 
@@ -89,12 +94,18 @@ export interface DashboardInputMessage {
   data?: string;
 }
 
-export type DashboardToServerMessage = DashboardInputMessage;
+export interface DashboardStartSessionMessage {
+  type: "start_session";
+  machineId: string;
+  args?: string;
+}
+
+export type DashboardToServerMessage = DashboardInputMessage | DashboardStartSessionMessage;
 
 // --- Parsers ---
 
 const AGENT_TYPES = new Set(["register", "output", "sessions"]);
-const DASHBOARD_TYPES = new Set(["input"]);
+const DASHBOARD_TYPES = new Set(["input", "start_session"]);
 
 export function parseAgentMessage(raw: string): AgentToServerMessage | null {
   try {
