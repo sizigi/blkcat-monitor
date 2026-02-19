@@ -1,5 +1,6 @@
 import { loadConfig } from "./config";
 import { AgentConnection } from "./connection";
+import { AgentListener } from "./listener";
 import { TmuxCapture, bunExec } from "./capture";
 import { discoverClaudeSessions } from "./discovery";
 import { hasChanged } from "./diff";
@@ -46,35 +47,53 @@ async function main() {
   const allSessions = [...autoSessions, ...manualSessions];
   console.log(`Found ${allSessions.length} sessions to monitor`);
 
-  const conn = new AgentConnection({
-    serverUrl: config.serverUrl,
-    machineId: config.machineId,
-    onInput: ({ sessionId, text, key, data }) => {
-      const cap = captures.get(sessionId);
-      if (!cap) return;
-      if (data) cap.sendRaw(sessionId, data);
-      else if (text) cap.sendText(sessionId, text);
-      if (key) cap.sendKey(sessionId, key);
-    },
-    onStartSession: (args?: string) => {
-      const localCap = new TmuxCapture(bunExec);
-      const paneId = localCap.startSession(args);
-      if (!paneId) {
-        console.error("Failed to start new session");
-        return;
-      }
-      captures.set(paneId, localCap);
-      const session: SessionInfo = { id: paneId, name: `claude${args ? ` ${args}` : ""}`, target: "local" };
-      manualSessions.push(session);
-      const all = [...autoSessions, ...manualSessions];
-      conn.updateSessions(all);
-      console.log(`Started new session: ${paneId}`);
-    },
-  });
+  function handleInput({ sessionId, text, key, data }: { sessionId: string; text?: string; key?: string; data?: string }) {
+    const cap = captures.get(sessionId);
+    if (!cap) return;
+    if (data) cap.sendRaw(sessionId, data);
+    else if (text) cap.sendText(sessionId, text);
+    if (key) cap.sendKey(sessionId, key);
+  }
 
-  await conn.waitForOpen();
-  conn.register(allSessions);
-  console.log(`Connected to ${config.serverUrl} as ${config.machineId}`);
+  function handleStartSession(args?: string) {
+    const localCap = new TmuxCapture(bunExec);
+    const paneId = localCap.startSession(args);
+    if (!paneId) {
+      console.error("Failed to start new session");
+      return;
+    }
+    captures.set(paneId, localCap);
+    const session: SessionInfo = { id: paneId, name: `claude${args ? ` ${args}` : ""}`, target: "local" };
+    manualSessions.push(session);
+    const all = [...autoSessions, ...manualSessions];
+    conn.updateSessions(all);
+    console.log(`Started new session: ${paneId}`);
+  }
+
+  let conn: { register(sessions: SessionInfo[]): void; sendOutput(sessionId: string, lines: string[]): void; updateSessions(sessions: SessionInfo[]): void; close(): void };
+
+  if (config.listenPort) {
+    const listener = new AgentListener({
+      port: config.listenPort,
+      machineId: config.machineId,
+      onInput: handleInput,
+      onStartSession: handleStartSession,
+    });
+    conn = listener;
+    conn.register(allSessions);
+    console.log(`Listening on port ${listener.port} as ${config.machineId}`);
+  } else {
+    const connection = new AgentConnection({
+      serverUrl: config.serverUrl,
+      machineId: config.machineId,
+      onInput: handleInput,
+      onStartSession: handleStartSession,
+    });
+    conn = connection;
+    await connection.waitForOpen();
+    conn.register(allSessions);
+    console.log(`Connected to ${config.serverUrl} as ${config.machineId}`);
+  }
 
   const prevLines = new Map<string, string[]>();
 

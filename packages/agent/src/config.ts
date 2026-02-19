@@ -12,6 +12,7 @@ export interface AgentConfig {
   machineId: string;
   pollInterval: number;
   targets: TargetConfig[];
+  listenPort?: number;
 }
 
 export async function loadConfig(): Promise<AgentConfig> {
@@ -26,10 +27,14 @@ export async function loadConfig(): Promise<AgentConfig> {
     } catch {}
   }
 
+  const listenPortStr = process.env.BLKCAT_LISTEN_PORT;
+  const listenPort = listenPortStr ? parseInt(listenPortStr) : undefined;
+
   return {
     serverUrl: process.env.BLKCAT_SERVER_URL ?? "ws://localhost:3000/ws/agent",
     machineId: process.env.BLKCAT_MACHINE_ID ?? os.hostname(),
     pollInterval: parseInt(process.env.BLKCAT_POLL_INTERVAL ?? "300"),
     targets,
+    listenPort,
   };
 }

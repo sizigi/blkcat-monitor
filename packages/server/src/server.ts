@@ -10,6 +10,7 @@ interface ServerOptions {
   port: number;
   hostname?: string;
   staticDir?: string;
+  agents?: string[];
 }
 
 interface WsData {
@@ -17,8 +18,13 @@ interface WsData {
   machineId?: string;
 }
 
+interface AgentSocket {
+  send(data: string): void;
+  machineId?: string;
+}
+
 interface MachineState {
-  ws: any;
+  agent: AgentSocket;
   sessions: SessionInfo[];
   lastSeen: number;
   lastOutputs: Map<string, AgentToServerMessage>;
@@ -27,6 +33,8 @@ interface MachineState {
 export function createServer(opts: ServerOptions) {
   const machines = new Map<string, MachineState>();
   const dashboards = new Set<any>();
+  const outboundTimers: ReturnType<typeof setTimeout>[] = [];
+  const inboundAgents = new WeakMap<object, AgentSocket>();
 
   function broadcastToDashboards(msg: object) {
     const data = JSON.stringify(msg);
@@ -41,6 +49,87 @@ export function createServer(opts: ServerOptions) {
       sessions: state.sessions,
       lastSeen: state.lastSeen,
     }));
+  }
+
+  function handleAgentMessage(agent: AgentSocket, raw: string) {
+    const msg = parseAgentMessage(raw);
+    if (!msg) return;
+
+    if (msg.type === "register") {
+      agent.machineId = msg.machineId;
+      machines.set(msg.machineId, {
+        agent, sessions: msg.sessions, lastSeen: Date.now(),
+        lastOutputs: new Map(),
+      });
+      broadcastToDashboards({
+        type: "machine_update",
+        machineId: msg.machineId,
+        sessions: msg.sessions,
+      });
+    } else if (msg.type === "output") {
+      const machine = machines.get(msg.machineId);
+      if (machine) {
+        machine.lastSeen = Date.now();
+        machine.lastOutputs.set(msg.sessionId, msg);
+      }
+      broadcastToDashboards(msg);
+    } else if (msg.type === "sessions") {
+      const machine = machines.get(msg.machineId);
+      if (machine) {
+        machine.sessions = msg.sessions;
+        machine.lastSeen = Date.now();
+      }
+      broadcastToDashboards({
+        type: "machine_update",
+        machineId: msg.machineId,
+        sessions: msg.sessions,
+      });
+    }
+  }
+
+  function handleAgentClose(agent: AgentSocket) {
+    if (agent.machineId) {
+      machines.delete(agent.machineId);
+      broadcastToDashboards({
+        type: "machine_update",
+        machineId: agent.machineId,
+        sessions: [],
+      });
+    }
+  }
+
+  function connectToAgent(address: string) {
+    let delay = 1000;
+    const MAX_DELAY = 30000;
+
+    function connect() {
+      const ws = new WebSocket(`ws://${address}`);
+      const agent: AgentSocket = {
+        send(data: string) { if (ws.readyState === WebSocket.OPEN) ws.send(data); },
+      };
+
+      ws.addEventListener("message", (ev) => {
+        const raw = typeof ev.data === "string" ? ev.data : new TextDecoder().decode(ev.data as ArrayBuffer);
+        handleAgentMessage(agent, raw);
+      });
+
+      ws.addEventListener("open", () => {
+        delay = 1000;
+      });
+
+      ws.addEventListener("close", () => {
+        handleAgentClose(agent);
+        const timer = setTimeout(connect, delay);
+        outboundTimers.push(timer);
+        delay = Math.min(delay * 2, MAX_DELAY);
+      });
+
+      ws.addEventListener("error", () => {
+        // close event will fire after error, reconnect happens there
+      });
+    }
+
+    connect();
   }
 
   const server = Bun.serve({
@@ -85,6 +174,8 @@ export function createServer(opts: ServerOptions) {
               ws.send(JSON.stringify(output));
             }
           }
+        } else if (data.role === "agent") {
+          inboundAgents.set(ws, { send(d: string) { ws.send(d); } });
         }
       },
       message(ws, message) {
@@ -92,39 +183,9 @@ export function createServer(opts: ServerOptions) {
         const raw = typeof message === "string" ? message : new TextDecoder().decode(message as ArrayBuffer);
 
         if (data.role === "agent") {
-          const msg = parseAgentMessage(raw);
-          if (!msg) return;
-
-          if (msg.type === "register") {
-            data.machineId = msg.machineId;
-            machines.set(msg.machineId, {
-              ws, sessions: msg.sessions, lastSeen: Date.now(),
-              lastOutputs: new Map(),
-            });
-            broadcastToDashboards({
-              type: "machine_update",
-              machineId: msg.machineId,
-              sessions: msg.sessions,
-            });
-          } else if (msg.type === "output") {
-            const machine = machines.get(msg.machineId);
-            if (machine) {
-              machine.lastSeen = Date.now();
-              machine.lastOutputs.set(msg.sessionId, msg);
-            }
-            broadcastToDashboards(msg);
-          } else if (msg.type === "sessions") {
-            const machine = machines.get(msg.machineId);
-            if (machine) {
-              machine.sessions = msg.sessions;
-              machine.lastSeen = Date.now();
-            }
-            broadcastToDashboards({
-              type: "machine_update",
-              machineId: msg.machineId,
-              sessions: msg.sessions,
-            });
-          }
+          const agent = inboundAgents.get(ws);
+          if (!agent) return;
+          handleAgentMessage(agent, raw);
         } else if (data.role === "dashboard") {
           const msg = parseDashboardMessage(raw);
           if (!msg) return;
@@ -139,14 +200,14 @@ export function createServer(opts: ServerOptions) {
               if (msg.text) fwd.text = msg.text;
               if (msg.key) fwd.key = msg.key;
               if (msg.data) fwd.data = msg.data;
-              machine.ws.send(JSON.stringify(fwd));
+              machine.agent.send(JSON.stringify(fwd));
             }
           } else if (msg.type === "start_session") {
             const machine = machines.get(msg.machineId);
             if (machine) {
               const fwd: Record<string, any> = { type: "start_session" };
               if (msg.args) fwd.args = msg.args;
-              machine.ws.send(JSON.stringify(fwd));
+              machine.agent.send(JSON.stringify(fwd));
             }
           }
         }
@@ -155,20 +216,26 @@ export function createServer(opts: ServerOptions) {
         const data = ws.data as WsData;
         if (data.role === "dashboard") {
           dashboards.delete(ws);
-        } else if (data.role === "agent" && data.machineId) {
-          machines.delete(data.machineId);
-          broadcastToDashboards({
-            type: "machine_update",
-            machineId: data.machineId,
-            sessions: [],
-          });
+        } else if (data.role === "agent") {
+          const agent = inboundAgents.get(ws);
+          if (agent) handleAgentClose(agent);
         }
       },
     },
   });
 
+  // Connect to agents that are in listener mode
+  if (opts.agents) {
+    for (const address of opts.agents) {
+      connectToAgent(address);
+    }
+  }
+
   return {
     port: server.port,
-    stop: () => server.stop(),
+    stop: () => {
+      for (const timer of outboundTimers) clearTimeout(timer);
+      server.stop();
+    },
   };
 }
