@@ -45,7 +45,9 @@ export type AgentToServerMessage =
 export interface ServerInputMessage {
   type: "input";
   sessionId: string;
-  text: string;
+  text?: string;
+  key?: string;
+  data?: string;
 }
 
 export type ServerToAgentMessage = ServerInputMessage;
@@ -82,7 +84,9 @@ export interface DashboardInputMessage {
   type: "input";
   machineId: string;
   sessionId: string;
-  text: string;
+  text?: string;
+  key?: string;
+  data?: string;
 }
 
 export type DashboardToServerMessage = DashboardInputMessage;

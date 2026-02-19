@@ -62,18 +62,33 @@ describe("useSocket", () => {
     expect(result.current.machines[0].machineId).toBe("m1");
   });
 
-  it("sends input message", async () => {
+  it("sends input message with text", async () => {
     const { result } = renderHook(() => useSocket("ws://test"));
 
     await vi.waitFor(() => expect(result.current.connected).toBe(true));
 
     act(() => {
-      result.current.sendInput("m1", "s1", "hello\n");
+      result.current.sendInput("m1", "s1", { text: "hello" });
     });
 
     const ws = MockWebSocket.instances[0];
     const sent = JSON.parse(ws.sent[0]);
     expect(sent.type).toBe("input");
-    expect(sent.text).toBe("hello\n");
+    expect(sent.text).toBe("hello");
+  });
+
+  it("sends input message with data", async () => {
+    const { result } = renderHook(() => useSocket("ws://test"));
+
+    await vi.waitFor(() => expect(result.current.connected).toBe(true));
+
+    act(() => {
+      result.current.sendInput("m1", "s1", { data: "\r" });
+    });
+
+    const ws = MockWebSocket.instances[0];
+    const sent = JSON.parse(ws.sent[0]);
+    expect(sent.type).toBe("input");
+    expect(sent.data).toBe("\r");
   });
 });

@@ -3,7 +3,7 @@ import type { SessionInfo, ServerToAgentMessage } from "@blkcat/shared";
 interface AgentConnectionOptions {
   serverUrl: string;
   machineId: string;
-  onInput: (msg: { sessionId: string; text: string }) => void;
+  onInput: (msg: { sessionId: string; text?: string; key?: string; data?: string }) => void;
 }
 
 export class AgentConnection {
@@ -21,7 +21,7 @@ export class AgentConnection {
       try {
         const msg: ServerToAgentMessage = JSON.parse(ev.data as string);
         if (msg.type === "input") {
-          opts.onInput({ sessionId: msg.sessionId, text: msg.text });
+          opts.onInput({ sessionId: msg.sessionId, text: msg.text, key: msg.key, data: msg.data });
         }
       } catch {}
     });

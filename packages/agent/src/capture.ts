@@ -20,7 +20,7 @@ export class TmuxCapture {
   ) {}
 
   capturePane(target: string): string[] {
-    const cmd = [...this.sshPrefix, "tmux", "capture-pane", "-p", "-t", target];
+    const cmd = [...this.sshPrefix, "tmux", "capture-pane", "-p", "-e", "-t", target];
     const result = this.exec(cmd);
     if (!result.success) return [];
     // Split and remove trailing empty line from the final newline
@@ -46,8 +46,21 @@ export class TmuxCapture {
     return result.stdout.trim().split("\n").filter(Boolean);
   }
 
-  sendKeys(target: string, text: string): void {
-    const cmd = [...this.sshPrefix, "tmux", "send-keys", "-t", target, text, ""];
+  sendText(target: string, text: string): void {
+    const cmd = [...this.sshPrefix, "tmux", "send-keys", "-l", "-t", target, text];
+    this.exec(cmd);
+  }
+
+  sendKey(target: string, key: string): void {
+    const cmd = [...this.sshPrefix, "tmux", "send-keys", "-t", target, key];
+    this.exec(cmd);
+  }
+
+  sendRaw(target: string, data: string): void {
+    const hex = Array.from(data).map((c) =>
+      c.charCodeAt(0).toString(16).padStart(2, "0")
+    ).join(" ");
+    const cmd = [...this.sshPrefix, "tmux", "send-keys", "-H", "-t", target, ...hex.split(" ")];
     this.exec(cmd);
   }
 

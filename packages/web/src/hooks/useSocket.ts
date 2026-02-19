@@ -15,7 +15,7 @@ export interface UseSocketReturn {
   connected: boolean;
   machines: MachineSnapshot[];
   outputs: OutputLine[];
-  sendInput: (machineId: string, sessionId: string, text: string) => void;
+  sendInput: (machineId: string, sessionId: string, opts: { text?: string; key?: string; data?: string }) => void;
 }
 
 export function useSocket(url: string): UseSocketReturn {
@@ -73,10 +73,14 @@ export function useSocket(url: string): UseSocketReturn {
   }, [url]);
 
   const sendInput = useCallback(
-    (machineId: string, sessionId: string, text: string) => {
+    (machineId: string, sessionId: string, opts: { text?: string; key?: string; data?: string }) => {
       const ws = wsRef.current;
       if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: "input", machineId, sessionId, text }));
+        const msg: Record<string, any> = { type: "input", machineId, sessionId };
+        if (opts.text) msg.text = opts.text;
+        if (opts.key) msg.key = opts.key;
+        if (opts.data) msg.data = opts.data;
+        ws.send(JSON.stringify(msg));
       }
     },
     [],

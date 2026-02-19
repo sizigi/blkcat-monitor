@@ -11,7 +11,7 @@ function mockExec(outputs: Record<string, ExecResult>): ExecFn {
 describe("TmuxCapture", () => {
   it("captures local pane content", () => {
     const exec = mockExec({
-      "tmux capture-pane -p -t mysession:0.0": {
+      "tmux capture-pane -p -e -t mysession:0.0": {
         success: true,
         stdout: "line1\nline2\nline3\n",
       },
@@ -38,11 +38,19 @@ describe("TmuxCapture", () => {
     expect(capture.listSessions()).toEqual(["dev", "build"]);
   });
 
-  it("sends keys to a session", () => {
+  it("sends literal text to a session", () => {
     const calls: string[][] = [];
     const exec: ExecFn = (cmd) => { calls.push(cmd); return { success: true, stdout: "" }; };
     const capture = new TmuxCapture(exec);
-    capture.sendKeys("dev:0.0", "hello world");
-    expect(calls[0]).toEqual(["tmux", "send-keys", "-t", "dev:0.0", "hello world", ""]);
+    capture.sendText("dev:0.0", "hello world");
+    expect(calls[0]).toEqual(["tmux", "send-keys", "-l", "-t", "dev:0.0", "hello world"]);
+  });
+
+  it("sends a special key to a session", () => {
+    const calls: string[][] = [];
+    const exec: ExecFn = (cmd) => { calls.push(cmd); return { success: true, stdout: "" }; };
+    const capture = new TmuxCapture(exec);
+    capture.sendKey("dev:0.0", "Enter");
+    expect(calls[0]).toEqual(["tmux", "send-keys", "-t", "dev:0.0", "Enter"]);
   });
 });

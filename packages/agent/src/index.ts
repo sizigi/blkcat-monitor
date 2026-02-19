@@ -49,9 +49,12 @@ async function main() {
   const conn = new AgentConnection({
     serverUrl: config.serverUrl,
     machineId: config.machineId,
-    onInput: ({ sessionId, text }) => {
+    onInput: ({ sessionId, text, key, data }) => {
       const cap = captures.get(sessionId);
-      if (cap) cap.sendKeys(sessionId, text);
+      if (!cap) return;
+      if (data) cap.sendRaw(sessionId, data);
+      else if (text) cap.sendText(sessionId, text);
+      if (key) cap.sendKey(sessionId, key);
     },
   });
 

@@ -7,7 +7,9 @@ interface SessionDetailProps {
   sessionId: string;
   sessionName: string;
   lines: string[];
-  onSendInput: (text: string) => void;
+  onSendText: (text: string) => void;
+  onSendKey: (key: string) => void;
+  onSendData: (data: string) => void;
 }
 
 export function SessionDetail({
@@ -15,7 +17,9 @@ export function SessionDetail({
   sessionId,
   sessionName,
   lines,
-  onSendInput,
+  onSendText,
+  onSendKey,
+  onSendData,
 }: SessionDetailProps) {
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
@@ -34,9 +38,9 @@ export function SessionDetail({
           {machineId} / {sessionId}
         </span>
       </div>
-      <TerminalOutput lines={lines} />
+      <TerminalOutput lines={lines} onData={onSendData} />
       <div style={{ borderTop: "1px solid var(--border)" }}>
-        <ChatInput onSend={onSendInput} />
+        <ChatInput onSendText={onSendText} onSendKey={onSendKey} />
       </div>
     </div>
   );

@@ -57,7 +57,9 @@ export default function App() {
             sessionId={selectedSession}
             sessionName={selectedSessionName}
             lines={sessionLines}
-            onSendInput={(text) => sendInput(selectedMachine, selectedSession, text)}
+            onSendText={(text) => sendInput(selectedMachine, selectedSession, { text })}
+            onSendKey={(key) => sendInput(selectedMachine, selectedSession, { key })}
+            onSendData={(data) => sendInput(selectedMachine, selectedSession, { data })}
           />
         ) : (
           <div

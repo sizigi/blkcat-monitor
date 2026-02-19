@@ -5,9 +5,10 @@ import "@xterm/xterm/css/xterm.css";
 
 interface TerminalOutputProps {
   lines: string[];
+  onData?: (data: string) => void;
 }
 
-export function TerminalOutput({ lines }: TerminalOutputProps) {
+export function TerminalOutput({ lines, onData }: TerminalOutputProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -17,8 +18,9 @@ export function TerminalOutput({ lines }: TerminalOutputProps) {
     if (!containerRef.current) return;
 
     const term = new Terminal({
-      disableStdin: true,
+      disableStdin: !onData,
       convertEol: true,
+      cursorBlink: !!onData,
       theme: {
         background: "#0d1117",
         foreground: "#c9d1d9",
@@ -47,12 +49,17 @@ export function TerminalOutput({ lines }: TerminalOutputProps) {
 
   useEffect(() => {
     const term = termRef.current;
+    if (!term || !onData) return;
+    const disposable = term.onData(onData);
+    return () => disposable.dispose();
+  }, [onData]);
+
+  useEffect(() => {
+    const term = termRef.current;
     if (!term) return;
     if (lines !== prevLinesRef.current) {
-      term.clear();
-      for (const line of lines) {
-        term.writeln(line);
-      }
+      term.reset();
+      term.write(lines.join("\r\n"));
       prevLinesRef.current = lines;
     }
   }, [lines]);
