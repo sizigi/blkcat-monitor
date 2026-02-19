@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import type { MachineSnapshot } from "@blkcat/shared";
+import type { MachineSnapshot, OutboundAgentInfo } from "@blkcat/shared";
+import { AgentManager } from "./AgentManager";
 
 interface SidebarProps {
   machines: MachineSnapshot[];
@@ -7,6 +8,9 @@ interface SidebarProps {
   selectedSession?: string;
   onSelectSession: (machineId: string, sessionId: string) => void;
   onStartSession?: (machineId: string, args?: string) => void;
+  agents?: OutboundAgentInfo[];
+  onAddAgent?: (address: string) => Promise<{ ok: boolean; error?: string }>;
+  onRemoveAgent?: (address: string) => Promise<void>;
 }
 
 export function Sidebar({
@@ -15,6 +19,9 @@ export function Sidebar({
   selectedSession,
   onSelectSession,
   onStartSession,
+  agents,
+  onAddAgent,
+  onRemoveAgent,
 }: SidebarProps) {
   const [expandedMachine, setExpandedMachine] = useState<string | null>(null);
   const [sessionArgs, setSessionArgs] = useState("");
@@ -24,10 +31,12 @@ export function Sidebar({
         width: 250,
         borderRight: "1px solid var(--border)",
         background: "var(--bg-secondary)",
-        overflowY: "auto",
+        display: "flex",
+        flexDirection: "column",
         flexShrink: 0,
       }}
     >
+      <div style={{ flex: 1, overflowY: "auto" }}>
       <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)" }}>
         <h2 style={{ fontSize: 16, fontWeight: 600 }}>Machines</h2>
       </div>
@@ -160,6 +169,10 @@ export function Sidebar({
           })}
         </div>
       ))}
+      </div>
+      {agents && onAddAgent && onRemoveAgent && (
+        <AgentManager agents={agents} onAdd={onAddAgent} onRemove={onRemoveAgent} />
+      )}
     </aside>
   );
 }

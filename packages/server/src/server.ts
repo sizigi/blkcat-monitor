@@ -1,6 +1,7 @@
 import {
   type AgentToServerMessage,
   type MachineSnapshot,
+  type OutboundAgentInfo,
   type SessionInfo,
   parseAgentMessage,
   parseDashboardMessage,
@@ -30,10 +31,19 @@ interface MachineState {
   lastOutputs: Map<string, AgentToServerMessage>;
 }
 
+interface OutboundAgent {
+  address: string;
+  status: "connecting" | "connected" | "disconnected";
+  source: "env" | "api";
+  ws: WebSocket | null;
+  reconnectTimer: ReturnType<typeof setTimeout> | null;
+  removed: boolean;
+}
+
 export function createServer(opts: ServerOptions) {
   const machines = new Map<string, MachineState>();
   const dashboards = new Set<any>();
-  const outboundTimers: ReturnType<typeof setTimeout>[] = [];
+  const outboundAgents = new Map<string, OutboundAgent>();
   const inboundAgents = new WeakMap<object, AgentSocket>();
 
   function broadcastToDashboards(msg: object) {
@@ -98,12 +108,28 @@ export function createServer(opts: ServerOptions) {
     }
   }
 
-  function connectToAgent(address: string) {
+  function connectToAgent(address: string, source: "env" | "api"): boolean {
+    if (outboundAgents.has(address)) return false;
+
+    const entry: OutboundAgent = {
+      address,
+      status: "connecting",
+      source,
+      ws: null,
+      reconnectTimer: null,
+      removed: false,
+    };
+    outboundAgents.set(address, entry);
+
     let delay = 1000;
     const MAX_DELAY = 30000;
 
     function connect() {
+      if (entry.removed) return;
+      entry.status = "connecting";
+
       const ws = new WebSocket(`ws://${address}`);
+      entry.ws = ws;
       const agent: AgentSocket = {
         send(data: string) { if (ws.readyState === WebSocket.OPEN) ws.send(data); },
       };
@@ -115,12 +141,15 @@ export function createServer(opts: ServerOptions) {
 
       ws.addEventListener("open", () => {
         delay = 1000;
+        entry.status = "connected";
       });
 
       ws.addEventListener("close", () => {
         handleAgentClose(agent);
-        const timer = setTimeout(connect, delay);
-        outboundTimers.push(timer);
+        if (entry.removed) return;
+        entry.status = "disconnected";
+        entry.ws = null;
+        entry.reconnectTimer = setTimeout(connect, delay);
         delay = Math.min(delay * 2, MAX_DELAY);
       });
 
@@ -130,12 +159,26 @@ export function createServer(opts: ServerOptions) {
     }
 
     connect();
+    return true;
+  }
+
+  function disconnectAgent(address: string): boolean {
+    const entry = outboundAgents.get(address);
+    if (!entry) return false;
+
+    entry.removed = true;
+    if (entry.reconnectTimer) clearTimeout(entry.reconnectTimer);
+    if (entry.ws) {
+      try { entry.ws.close(); } catch {}
+    }
+    outboundAgents.delete(address);
+    return true;
   }
 
   const server = Bun.serve({
     port: opts.port,
     hostname: opts.hostname,
-    fetch(req, server) {
+    async fetch(req, server) {
       const url = new URL(req.url);
       if (url.pathname === "/ws/agent") {
         const ok = server.upgrade(req, {
@@ -153,6 +196,38 @@ export function createServer(opts: ServerOptions) {
 
       if (url.pathname === "/api/sessions") {
         return Response.json({ machines: getSnapshot() });
+      }
+
+      if (url.pathname === "/api/agents") {
+        if (req.method === "GET") {
+          const agents: OutboundAgentInfo[] = Array.from(outboundAgents.values()).map((a) => ({
+            address: a.address,
+            status: a.status,
+            source: a.source,
+          }));
+          return Response.json({ agents });
+        }
+
+        if (req.method === "POST") {
+          const body = await req.json() as { address?: string };
+          if (!body.address || typeof body.address !== "string") {
+            return Response.json({ error: "address is required" }, { status: 400 });
+          }
+          const added = connectToAgent(body.address, "api");
+          if (!added) {
+            return Response.json({ error: "agent already exists" }, { status: 409 });
+          }
+          return Response.json({ ok: true }, { status: 201 });
+        }
+      }
+
+      if (url.pathname.startsWith("/api/agents/") && req.method === "DELETE") {
+        const address = decodeURIComponent(url.pathname.slice("/api/agents/".length));
+        const removed = disconnectAgent(address);
+        if (!removed) {
+          return Response.json({ error: "agent not found" }, { status: 404 });
+        }
+        return Response.json({ ok: true });
       }
 
       if (opts.staticDir) {
@@ -227,14 +302,21 @@ export function createServer(opts: ServerOptions) {
   // Connect to agents that are in listener mode
   if (opts.agents) {
     for (const address of opts.agents) {
-      connectToAgent(address);
+      connectToAgent(address, "env");
     }
   }
 
   return {
     port: server.port,
     stop: () => {
-      for (const timer of outboundTimers) clearTimeout(timer);
+      for (const entry of outboundAgents.values()) {
+        entry.removed = true;
+        if (entry.reconnectTimer) clearTimeout(entry.reconnectTimer);
+        if (entry.ws) {
+          try { entry.ws.close(); } catch {}
+        }
+      }
+      outboundAgents.clear();
       server.stop();
     },
   };

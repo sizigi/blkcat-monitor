@@ -102,6 +102,14 @@ export interface DashboardStartSessionMessage {
 
 export type DashboardToServerMessage = DashboardInputMessage | DashboardStartSessionMessage;
 
+// --- Outbound agent info ---
+
+export interface OutboundAgentInfo {
+  address: string;
+  status: "connecting" | "connected" | "disconnected";
+  source: "env" | "api";
+}
+
 // --- Parsers ---
 
 const AGENT_TYPES = new Set(["register", "output", "sessions"]);

@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { useSocket } from "./hooks/useSocket";
+import { useAgents } from "./hooks/useAgents";
 import { Sidebar } from "./components/Sidebar";
 import { SessionDetail } from "./components/SessionDetail";
 
@@ -9,6 +10,7 @@ const WS_URL =
 
 export default function App() {
   const { connected, machines, outputs, sendInput, startSession } = useSocket(WS_URL);
+  const { agents, addAgent, removeAgent } = useAgents();
   const [selectedMachine, setSelectedMachine] = useState<string>();
   const [selectedSession, setSelectedSession] = useState<string>();
 
@@ -38,6 +40,9 @@ export default function App() {
           setSelectedSession(s);
         }}
         onStartSession={startSession}
+        agents={agents}
+        onAddAgent={addAgent}
+        onRemoveAgent={removeAgent}
       />
       <main style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
         {!connected && (

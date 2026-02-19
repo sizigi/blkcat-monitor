@@ -101,6 +101,96 @@ describe("Server", () => {
   });
 });
 
+describe("Outbound agent REST API", () => {
+  let server: ReturnType<typeof createServer>;
+  let port: number;
+
+  beforeAll(() => {
+    server = createServer({ port: 0 });
+    port = server.port;
+  });
+
+  afterAll(() => { server.stop(); });
+
+  it("GET /api/agents returns empty initially", async () => {
+    const res = await fetch(`http://localhost:${port}/api/agents`);
+    expect(res.ok).toBe(true);
+    const data = await res.json();
+    expect(data.agents).toEqual([]);
+  });
+
+  it("POST /api/agents adds agent, appears in GET", async () => {
+    // Use a port nothing is listening on — agent will be "connecting"/"disconnected"
+    const res = await fetch(`http://localhost:${port}/api/agents`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ address: "localhost:59999" }),
+    });
+    expect(res.status).toBe(201);
+
+    const list = await fetch(`http://localhost:${port}/api/agents`);
+    const data = await list.json();
+    expect(data.agents.length).toBe(1);
+    expect(data.agents[0].address).toBe("localhost:59999");
+    expect(data.agents[0].source).toBe("api");
+  });
+
+  it("POST duplicate returns 409", async () => {
+    const res = await fetch(`http://localhost:${port}/api/agents`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ address: "localhost:59999" }),
+    });
+    expect(res.status).toBe(409);
+  });
+
+  it("DELETE /api/agents/:address removes agent", async () => {
+    const res = await fetch(
+      `http://localhost:${port}/api/agents/${encodeURIComponent("localhost:59999")}`,
+      { method: "DELETE" },
+    );
+    expect(res.ok).toBe(true);
+
+    const list = await fetch(`http://localhost:${port}/api/agents`);
+    const data = await list.json();
+    expect(data.agents).toEqual([]);
+  });
+
+  it("DELETE unknown agent returns 404", async () => {
+    const res = await fetch(
+      `http://localhost:${port}/api/agents/${encodeURIComponent("localhost:11111")}`,
+      { method: "DELETE" },
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("env-configured agents appear with source env", async () => {
+    const listener = new AgentListener({
+      port: 0,
+      machineId: "env-test",
+      onInput: () => {},
+    });
+    listener.register([{ id: "p1", name: "dev", target: "local" }]);
+
+    const envServer = createServer({
+      port: 0,
+      agents: [`localhost:${listener.port}`],
+    });
+
+    await Bun.sleep(200);
+
+    const res = await fetch(`http://localhost:${envServer.port}/api/agents`);
+    const data = await res.json();
+    const agent = data.agents.find((a: any) => a.address === `localhost:${listener.port}`);
+    expect(agent).toBeDefined();
+    expect(agent.source).toBe("env");
+    expect(agent.status).toBe("connected");
+
+    envServer.stop();
+    listener.close();
+  });
+});
+
 describe("Server outbound connector", () => {
   let listener: AgentListener;
   let server: ReturnType<typeof createServer>;
