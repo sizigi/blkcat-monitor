@@ -6,13 +6,17 @@ A web dashboard for monitoring and interacting with Claude Code / tmux sessions 
         Browser (React + xterm.js)
              | WS
         Central Server (Bun)
-       /     |      \        WS (agents connect outbound)
+       /     |      \
     Agent   Agent   Agent
      |       |       |
     tmux    tmux    tmux (local + SSH targets)
+
+  Connection modes:
+    Agent -> Server   (default: agent connects outbound)
+    Server -> Agent   (reverse: server dials agent listener)
 ```
 
-Agents connect outbound to the server, solving NAT/firewall issues. The server relays tmux output to the dashboard and routes input back to sessions.
+Agents can connect outbound to the server (default), or the server can dial out to agents running in listener mode — useful when agents are behind NAT but the server can reach them. Both modes work simultaneously and use the same message protocol.
 
 ## Quick Start
 
@@ -52,6 +56,20 @@ bun packages/agent/src/index.ts
 
 The agent auto-discovers local tmux sessions running Claude Code and begins streaming their output.
 
+#### Reverse connection mode
+
+When the agent machine is reachable from the server but can't connect outbound (e.g. NAT), run the agent in listener mode and have the server connect to it:
+
+```bash
+# On the agent machine — listen for incoming server connections
+BLKCAT_LISTEN_PORT=4000 bun packages/agent/src/index.ts
+
+# On the server — connect to the agent
+BLKCAT_AGENTS=agent-host:4000 bun packages/server/src/index.ts
+```
+
+Multiple agents can be specified as a comma-separated list: `BLKCAT_AGENTS=host1:4000,host2:4000`. The server reconnects automatically with exponential backoff if the connection drops. Both inbound and outbound agents can be used at the same time.
+
 ### 3. Open the dashboard
 
 If using `BLKCAT_STATIC_DIR`, the dashboard is served at `http://your-server:3000`.
@@ -82,15 +100,17 @@ Open http://localhost:5173 — select a session from the sidebar to view termina
 | `BLKCAT_PORT` | `3000` | Server listen port |
 | `BLKCAT_HOST` | `0.0.0.0` | Server bind address |
 | `BLKCAT_STATIC_DIR` | — | Serve static files from this directory |
+| `BLKCAT_AGENTS` | — | Comma-separated `host:port` list of agents in listener mode to connect to |
 
 ### Agent
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `BLKCAT_SERVER_URL` | `ws://localhost:3000/ws/agent` | Server WebSocket URL |
+| `BLKCAT_SERVER_URL` | `ws://localhost:3000/ws/agent` | Server WebSocket URL (outbound mode) |
 | `BLKCAT_MACHINE_ID` | hostname | Machine identifier |
 | `BLKCAT_POLL_INTERVAL` | `300` | Pane capture interval in ms |
 | `BLKCAT_CONFIG` | — | Path to JSON config file |
+| `BLKCAT_LISTEN_PORT` | — | Port to listen on for incoming server connections (listener mode) |
 
 #### Config file
 
