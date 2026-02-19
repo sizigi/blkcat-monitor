@@ -36,7 +36,7 @@ beforeEach(() => {
 
 describe("useSocket", () => {
   it("connects and sets connected to true", async () => {
-    const { result } = renderHook(() => useSocket("ws://test", "secret"));
+    const { result } = renderHook(() => useSocket("ws://test"));
 
     await vi.waitFor(() => {
       expect(result.current.connected).toBe(true);
@@ -44,7 +44,7 @@ describe("useSocket", () => {
   });
 
   it("handles snapshot message", async () => {
-    const { result } = renderHook(() => useSocket("ws://test", "secret"));
+    const { result } = renderHook(() => useSocket("ws://test"));
     const ws = MockWebSocket.instances[0];
 
     await vi.waitFor(() => expect(result.current.connected).toBe(true));
@@ -63,7 +63,7 @@ describe("useSocket", () => {
   });
 
   it("sends input message", async () => {
-    const { result } = renderHook(() => useSocket("ws://test", "secret"));
+    const { result } = renderHook(() => useSocket("ws://test"));
 
     await vi.waitFor(() => expect(result.current.connected).toBe(true));
 

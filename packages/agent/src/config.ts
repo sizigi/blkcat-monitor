@@ -9,7 +9,6 @@ export interface TargetConfig {
 
 export interface AgentConfig {
   serverUrl: string;
-  secret: string;
   machineId: string;
   pollInterval: number;
   targets: TargetConfig[];
@@ -29,7 +28,6 @@ export async function loadConfig(): Promise<AgentConfig> {
 
   return {
     serverUrl: process.env.BLKCAT_SERVER_URL ?? "ws://localhost:3000/ws/agent",
-    secret: process.env.BLKCAT_SECRET ?? "",
     machineId: process.env.BLKCAT_MACHINE_ID ?? os.hostname(),
     pollInterval: parseInt(process.env.BLKCAT_POLL_INTERVAL ?? "300"),
     targets,

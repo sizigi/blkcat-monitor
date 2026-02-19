@@ -4,10 +4,9 @@ import { createServer } from "./server";
 describe("E2E: agent -> server -> dashboard round-trip", () => {
   let server: ReturnType<typeof createServer>;
   let port: number;
-  const SECRET = "e2e-test-secret";
 
   beforeAll(() => {
-    server = createServer({ port: 0, secret: SECRET });
+    server = createServer({ port: 0 });
     port = server.port;
   });
 
@@ -15,7 +14,7 @@ describe("E2E: agent -> server -> dashboard round-trip", () => {
 
   it("full round-trip: register, output, snapshot, input", async () => {
     // 1. Agent connects and registers
-    const agent = new WebSocket(`ws://localhost:${port}/ws/agent?secret=${SECRET}`);
+    const agent = new WebSocket(`ws://localhost:${port}/ws/agent`);
     await new Promise<void>((r) => agent.addEventListener("open", () => r()));
 
     agent.send(JSON.stringify({
@@ -30,7 +29,7 @@ describe("E2E: agent -> server -> dashboard round-trip", () => {
 
     // 2. Dashboard connects and receives snapshot
     const dashMsgs: any[] = [];
-    const dash = new WebSocket(`ws://localhost:${port}/ws/dashboard?secret=${SECRET}`);
+    const dash = new WebSocket(`ws://localhost:${port}/ws/dashboard`);
     await new Promise<void>((r) => dash.addEventListener("open", () => r()));
     dash.addEventListener("message", (ev) =>
       dashMsgs.push(JSON.parse(ev.data as string))

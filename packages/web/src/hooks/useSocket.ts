@@ -18,15 +18,14 @@ export interface UseSocketReturn {
   sendInput: (machineId: string, sessionId: string, text: string) => void;
 }
 
-export function useSocket(url: string, secret: string): UseSocketReturn {
+export function useSocket(url: string): UseSocketReturn {
   const [connected, setConnected] = useState(false);
   const [machines, setMachines] = useState<MachineSnapshot[]>([]);
   const [outputs, setOutputs] = useState<OutputLine[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    const fullUrl = `${url}?secret=${encodeURIComponent(secret)}`;
-    const ws = new WebSocket(fullUrl);
+    const ws = new WebSocket(url);
     wsRef.current = ws;
 
     ws.addEventListener("open", () => setConnected(true));
@@ -71,7 +70,7 @@ export function useSocket(url: string, secret: string): UseSocketReturn {
     });
 
     return () => { ws.close(); };
-  }, [url, secret]);
+  }, [url]);
 
   const sendInput = useCallback(
     (machineId: string, sessionId: string, text: string) => {

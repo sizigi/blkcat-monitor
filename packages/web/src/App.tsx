@@ -6,10 +6,9 @@ import { SessionDetail } from "./components/SessionDetail";
 const WS_URL =
   (import.meta as any).env?.VITE_WS_URL ??
   `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/ws/dashboard`;
-const SECRET = (import.meta as any).env?.VITE_SECRET ?? "";
 
 export default function App() {
-  const { connected, machines, outputs, sendInput } = useSocket(WS_URL, SECRET);
+  const { connected, machines, outputs, sendInput } = useSocket(WS_URL);
   const [selectedMachine, setSelectedMachine] = useState<string>();
   const [selectedSession, setSelectedSession] = useState<string>();
 

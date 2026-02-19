@@ -4,16 +4,14 @@ import { AgentConnection } from "./connection";
 
 describe("AgentConnection", () => {
   let server: ReturnType<typeof createServer>;
-  const SECRET = "conn-test";
 
-  beforeAll(() => { server = createServer({ port: 0, secret: SECRET }); });
+  beforeAll(() => { server = createServer({ port: 0 }); });
   afterAll(() => { server.stop(); });
 
   it("connects, registers, and receives input", async () => {
     const received: any[] = [];
     const conn = new AgentConnection({
       serverUrl: `ws://localhost:${server.port}/ws/agent`,
-      secret: SECRET,
       machineId: "test-agent",
       onInput: (msg) => received.push(msg),
     });
@@ -24,7 +22,7 @@ describe("AgentConnection", () => {
 
     // Send input from a dashboard
     const dash = new WebSocket(
-      `ws://localhost:${server.port}/ws/dashboard?secret=${SECRET}`
+      `ws://localhost:${server.port}/ws/dashboard`
     );
     await new Promise<void>((r) => dash.addEventListener("open", () => r()));
     await Bun.sleep(50);

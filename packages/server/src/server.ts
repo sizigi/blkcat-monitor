@@ -8,14 +8,12 @@ import {
 
 interface ServerOptions {
   port: number;
-  secret: string;
   staticDir?: string;
 }
 
 interface WsData {
   role: "agent" | "dashboard";
   machineId?: string;
-  authenticated: boolean;
 }
 
 interface MachineState {
@@ -47,19 +45,16 @@ export function createServer(opts: ServerOptions) {
     port: opts.port,
     fetch(req, server) {
       const url = new URL(req.url);
-      const secret = url.searchParams.get("secret") ??
-        req.headers.get("x-secret");
-
       if (url.pathname === "/ws/agent") {
         const ok = server.upgrade(req, {
-          data: { role: "agent", authenticated: secret === opts.secret } as WsData,
+          data: { role: "agent" } as WsData,
         });
         return ok ? undefined : new Response("Upgrade failed", { status: 500 });
       }
 
       if (url.pathname === "/ws/dashboard") {
         const ok = server.upgrade(req, {
-          data: { role: "dashboard", authenticated: secret === opts.secret } as WsData,
+          data: { role: "dashboard" } as WsData,
         });
         return ok ? undefined : new Response("Upgrade failed", { status: 500 });
       }
@@ -79,10 +74,6 @@ export function createServer(opts: ServerOptions) {
     websocket: {
       open(ws) {
         const data = ws.data as WsData;
-        if (!data.authenticated) {
-          ws.close(4001, "Unauthorized");
-          return;
-        }
         if (data.role === "dashboard") {
           dashboards.add(ws);
           ws.send(JSON.stringify({ type: "snapshot", machines: getSnapshot() }));

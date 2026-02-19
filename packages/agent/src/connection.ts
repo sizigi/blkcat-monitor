@@ -2,7 +2,6 @@ import type { SessionInfo, ServerToAgentMessage } from "@blkcat/shared";
 
 interface AgentConnectionOptions {
   serverUrl: string;
-  secret: string;
   machineId: string;
   onInput: (msg: { sessionId: string; text: string }) => void;
 }
@@ -12,8 +11,7 @@ export class AgentConnection {
   private openPromise: Promise<void>;
 
   constructor(private opts: AgentConnectionOptions) {
-    const url = `${opts.serverUrl}?secret=${encodeURIComponent(opts.secret)}`;
-    this.ws = new WebSocket(url);
+    this.ws = new WebSocket(opts.serverUrl);
 
     this.openPromise = new Promise((resolve) => {
       this.ws.addEventListener("open", () => resolve());

@@ -7,10 +7,6 @@ import type { SessionInfo } from "@blkcat/shared";
 
 async function main() {
   const config = await loadConfig();
-  if (!config.secret) {
-    console.error("BLKCAT_SECRET is required");
-    process.exit(1);
-  }
 
   const captures = new Map<string, TmuxCapture>();
   const manualSessions: SessionInfo[] = [];
@@ -52,7 +48,6 @@ async function main() {
 
   const conn = new AgentConnection({
     serverUrl: config.serverUrl,
-    secret: config.secret,
     machineId: config.machineId,
     onInput: ({ sessionId, text }) => {
       const cap = captures.get(sessionId);
