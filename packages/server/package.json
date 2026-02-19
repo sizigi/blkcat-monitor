@@ -1,0 +1,12 @@
+{
+  "name": "@blkcat/server",
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@blkcat/shared": "workspace:*"
+  }
+}

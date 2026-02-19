@@ -1,0 +1,10 @@
+{
+  "name": "blkcat-monitor",
+  "private": true,
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "dev:server": "bun run --filter @blkcat/server dev",
+    "dev:web": "bun run --filter @blkcat/web dev",
+    "test": "bun run --filter '@blkcat/*' test"
+  }
+}
