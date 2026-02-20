@@ -9,6 +9,7 @@ export interface OutputLine {
   sessionId: string;
   lines: string[];
   timestamp: number;
+  waitingForInput?: boolean;
 }
 
 export interface UseSocketReturn {
@@ -17,6 +18,7 @@ export interface UseSocketReturn {
   outputs: OutputLine[];
   sendInput: (machineId: string, sessionId: string, opts: { text?: string; key?: string; data?: string }) => void;
   startSession: (machineId: string, args?: string) => void;
+  closeSession: (machineId: string, sessionId: string) => void;
 }
 
 export function useSocket(url: string): UseSocketReturn {
@@ -63,6 +65,7 @@ export function useSocket(url: string): UseSocketReturn {
               sessionId: msg.sessionId,
               lines: msg.lines,
               timestamp: msg.timestamp,
+              waitingForInput: (msg as any).waitingForInput,
             };
             const idx = prev.findIndex(
               (o) => o.machineId === msg.machineId && o.sessionId === msg.sessionId,
@@ -107,5 +110,15 @@ export function useSocket(url: string): UseSocketReturn {
     [],
   );
 
-  return { connected, machines, outputs, sendInput, startSession };
+  const closeSession = useCallback(
+    (machineId: string, sessionId: string) => {
+      const ws = wsRef.current;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "close_session", machineId, sessionId }));
+      }
+    },
+    [],
+  );
+
+  return { connected, machines, outputs, sendInput, startSession, closeSession };
 }

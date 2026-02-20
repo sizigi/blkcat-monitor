@@ -5,6 +5,7 @@ interface AgentListenerOptions {
   machineId: string;
   onInput: (msg: { sessionId: string; text?: string; key?: string; data?: string }) => void;
   onStartSession?: (args?: string) => void;
+  onCloseSession?: (sessionId: string) => void;
 }
 
 export class AgentListener {
@@ -42,6 +43,8 @@ export class AgentListener {
               this.opts.onInput({ sessionId: msg.sessionId, text: msg.text, key: msg.key, data: msg.data });
             } else if (msg.type === "start_session") {
               this.opts.onStartSession?.(msg.args);
+            } else if (msg.type === "close_session") {
+              this.opts.onCloseSession?.(msg.sessionId);
             }
           } catch {}
         },
@@ -63,14 +66,16 @@ export class AgentListener {
     });
   }
 
-  sendOutput(sessionId: string, lines: string[]) {
-    this.broadcast({
+  sendOutput(sessionId: string, lines: string[], waitingForInput?: boolean) {
+    const msg: Record<string, any> = {
       type: "output",
       machineId: this.machineId,
       sessionId,
       lines,
       timestamp: Date.now(),
-    });
+    };
+    if (waitingForInput) msg.waitingForInput = true;
+    this.broadcast(msg);
   }
 
   updateSessions(sessions: SessionInfo[]) {

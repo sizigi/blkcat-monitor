@@ -64,6 +64,11 @@ export class TmuxCapture {
     this.exec(cmd);
   }
 
+  killPane(target: string): boolean {
+    const cmd = [...this.sshPrefix, "tmux", "kill-pane", "-t", target];
+    return this.exec(cmd).success;
+  }
+
   startSession(args?: string): string | null {
     const claudeCmd = args ? `claude ${args}` : "claude";
     const cmd = [...this.sshPrefix, "tmux", "new-window", "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}", claudeCmd];

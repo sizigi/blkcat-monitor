@@ -27,6 +27,7 @@ export interface AgentOutputMessage {
   sessionId: string;
   lines: string[];
   timestamp: number;
+  waitingForInput?: boolean;
 }
 
 export interface AgentSessionsMessage {
@@ -55,7 +56,12 @@ export interface ServerStartSessionMessage {
   args?: string;
 }
 
-export type ServerToAgentMessage = ServerInputMessage | ServerStartSessionMessage;
+export interface ServerCloseSessionMessage {
+  type: "close_session";
+  sessionId: string;
+}
+
+export type ServerToAgentMessage = ServerInputMessage | ServerStartSessionMessage | ServerCloseSessionMessage;
 
 // --- Server -> Dashboard messages ---
 
@@ -76,6 +82,7 @@ export interface ServerOutputMessage {
   sessionId: string;
   lines: string[];
   timestamp: number;
+  waitingForInput?: boolean;
 }
 
 export type ServerToDashboardMessage =
@@ -100,7 +107,13 @@ export interface DashboardStartSessionMessage {
   args?: string;
 }
 
-export type DashboardToServerMessage = DashboardInputMessage | DashboardStartSessionMessage;
+export interface DashboardCloseSessionMessage {
+  type: "close_session";
+  machineId: string;
+  sessionId: string;
+}
+
+export type DashboardToServerMessage = DashboardInputMessage | DashboardStartSessionMessage | DashboardCloseSessionMessage;
 
 // --- Outbound agent info ---
 
@@ -113,7 +126,7 @@ export interface OutboundAgentInfo {
 // --- Parsers ---
 
 const AGENT_TYPES = new Set(["register", "output", "sessions"]);
-const DASHBOARD_TYPES = new Set(["input", "start_session"]);
+const DASHBOARD_TYPES = new Set(["input", "start_session", "close_session"]);
 
 export function parseAgentMessage(raw: string): AgentToServerMessage | null {
   try {

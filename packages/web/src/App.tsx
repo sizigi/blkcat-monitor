@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { useSocket } from "./hooks/useSocket";
 import { useAgents } from "./hooks/useAgents";
+import { useDisplayNames } from "./hooks/useDisplayNames";
 import { Sidebar } from "./components/Sidebar";
 import { SessionDetail } from "./components/SessionDetail";
 
@@ -9,8 +10,9 @@ const WS_URL =
   `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/ws/dashboard`;
 
 export default function App() {
-  const { connected, machines, outputs, sendInput, startSession } = useSocket(WS_URL);
+  const { connected, machines, outputs, sendInput, startSession, closeSession } = useSocket(WS_URL);
   const { agents, addAgent, removeAgent } = useAgents();
+  const { getMachineName, getSessionName, setMachineName, setSessionName } = useDisplayNames();
   const [selectedMachine, setSelectedMachine] = useState<string>();
   const [selectedSession, setSelectedSession] = useState<string>();
 
@@ -22,12 +24,21 @@ export default function App() {
     return matching.length > 0 ? matching[matching.length - 1].lines : [];
   }, [outputs, selectedMachine, selectedSession]);
 
+  const waitingSessions = useMemo(() => {
+    const set = new Set<string>();
+    for (const o of outputs) {
+      if (o.waitingForInput) set.add(`${o.machineId}:${o.sessionId}`);
+    }
+    return set;
+  }, [outputs]);
+
   const selectedSessionName = useMemo(() => {
     if (!selectedMachine || !selectedSession) return "";
     const machine = machines.find((m) => m.machineId === selectedMachine);
     const session = machine?.sessions.find((s) => s.id === selectedSession);
-    return session?.name ?? selectedSession;
-  }, [machines, selectedMachine, selectedSession]);
+    const defaultName = session?.name ?? selectedSession;
+    return getSessionName(selectedSession, defaultName);
+  }, [machines, selectedMachine, selectedSession, getSessionName]);
 
   return (
     <div style={{ display: "flex", height: "100vh" }}>
@@ -40,6 +51,18 @@ export default function App() {
           setSelectedSession(s);
         }}
         onStartSession={startSession}
+        onCloseSession={(machineId, sessionId) => {
+          closeSession(machineId, sessionId);
+          if (selectedMachine === machineId && selectedSession === sessionId) {
+            setSelectedMachine(undefined);
+            setSelectedSession(undefined);
+          }
+        }}
+        getMachineName={getMachineName}
+        getSessionName={getSessionName}
+        onRenameMachine={setMachineName}
+        onRenameSession={setSessionName}
+        waitingSessions={waitingSessions}
         agents={agents}
         onAddAgent={addAgent}
         onRemoveAgent={removeAgent}

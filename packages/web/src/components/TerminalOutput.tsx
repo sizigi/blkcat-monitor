@@ -21,6 +21,7 @@ export function TerminalOutput({ lines, onData }: TerminalOutputProps) {
       disableStdin: !onData,
       convertEol: true,
       cursorBlink: !!onData,
+      scrollback: 5000,
       theme: {
         background: "#0d1117",
         foreground: "#c9d1d9",
@@ -58,11 +59,26 @@ export function TerminalOutput({ lines, onData }: TerminalOutputProps) {
     const term = termRef.current;
     if (!term) return;
     if (lines === prevLinesRef.current) return;
-    // Clear scrollback buffer (non-visual), then move cursor home +
-    // clear visible area + write content in a single write() call
-    // so xterm.js renders it atomically in one frame (no blank flash).
-    term.clear();
-    term.write("\x1b[H\x1b[2J" + lines.join("\r\n"));
+    const prev = prevLinesRef.current;
+
+    // Check if new lines are an append-only extension of previous content.
+    // This preserves scrollback history for the common case of Claude streaming output.
+    let isAppend = prev.length > 0 && lines.length > prev.length;
+    if (isAppend) {
+      for (let i = 0; i < prev.length; i++) {
+        if (prev[i] !== lines[i]) { isAppend = false; break; }
+      }
+    }
+
+    if (isAppend) {
+      // Only write the newly appended lines
+      const newLines = lines.slice(prev.length);
+      term.write("\r\n" + newLines.join("\r\n"));
+    } else {
+      // Full redraw — content changed significantly
+      term.clear();
+      term.write("\x1b[H\x1b[2J" + lines.join("\r\n"));
+    }
     prevLinesRef.current = lines;
   }, [lines]);
 

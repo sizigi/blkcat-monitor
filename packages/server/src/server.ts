@@ -284,6 +284,14 @@ export function createServer(opts: ServerOptions) {
               if (msg.args) fwd.args = msg.args;
               machine.agent.send(JSON.stringify(fwd));
             }
+          } else if (msg.type === "close_session") {
+            const machine = machines.get(msg.machineId);
+            if (machine) {
+              machine.agent.send(JSON.stringify({
+                type: "close_session",
+                sessionId: msg.sessionId,
+              }));
+            }
           }
         }
       },

@@ -8,6 +8,12 @@ interface SidebarProps {
   selectedSession?: string;
   onSelectSession: (machineId: string, sessionId: string) => void;
   onStartSession?: (machineId: string, args?: string) => void;
+  onCloseSession?: (machineId: string, sessionId: string) => void;
+  getMachineName?: (machineId: string) => string;
+  getSessionName?: (sessionId: string, defaultName: string) => string;
+  onRenameMachine?: (machineId: string, name: string) => void;
+  onRenameSession?: (sessionId: string, name: string) => void;
+  waitingSessions?: Set<string>;
   agents?: OutboundAgentInfo[];
   onAddAgent?: (address: string) => Promise<{ ok: boolean; error?: string }>;
   onRemoveAgent?: (address: string) => Promise<void>;
@@ -19,12 +25,20 @@ export function Sidebar({
   selectedSession,
   onSelectSession,
   onStartSession,
+  onCloseSession,
+  getMachineName,
+  getSessionName,
+  onRenameMachine,
+  onRenameSession,
+  waitingSessions,
   agents,
   onAddAgent,
   onRemoveAgent,
 }: SidebarProps) {
   const [expandedMachine, setExpandedMachine] = useState<string | null>(null);
   const [sessionArgs, setSessionArgs] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
   return (
     <aside
       style={{
@@ -65,7 +79,48 @@ export function Sidebar({
                 display: "inline-block",
               }}
             />
-            <span style={{ flex: 1 }}>{machine.machineId}</span>
+            {editingId === `machine:${machine.machineId}` ? (
+              <input
+                autoFocus
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                onBlur={() => {
+                  onRenameMachine?.(machine.machineId, editValue.trim());
+                  setEditingId(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    onRenameMachine?.(machine.machineId, editValue.trim());
+                    setEditingId(null);
+                  } else if (e.key === "Escape") {
+                    setEditingId(null);
+                  }
+                }}
+                style={{
+                  flex: 1,
+                  background: "var(--bg)",
+                  color: "var(--text)",
+                  border: "1px solid var(--accent)",
+                  borderRadius: 3,
+                  padding: "1px 4px",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  outline: "none",
+                }}
+              />
+            ) : (
+              <span
+                style={{ flex: 1, cursor: onRenameMachine ? "pointer" : "default" }}
+                onDoubleClick={() => {
+                  if (!onRenameMachine) return;
+                  setEditingId(`machine:${machine.machineId}`);
+                  setEditValue(getMachineName ? getMachineName(machine.machineId) : machine.machineId);
+                }}
+                title="Double-click to rename"
+              >
+                {getMachineName ? getMachineName(machine.machineId) : machine.machineId}
+              </span>
+            )}
             {onStartSession && (
               <button
                 data-testid={`new-session-${machine.machineId}`}
@@ -141,30 +196,124 @@ export function Sidebar({
             const isSelected =
               selectedMachine === machine.machineId &&
               selectedSession === session.id;
+            const isWaiting = waitingSessions?.has(`${machine.machineId}:${session.id}`);
             return (
-              <button
+              <div
                 key={session.id}
-                onClick={() => onSelectSession(machine.machineId, session.id)}
-                data-testid={`session-${session.id}`}
                 style={{
-                  display: "block",
-                  width: "100%",
-                  textAlign: "left",
-                  padding: "6px 16px 6px 32px",
+                  display: "flex",
+                  alignItems: "center",
                   background: isSelected ? "var(--bg-tertiary)" : "transparent",
-                  border: "none",
-                  color: isSelected ? "var(--accent)" : "var(--text)",
-                  cursor: "pointer",
-                  fontSize: 13,
                 }}
               >
-                {session.name}
-                {session.target === "ssh" && (
-                  <span style={{ color: "var(--text-muted)", marginLeft: 4 }}>
-                    (ssh)
-                  </span>
+                <button
+                  onClick={() => onSelectSession(machine.machineId, session.id)}
+                  data-testid={`session-${session.id}`}
+                  style={{
+                    flex: 1,
+                    textAlign: "left",
+                    padding: "6px 4px 6px 20px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    background: "transparent",
+                    border: "none",
+                    color: isSelected ? "var(--accent)" : "var(--text)",
+                    cursor: "pointer",
+                    fontSize: 13,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  <span
+                    className={isWaiting ? "waiting-indicator" : undefined}
+                    style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: "50%",
+                      background: isWaiting ? "var(--accent)" : "var(--text-muted)",
+                      display: "inline-block",
+                      flexShrink: 0,
+                      opacity: isWaiting ? 1 : 0.3,
+                    }}
+                    title={isWaiting ? "Waiting for input" : ""}
+                  />
+                  {editingId === `session:${session.id}` ? (
+                    <input
+                      autoFocus
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onClick={(e) => e.stopPropagation()}
+                      onBlur={() => {
+                        onRenameSession?.(session.id, editValue.trim());
+                        setEditingId(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          onRenameSession?.(session.id, editValue.trim());
+                          setEditingId(null);
+                        } else if (e.key === "Escape") {
+                          setEditingId(null);
+                        }
+                      }}
+                      style={{
+                        width: "100%",
+                        background: "var(--bg)",
+                        color: "var(--text)",
+                        border: "1px solid var(--accent)",
+                        borderRadius: 3,
+                        padding: "1px 4px",
+                        fontSize: 13,
+                        outline: "none",
+                      }}
+                    />
+                  ) : (
+                    <span
+                      onDoubleClick={(e) => {
+                        if (!onRenameSession) return;
+                        e.stopPropagation();
+                        setEditingId(`session:${session.id}`);
+                        setEditValue(
+                          getSessionName ? getSessionName(session.id, session.name) : session.name,
+                        );
+                      }}
+                      title="Double-click to rename"
+                    >
+                      {getSessionName ? getSessionName(session.id, session.name) : session.name}
+                      {session.target === "ssh" && (
+                        <span style={{ color: "var(--text-muted)", marginLeft: 4 }}>
+                          (ssh)
+                        </span>
+                      )}
+                    </span>
+                  )}
+                </button>
+                {onCloseSession && (
+                  <button
+                    data-testid={`close-session-${session.id}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onCloseSession(machine.machineId, session.id);
+                    }}
+                    title="Close session"
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "var(--text-muted)",
+                      cursor: "pointer",
+                      fontSize: 12,
+                      padding: "4px 8px",
+                      lineHeight: 1,
+                      opacity: 0.5,
+                    }}
+                    onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; (e.target as HTMLElement).style.color = "var(--red)"; }}
+                    onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.5"; (e.target as HTMLElement).style.color = "var(--text-muted)"; }}
+                  >
+                    ✕
+                  </button>
                 )}
-              </button>
+              </div>
             );
           })}
         </div>

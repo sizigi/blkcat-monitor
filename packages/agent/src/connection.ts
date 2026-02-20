@@ -5,6 +5,7 @@ interface AgentConnectionOptions {
   machineId: string;
   onInput: (msg: { sessionId: string; text?: string; key?: string; data?: string }) => void;
   onStartSession?: (args?: string) => void;
+  onCloseSession?: (sessionId: string) => void;
 }
 
 export class AgentConnection {
@@ -33,6 +34,8 @@ export class AgentConnection {
           opts.onInput({ sessionId: msg.sessionId, text: msg.text, key: msg.key, data: msg.data });
         } else if (msg.type === "start_session") {
           opts.onStartSession?.(msg.args);
+        } else if (msg.type === "close_session") {
+          opts.onCloseSession?.(msg.sessionId);
         }
       } catch {}
     });
@@ -48,14 +51,16 @@ export class AgentConnection {
     }));
   }
 
-  sendOutput(sessionId: string, lines: string[]) {
-    this.ws.send(JSON.stringify({
+  sendOutput(sessionId: string, lines: string[], waitingForInput?: boolean) {
+    const msg: Record<string, any> = {
       type: "output",
       machineId: this.opts.machineId,
       sessionId,
       lines,
       timestamp: Date.now(),
-    }));
+    };
+    if (waitingForInput) msg.waitingForInput = true;
+    this.ws.send(JSON.stringify(msg));
   }
 
   updateSessions(sessions: SessionInfo[]) {

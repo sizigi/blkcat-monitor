@@ -55,6 +55,22 @@ async function main() {
     if (key) cap.sendKey(sessionId, key);
   }
 
+  function handleCloseSession(sessionId: string) {
+    const cap = captures.get(sessionId);
+    if (!cap) return;
+    cap.killPane(sessionId);
+    captures.delete(sessionId);
+    prevLines.delete(sessionId);
+    // Remove from manual sessions
+    const manualIdx = manualSessions.findIndex((s) => s.id === sessionId);
+    if (manualIdx >= 0) manualSessions.splice(manualIdx, 1);
+    // Remove from auto sessions
+    autoSessions = autoSessions.filter((s) => s.id !== sessionId);
+    const all = [...autoSessions, ...manualSessions];
+    conn.updateSessions(all);
+    console.log(`Closed session: ${sessionId}`);
+  }
+
   function handleStartSession(args?: string) {
     const localCap = new TmuxCapture(bunExec);
     const paneId = localCap.startSession(args);
@@ -70,7 +86,7 @@ async function main() {
     console.log(`Started new session: ${paneId}`);
   }
 
-  let conn: { register(sessions: SessionInfo[]): void; sendOutput(sessionId: string, lines: string[]): void; updateSessions(sessions: SessionInfo[]): void; close(): void };
+  let conn: { register(sessions: SessionInfo[]): void; sendOutput(sessionId: string, lines: string[], waitingForInput?: boolean): void; updateSessions(sessions: SessionInfo[]): void; close(): void };
 
   if (config.listenPort) {
     const listener = new AgentListener({
@@ -78,6 +94,7 @@ async function main() {
       machineId: config.machineId,
       onInput: handleInput,
       onStartSession: handleStartSession,
+      onCloseSession: handleCloseSession,
     });
     conn = listener;
     conn.register(allSessions);
@@ -88,6 +105,7 @@ async function main() {
       machineId: config.machineId,
       onInput: handleInput,
       onStartSession: handleStartSession,
+      onCloseSession: handleCloseSession,
     });
     conn = connection;
     await connection.waitForOpen();
@@ -97,12 +115,31 @@ async function main() {
 
   const prevLines = new Map<string, string[]>();
 
+  // Detect if terminal output indicates Claude is waiting for user input.
+  // Looks for common prompt patterns on the last non-empty line.
+  function detectWaitingForInput(lines: string[]): boolean {
+    // Find the last non-empty line (strip ANSI escape sequences for matching)
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const stripped = lines[i].replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "").trim();
+      if (!stripped) continue;
+      // Claude Code prompts: "> ", "? ", or lines ending with common prompt indicators
+      if (/^[>?]\s*$/.test(stripped)) return true;
+      if (/[>?]\s*$/.test(stripped) && stripped.length < 80) return true;
+      // Also check for yes/no style prompts
+      if (/\(y\/n\)\s*$/i.test(stripped)) return true;
+      if (/\(Y\/n\)\s*$/i.test(stripped)) return true;
+      return false;
+    }
+    return false;
+  }
+
   setInterval(() => {
     for (const [paneId, cap] of captures) {
       const lines = cap.capturePane(paneId);
       const prev = prevLines.get(paneId) ?? [];
       if (hasChanged(prev, lines)) {
-        conn.sendOutput(paneId, lines);
+        const waitingForInput = detectWaitingForInput(lines);
+        conn.sendOutput(paneId, lines, waitingForInput);
         prevLines.set(paneId, lines);
       }
     }
