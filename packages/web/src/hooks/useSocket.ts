@@ -122,8 +122,8 @@ export function useSocket(url: string): UseSocketReturn {
           setMachines(msg.machines);
           // Seed hook events from snapshot
           for (const machine of msg.machines) {
-            if ((machine as any).recentEvents) {
-              hookEventsRef.current.push(...(machine as any).recentEvents);
+            if (machine.recentEvents) {
+              hookEventsRef.current.push(...machine.recentEvents);
             }
           }
         } else if (msg.type === "machine_update") {

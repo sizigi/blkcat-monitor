@@ -47,8 +47,8 @@ export class HooksServer {
                 ? body.source
                 : null;
 
-          // Remove tmux_pane from data (it's agent-internal)
-          const { tmux_pane: _, ...data } = body;
+          // Remove agent-internal fields from data
+          const { tmux_pane: _, hook_event_name: __, ...data } = body;
 
           const event: AgentHookEventMessage = {
             type: "hook_event",
