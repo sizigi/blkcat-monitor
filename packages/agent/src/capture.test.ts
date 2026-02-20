@@ -66,6 +66,18 @@ describe("TmuxCapture", () => {
     expect(paneId).toBe("dev:1.0");
   });
 
+  it("starts a new session with cwd", () => {
+    const exec = mockExec({
+      "tmux new-window -P -F #{session_name}:#{window_index}.#{pane_index} -c /home/user/project claude --model sonnet": {
+        success: true,
+        stdout: "dev:1.0\n",
+      },
+    });
+    const capture = new TmuxCapture(exec);
+    const paneId = capture.startSession("--model sonnet", "/home/user/project");
+    expect(paneId).toBe("dev:1.0");
+  });
+
   it("starts a new session without args", () => {
     const exec = mockExec({
       "tmux new-window -P -F #{session_name}:#{window_index}.#{pane_index} claude": {

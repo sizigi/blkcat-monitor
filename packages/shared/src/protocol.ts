@@ -54,6 +54,7 @@ export interface ServerInputMessage {
 export interface ServerStartSessionMessage {
   type: "start_session";
   args?: string;
+  cwd?: string;
 }
 
 export interface ServerCloseSessionMessage {
@@ -74,6 +75,7 @@ export interface ServerMachineUpdateMessage {
   type: "machine_update";
   machineId: string;
   sessions: SessionInfo[];
+  online?: boolean;
 }
 
 export interface ServerOutputMessage {
@@ -105,6 +107,7 @@ export interface DashboardStartSessionMessage {
   type: "start_session";
   machineId: string;
   args?: string;
+  cwd?: string;
 }
 
 export interface DashboardCloseSessionMessage {

@@ -17,7 +17,7 @@ export interface UseSocketReturn {
   machines: MachineSnapshot[];
   outputs: OutputLine[];
   sendInput: (machineId: string, sessionId: string, opts: { text?: string; key?: string; data?: string }) => void;
-  startSession: (machineId: string, args?: string) => void;
+  startSession: (machineId: string, args?: string, cwd?: string) => void;
   closeSession: (machineId: string, sessionId: string) => void;
 }
 
@@ -42,10 +42,10 @@ export function useSocket(url: string): UseSocketReturn {
           setMachines(msg.machines);
         } else if (msg.type === "machine_update") {
           setMachines((prev) => {
-            const idx = prev.findIndex((m) => m.machineId === msg.machineId);
-            if (msg.sessions.length === 0) {
+            if (msg.online === false) {
               return prev.filter((m) => m.machineId !== msg.machineId);
             }
+            const idx = prev.findIndex((m) => m.machineId === msg.machineId);
             const updated: MachineSnapshot = {
               machineId: msg.machineId,
               sessions: msg.sessions,
@@ -99,11 +99,12 @@ export function useSocket(url: string): UseSocketReturn {
   );
 
   const startSession = useCallback(
-    (machineId: string, args?: string) => {
+    (machineId: string, args?: string, cwd?: string) => {
       const ws = wsRef.current;
       if (ws && ws.readyState === WebSocket.OPEN) {
         const msg: Record<string, any> = { type: "start_session", machineId };
         if (args) msg.args = args;
+        if (cwd) msg.cwd = cwd;
         ws.send(JSON.stringify(msg));
       }
     },

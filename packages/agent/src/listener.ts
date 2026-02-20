@@ -4,7 +4,7 @@ interface AgentListenerOptions {
   port: number;
   machineId: string;
   onInput: (msg: { sessionId: string; text?: string; key?: string; data?: string }) => void;
-  onStartSession?: (args?: string) => void;
+  onStartSession?: (args?: string, cwd?: string) => void;
   onCloseSession?: (sessionId: string) => void;
 }
 
@@ -42,7 +42,7 @@ export class AgentListener {
             if (msg.type === "input") {
               this.opts.onInput({ sessionId: msg.sessionId, text: msg.text, key: msg.key, data: msg.data });
             } else if (msg.type === "start_session") {
-              this.opts.onStartSession?.(msg.args);
+              this.opts.onStartSession?.(msg.args, msg.cwd);
             } else if (msg.type === "close_session") {
               this.opts.onCloseSession?.(msg.sessionId);
             }

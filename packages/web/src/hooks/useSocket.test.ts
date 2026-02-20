@@ -62,6 +62,70 @@ describe("useSocket", () => {
     expect(result.current.machines[0].machineId).toBe("m1");
   });
 
+  it("keeps machine with empty sessions on machine_update", async () => {
+    const { result } = renderHook(() => useSocket("ws://test"));
+    const ws = MockWebSocket.instances[0];
+
+    await vi.waitFor(() => expect(result.current.connected).toBe(true));
+
+    act(() => {
+      ws.emit("message", {
+        data: JSON.stringify({
+          type: "machine_update",
+          machineId: "m1",
+          sessions: [{ id: "s1", name: "dev", target: "local" }],
+        }),
+      });
+    });
+
+    expect(result.current.machines).toHaveLength(1);
+
+    act(() => {
+      ws.emit("message", {
+        data: JSON.stringify({
+          type: "machine_update",
+          machineId: "m1",
+          sessions: [],
+        }),
+      });
+    });
+
+    expect(result.current.machines).toHaveLength(1);
+    expect(result.current.machines[0].sessions).toEqual([]);
+  });
+
+  it("removes machine on machine_update with online false", async () => {
+    const { result } = renderHook(() => useSocket("ws://test"));
+    const ws = MockWebSocket.instances[0];
+
+    await vi.waitFor(() => expect(result.current.connected).toBe(true));
+
+    act(() => {
+      ws.emit("message", {
+        data: JSON.stringify({
+          type: "machine_update",
+          machineId: "m1",
+          sessions: [{ id: "s1", name: "dev", target: "local" }],
+        }),
+      });
+    });
+
+    expect(result.current.machines).toHaveLength(1);
+
+    act(() => {
+      ws.emit("message", {
+        data: JSON.stringify({
+          type: "machine_update",
+          machineId: "m1",
+          sessions: [],
+          online: false,
+        }),
+      });
+    });
+
+    expect(result.current.machines).toHaveLength(0);
+  });
+
   it("sends input message with text", async () => {
     const { result } = renderHook(() => useSocket("ws://test"));
 
@@ -106,6 +170,23 @@ describe("useSocket", () => {
     expect(sent.type).toBe("start_session");
     expect(sent.machineId).toBe("m1");
     expect(sent.args).toBe("--model sonnet");
+  });
+
+  it("sends start_session message with cwd", async () => {
+    const { result } = renderHook(() => useSocket("ws://test"));
+
+    await vi.waitFor(() => expect(result.current.connected).toBe(true));
+
+    act(() => {
+      result.current.startSession("m1", "--model sonnet", "/home/user/project");
+    });
+
+    const ws = MockWebSocket.instances[0];
+    const sent = JSON.parse(ws.sent[0]);
+    expect(sent.type).toBe("start_session");
+    expect(sent.machineId).toBe("m1");
+    expect(sent.args).toBe("--model sonnet");
+    expect(sent.cwd).toBe("/home/user/project");
   });
 
   it("sends start_session message without args", async () => {

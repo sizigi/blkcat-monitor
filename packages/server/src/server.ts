@@ -104,6 +104,7 @@ export function createServer(opts: ServerOptions) {
         type: "machine_update",
         machineId: agent.machineId,
         sessions: [],
+        online: false,
       });
     }
   }
@@ -282,6 +283,7 @@ export function createServer(opts: ServerOptions) {
             if (machine) {
               const fwd: Record<string, any> = { type: "start_session" };
               if (msg.args) fwd.args = msg.args;
+              if (msg.cwd) fwd.cwd = msg.cwd;
               machine.agent.send(JSON.stringify(fwd));
             }
           } else if (msg.type === "close_session") {

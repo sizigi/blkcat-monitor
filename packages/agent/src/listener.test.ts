@@ -72,6 +72,29 @@ describe("AgentListener", () => {
     ws.close();
   });
 
+  it("routes start_session with cwd to onStartSession callback", async () => {
+    const received: { args?: string; cwd?: string }[] = [];
+    listener = new AgentListener({
+      port: 0,
+      machineId: "cwd-test",
+      onInput: () => {},
+      onStartSession: (args, cwd) => received.push({ args, cwd }),
+    });
+
+    const ws = new WebSocket(`ws://localhost:${listener.port}`);
+    await new Promise<void>((r) => ws.addEventListener("open", () => r()));
+    await Bun.sleep(50);
+
+    ws.send(JSON.stringify({ type: "start_session", args: "--model sonnet", cwd: "/home/user/project" }));
+    await Bun.sleep(100);
+
+    expect(received.length).toBe(1);
+    expect(received[0].args).toBe("--model sonnet");
+    expect(received[0].cwd).toBe("/home/user/project");
+
+    ws.close();
+  });
+
   it("broadcasts sendOutput to all connected clients", async () => {
     listener = new AgentListener({
       port: 0,

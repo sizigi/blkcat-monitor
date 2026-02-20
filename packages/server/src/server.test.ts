@@ -93,6 +93,41 @@ describe("Server", () => {
     dash.close();
   });
 
+  it("forwards start_session with cwd from dashboard to agent", async () => {
+    const agent = new WebSocket(`ws://localhost:${port}/ws/agent`);
+    await new Promise<void>((r) => agent.addEventListener("open", () => r()));
+
+    agent.send(JSON.stringify({
+      type: "register",
+      machineId: "cwd-test",
+      sessions: [{ id: "s1", name: "dev", target: "local" }],
+    }));
+    await Bun.sleep(50);
+
+    const agentMsgs: any[] = [];
+    agent.addEventListener("message", (ev) => agentMsgs.push(JSON.parse(ev.data as string)));
+
+    const dash = new WebSocket(`ws://localhost:${port}/ws/dashboard`);
+    await new Promise<void>((r) => dash.addEventListener("open", () => r()));
+    await Bun.sleep(50);
+
+    dash.send(JSON.stringify({
+      type: "start_session",
+      machineId: "cwd-test",
+      args: "--model sonnet",
+      cwd: "/home/user/project",
+    }));
+    await Bun.sleep(50);
+
+    const startMsg = agentMsgs.find((m) => m.type === "start_session");
+    expect(startMsg).toBeDefined();
+    expect(startMsg.args).toBe("--model sonnet");
+    expect(startMsg.cwd).toBe("/home/user/project");
+
+    agent.close();
+    dash.close();
+  });
+
   it("GET /api/sessions returns machine list", async () => {
     const res = await fetch(`http://localhost:${port}/api/sessions`);
     expect(res.ok).toBe(true);

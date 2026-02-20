@@ -7,7 +7,7 @@ interface SidebarProps {
   selectedMachine?: string;
   selectedSession?: string;
   onSelectSession: (machineId: string, sessionId: string) => void;
-  onStartSession?: (machineId: string, args?: string) => void;
+  onStartSession?: (machineId: string, args?: string, cwd?: string) => void;
   onCloseSession?: (machineId: string, sessionId: string) => void;
   getMachineName?: (machineId: string) => string;
   getSessionName?: (sessionId: string, defaultName: string) => string;
@@ -37,6 +37,7 @@ export function Sidebar({
 }: SidebarProps) {
   const [expandedMachine, setExpandedMachine] = useState<string | null>(null);
   const [sessionArgs, setSessionArgs] = useState("");
+  const [sessionCwd, setSessionCwd] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   return (
@@ -129,6 +130,7 @@ export function Sidebar({
                     expandedMachine === machine.machineId ? null : machine.machineId,
                   );
                   setSessionArgs("");
+                  setSessionCwd("");
                 }}
                 style={{
                   background: "none",
@@ -150,46 +152,67 @@ export function Sidebar({
               data-testid={`new-session-form-${machine.machineId}`}
               onSubmit={(e) => {
                 e.preventDefault();
-                onStartSession(machine.machineId, sessionArgs || undefined);
+                onStartSession(machine.machineId, sessionArgs || undefined, sessionCwd || undefined);
                 setExpandedMachine(null);
                 setSessionArgs("");
+                setSessionCwd("");
               }}
               style={{
                 padding: "4px 16px 8px 32px",
                 display: "flex",
+                flexDirection: "column",
                 gap: 4,
               }}
             >
               <input
-                data-testid={`new-session-args-${machine.machineId}`}
+                data-testid={`new-session-cwd-${machine.machineId}`}
                 type="text"
-                value={sessionArgs}
-                onChange={(e) => setSessionArgs(e.target.value)}
-                placeholder="e.g. --model sonnet"
+                value={sessionCwd}
+                onChange={(e) => setSessionCwd(e.target.value)}
+                placeholder="path, e.g. ~/projects/myapp"
                 style={{
-                  flex: 1,
+                  width: "100%",
                   padding: "4px 8px",
                   fontSize: 12,
                   background: "var(--bg)",
                   color: "var(--text)",
                   border: "1px solid var(--border)",
                   borderRadius: 4,
+                  boxSizing: "border-box",
                 }}
               />
-              <button
-                type="submit"
-                style={{
-                  padding: "4px 8px",
-                  fontSize: 12,
-                  background: "var(--accent)",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: 4,
-                  cursor: "pointer",
-                }}
-              >
-                Start
-              </button>
+              <div style={{ display: "flex", gap: 4 }}>
+                <input
+                  data-testid={`new-session-args-${machine.machineId}`}
+                  type="text"
+                  value={sessionArgs}
+                  onChange={(e) => setSessionArgs(e.target.value)}
+                  placeholder="args, e.g. --model sonnet"
+                  style={{
+                    flex: 1,
+                    padding: "4px 8px",
+                    fontSize: 12,
+                    background: "var(--bg)",
+                    color: "var(--text)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 4,
+                  }}
+                />
+                <button
+                  type="submit"
+                  style={{
+                    padding: "4px 8px",
+                    fontSize: 12,
+                    background: "var(--accent)",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: 4,
+                    cursor: "pointer",
+                  }}
+                >
+                  Start
+                </button>
+              </div>
             </form>
           )}
           {machine.sessions.map((session) => {

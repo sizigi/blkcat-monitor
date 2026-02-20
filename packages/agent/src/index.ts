@@ -71,9 +71,9 @@ async function main() {
     console.log(`Closed session: ${sessionId}`);
   }
 
-  function handleStartSession(args?: string) {
+  function handleStartSession(args?: string, cwd?: string) {
     const localCap = new TmuxCapture(bunExec);
-    const paneId = localCap.startSession(args);
+    const paneId = localCap.startSession(args, cwd);
     if (!paneId) {
       console.error("Failed to start new session");
       return;

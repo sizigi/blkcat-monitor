@@ -69,9 +69,11 @@ export class TmuxCapture {
     return this.exec(cmd).success;
   }
 
-  startSession(args?: string): string | null {
+  startSession(args?: string, cwd?: string): string | null {
     const claudeCmd = args ? `claude ${args}` : "claude";
-    const cmd = [...this.sshPrefix, "tmux", "new-window", "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}", claudeCmd];
+    const cmd = [...this.sshPrefix, "tmux", "new-window", "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}"];
+    if (cwd) cmd.push("-c", cwd);
+    cmd.push(claudeCmd);
     const result = this.exec(cmd);
     if (!result.success) return null;
     return result.stdout.trim();

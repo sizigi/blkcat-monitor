@@ -2,7 +2,7 @@ import { createServer } from "./server";
 
 const port = parseInt(process.env.BLKCAT_PORT ?? "3000");
 const hostname = process.env.BLKCAT_HOST;
-const staticDir = process.env.BLKCAT_STATIC_DIR;
+const staticDir = process.env.BLKCAT_STATIC_DIR ?? new URL("../../web/dist", import.meta.url).pathname;
 const agents = process.env.BLKCAT_AGENTS
   ? process.env.BLKCAT_AGENTS.split(",").map((s) => s.trim()).filter(Boolean)
   : undefined;

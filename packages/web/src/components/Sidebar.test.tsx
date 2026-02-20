@@ -65,7 +65,7 @@ describe("Sidebar", () => {
     fireEvent.change(input, { target: { value: "--model sonnet" } });
     fireEvent.submit(screen.getByTestId("new-session-form-m1"));
 
-    expect(onStart).toHaveBeenCalledWith("m1", "--model sonnet");
+    expect(onStart).toHaveBeenCalledWith("m1", "--model sonnet", undefined);
     expect(screen.queryByTestId("new-session-form-m1")).not.toBeInTheDocument();
   });
 
@@ -78,7 +78,21 @@ describe("Sidebar", () => {
     fireEvent.click(screen.getByTestId("new-session-m1"));
     fireEvent.submit(screen.getByTestId("new-session-form-m1"));
 
-    expect(onStart).toHaveBeenCalledWith("m1", undefined);
+    expect(onStart).toHaveBeenCalledWith("m1", undefined, undefined);
+  });
+
+  it("calls onStartSession with cwd when path provided", () => {
+    const onStart = vi.fn();
+    render(
+      <Sidebar machines={machines} onSelectSession={() => {}} onStartSession={onStart} />,
+    );
+
+    fireEvent.click(screen.getByTestId("new-session-m1"));
+    const cwdInput = screen.getByTestId("new-session-cwd-m1");
+    fireEvent.change(cwdInput, { target: { value: "/home/user/project" } });
+    fireEvent.submit(screen.getByTestId("new-session-form-m1"));
+
+    expect(onStart).toHaveBeenCalledWith("m1", undefined, "/home/user/project");
   });
 
   it("renders AgentManager when agent props provided", () => {
