@@ -82,6 +82,14 @@ cd packages/web && bunx vite
 
 Open http://localhost:5173 — select a session from the sidebar to view terminal output and send commands. Use the "+" button next to a machine name to start a new Claude Code session with optional arguments.
 
+## Dashboard Features
+
+- **Terminal streaming** — live xterm.js terminal with scrollback history (5000 lines). Scroll up with mouse wheel to view previous output.
+- **Session management** — start new Claude sessions with the "+" button, close sessions with the "x" button next to each session name.
+- **Rename sessions & machines** — double-click any session or machine name in the sidebar to set a custom display name. Names persist in browser localStorage.
+- **Input indicator** — a pulsing blue dot appears next to sessions that are waiting for user input (e.g. Claude prompting for a response).
+- **Outbound agent management** — add or remove reverse-connection agents from the dashboard UI.
+
 ## Packages
 
 | Package | Description |
@@ -151,6 +159,19 @@ Open http://localhost:5173 — select a session from the sidebar to view termina
   ]
 }
 ```
+
+### WebSocket Messages
+
+The dashboard communicates with the server over WebSocket (`/ws/dashboard`). Key message types:
+
+| Direction | Type | Description |
+|-----------|------|-------------|
+| Server → Dashboard | `snapshot` | Initial state with all machines/sessions |
+| Server → Dashboard | `machine_update` | Session list changed for a machine |
+| Server → Dashboard | `output` | Terminal output update (includes `waitingForInput` flag) |
+| Dashboard → Server | `input` | Send text/key/data to a session |
+| Dashboard → Server | `start_session` | Create a new Claude session |
+| Dashboard → Server | `close_session` | Kill a tmux session |
 
 ## Testing
 
