@@ -4,6 +4,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 
 interface TerminalOutputProps {
+  sessionKey?: string;
   lines: string[];
   onData?: (data: string) => void;
   onResize?: (cols: number, rows: number) => void;
@@ -15,11 +16,12 @@ function stripAnsi(s: string): string {
   return s.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "").trimEnd();
 }
 
-export function TerminalOutput({ lines, onData, onResize }: TerminalOutputProps) {
+export function TerminalOutput({ sessionKey, lines, onData, onResize }: TerminalOutputProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const prevLinesRef = useRef<string[]>([]);
+  const pendingLinesRef = useRef<string[] | null>(null);
   const onResizeRef = useRef(onResize);
   onResizeRef.current = onResize;
 
@@ -48,6 +50,16 @@ export function TerminalOutput({ lines, onData, onResize }: TerminalOutputProps)
     termRef.current = term;
     fitRef.current = fit;
 
+    // When user clears selection, flush any deferred terminal updates
+    const selDisposable = term.onSelectionChange(() => {
+      if (!term.hasSelection() && pendingLinesRef.current) {
+        const deferred = pendingLinesRef.current;
+        pendingLinesRef.current = null;
+        prevLinesRef.current = deferred;
+        term.write("\x1b[H\x1b[2J" + deferred.join("\r\n"));
+      }
+    });
+
     let resizeTimer: ReturnType<typeof setTimeout> | undefined;
     const resizeObserver = new ResizeObserver(() => {
       fit.fit();
@@ -61,6 +73,7 @@ export function TerminalOutput({ lines, onData, onResize }: TerminalOutputProps)
     return () => {
       clearTimeout(resizeTimer);
       resizeObserver.disconnect();
+      selDisposable.dispose();
       term.dispose();
     };
   }, []);
@@ -72,21 +85,35 @@ export function TerminalOutput({ lines, onData, onResize }: TerminalOutputProps)
     return () => disposable.dispose();
   }, [onData]);
 
+  // Reset terminal state when switching sessions so overlap detection
+  // doesn't compare unrelated content from different sessions.
+  useEffect(() => {
+    const term = termRef.current;
+    if (!term) return;
+    prevLinesRef.current = [];
+    pendingLinesRef.current = null;
+    term.clear();
+    term.write("\x1b[H\x1b[2J");
+  }, [sessionKey]);
+
   useEffect(() => {
     const term = termRef.current;
     if (!term) return;
     if (lines === prevLinesRef.current) return;
     const prev = prevLinesRef.current;
 
-    // tmux capture-pane sends viewport snapshots. When content scrolls, old
-    // lines leave the top and new ones appear at the bottom. We find the
-    // overlap (stripping ANSI codes which can differ between captures), then
-    // push scrolled-off lines into xterm's scrollback buffer before redrawing
-    // the visible viewport.
-    let overlap = 0;
+    // tmux capture-pane sends viewport snapshots. We need to distinguish
+    // between content that scrolled (old lines leave the top, new ones appear
+    // at the bottom) and content that was edited in place (e.g. spinner
+    // updates, typing at a prompt). Only actual scrolling should push lines
+    // into xterm's scrollback buffer.
+    const prevStripped = prev.map(stripAnsi);
+    const linesStripped = lines.map(stripAnsi);
+
+    // 1. Scroll overlap: longest suffix of prev matching prefix of new.
+    //    Detects how many lines scrolled off the top.
+    let scrollOverlap = 0;
     if (prev.length > 0 && lines.length > 0) {
-      const prevStripped = prev.map(stripAnsi);
-      const linesStripped = lines.map(stripAnsi);
       const maxK = Math.min(prev.length, lines.length);
       for (let k = maxK; k >= 1; k--) {
         let match = true;
@@ -96,15 +123,38 @@ export function TerminalOutput({ lines, onData, onResize }: TerminalOutputProps)
             break;
           }
         }
-        if (match) { overlap = k; break; }
+        if (match) { scrollOverlap = k; break; }
       }
     }
 
-    // Number of lines that scrolled off the top since last snapshot
-    const scrolled = prev.length - overlap;
+    // 2. In-place match: count lines that are identical at the same position.
+    //    High in-place match means content was edited, not scrolled.
+    let inPlaceMatch = 0;
+    const minLen = Math.min(prevStripped.length, linesStripped.length);
+    for (let i = 0; i < minLen; i++) {
+      if (prevStripped[i] === linesStripped[i]) inPlaceMatch++;
+    }
+
+    // Use scroll overlap only when it explains the change better than
+    // in-place matching. This prevents false scrollback pushes when content
+    // is merely edited (spinners, typing, partial redraws).
+    const scrolled = scrollOverlap > inPlaceMatch
+      ? prev.length - scrollOverlap
+      : 0;
+
+    // If the user has text selected (e.g. for copy), defer the redraw so
+    // the selection isn't destroyed by the screen clear.
+    if (term.hasSelection()) {
+      pendingLinesRef.current = lines;
+      return;
+    }
+
     if (scrolled > 0) {
-      // Write newlines at the bottom to push old lines into scrollback
-      term.write("\r\n".repeat(scrolled));
+      // Move cursor to last row first — \r\n only scrolls content into
+      // the scrollback buffer when the cursor is at the bottom of the
+      // viewport. Without this, lines are lost if prev had fewer lines
+      // than the terminal rows.
+      term.write(`\x1b[${term.rows};1H` + "\r\n".repeat(scrolled));
     }
 
     // Overwrite the visible viewport with the current snapshot.

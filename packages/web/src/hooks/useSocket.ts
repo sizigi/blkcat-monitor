@@ -15,7 +15,9 @@ export interface OutputLine {
 export interface UseSocketReturn {
   connected: boolean;
   machines: MachineSnapshot[];
-  outputs: OutputLine[];
+  waitingSessions: Set<string>;
+  outputMapRef: React.RefObject<Map<string, OutputLine>>;
+  subscribeOutput: (cb: (key: string) => void) => () => void;
   sendInput: (machineId: string, sessionId: string, opts: { text?: string; key?: string; data?: string }) => void;
   startSession: (machineId: string, args?: string, cwd?: string) => void;
   closeSession: (machineId: string, sessionId: string) => void;
@@ -25,8 +27,18 @@ export interface UseSocketReturn {
 export function useSocket(url: string): UseSocketReturn {
   const [connected, setConnected] = useState(false);
   const [machines, setMachines] = useState<MachineSnapshot[]>([]);
-  const [outputs, setOutputs] = useState<OutputLine[]>([]);
+  const [waitingSessions, setWaitingSessions] = useState<Set<string>>(new Set());
   const wsRef = useRef<WebSocket | null>(null);
+
+  // Store outputs in a ref-based Map for O(1) lookup without triggering
+  // App-level re-renders on every output message from every session.
+  const outputMapRef = useRef(new Map<string, OutputLine>());
+  const outputSubsRef = useRef(new Set<(key: string) => void>());
+
+  const subscribeOutput = useCallback((cb: (key: string) => void) => {
+    outputSubsRef.current.add(cb);
+    return () => { outputSubsRef.current.delete(cb); };
+  }, []);
 
   useEffect(() => {
     const ws = new WebSocket(url);
@@ -60,23 +72,32 @@ export function useSocket(url: string): UseSocketReturn {
             return [...prev, updated];
           });
         } else if (msg.type === "output") {
-          setOutputs((prev) => {
-            const entry: OutputLine = {
-              machineId: msg.machineId,
-              sessionId: msg.sessionId,
-              lines: msg.lines,
-              timestamp: msg.timestamp,
-              waitingForInput: (msg as any).waitingForInput,
-            };
-            const idx = prev.findIndex(
-              (o) => o.machineId === msg.machineId && o.sessionId === msg.sessionId,
-            );
-            if (idx >= 0) {
-              const next = [...prev];
-              next[idx] = entry;
+          const key = `${msg.machineId}:${msg.sessionId}`;
+          const entry: OutputLine = {
+            machineId: msg.machineId,
+            sessionId: msg.sessionId,
+            lines: msg.lines,
+            timestamp: msg.timestamp,
+            waitingForInput: (msg as any).waitingForInput,
+          };
+          outputMapRef.current.set(key, entry);
+
+          // Notify subscribers (only the selected session's hook re-renders)
+          for (const sub of outputSubsRef.current) sub(key);
+
+          // Update waitingSessions only when membership actually changes
+          setWaitingSessions((prev) => {
+            const has = prev.has(key);
+            if (entry.waitingForInput && !has) {
+              const next = new Set(prev);
+              next.add(key);
+              return next;
+            } else if (!entry.waitingForInput && has) {
+              const next = new Set(prev);
+              next.delete(key);
               return next;
             }
-            return [...prev, entry];
+            return prev;
           });
         }
       } catch {}
@@ -132,5 +153,5 @@ export function useSocket(url: string): UseSocketReturn {
     [],
   );
 
-  return { connected, machines, outputs, sendInput, startSession, closeSession, sendResize };
+  return { connected, machines, waitingSessions, outputMapRef, subscribeOutput, sendInput, startSession, closeSession, sendResize };
 }

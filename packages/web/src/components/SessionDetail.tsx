@@ -40,7 +40,7 @@ export function SessionDetail({
           {machineId} / {sessionId}
         </span>
       </div>
-      <TerminalOutput lines={lines} onData={onSendData} onResize={onResize} />
+      <TerminalOutput sessionKey={`${machineId}:${sessionId}`} lines={lines} onData={onSendData} onResize={onResize} />
       <div style={{ borderTop: "1px solid var(--border)" }}>
         <ChatInput onSendText={onSendText} onSendKey={onSendKey} />
       </div>

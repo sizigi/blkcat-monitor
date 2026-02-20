@@ -204,4 +204,70 @@ describe("useSocket", () => {
     expect(sent.machineId).toBe("m1");
     expect(sent.args).toBeUndefined();
   });
+
+  it("stores output in ref map and notifies subscribers", async () => {
+    const { result } = renderHook(() => useSocket("ws://test"));
+    const ws = MockWebSocket.instances[0];
+
+    await vi.waitFor(() => expect(result.current.connected).toBe(true));
+
+    const notified: string[] = [];
+    const unsub = result.current.subscribeOutput((key) => notified.push(key));
+
+    act(() => {
+      ws.emit("message", {
+        data: JSON.stringify({
+          type: "output",
+          machineId: "m1",
+          sessionId: "s1",
+          lines: ["hello"],
+          timestamp: 1,
+        }),
+      });
+    });
+
+    expect(notified).toEqual(["m1:s1"]);
+    expect(result.current.outputMapRef.current?.get("m1:s1")?.lines).toEqual(["hello"]);
+
+    unsub();
+  });
+
+  it("updates waitingSessions only on membership change", async () => {
+    const { result } = renderHook(() => useSocket("ws://test"));
+    const ws = MockWebSocket.instances[0];
+
+    await vi.waitFor(() => expect(result.current.connected).toBe(true));
+
+    expect(result.current.waitingSessions.size).toBe(0);
+
+    act(() => {
+      ws.emit("message", {
+        data: JSON.stringify({
+          type: "output",
+          machineId: "m1",
+          sessionId: "s1",
+          lines: ["$ "],
+          timestamp: 1,
+          waitingForInput: true,
+        }),
+      });
+    });
+
+    expect(result.current.waitingSessions.has("m1:s1")).toBe(true);
+
+    act(() => {
+      ws.emit("message", {
+        data: JSON.stringify({
+          type: "output",
+          machineId: "m1",
+          sessionId: "s1",
+          lines: ["running..."],
+          timestamp: 2,
+          waitingForInput: false,
+        }),
+      });
+    });
+
+    expect(result.current.waitingSessions.has("m1:s1")).toBe(false);
+  });
 });

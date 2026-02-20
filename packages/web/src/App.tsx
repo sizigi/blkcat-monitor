@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useCallback, useRef } from "react";
-import { useSocket } from "./hooks/useSocket";
+import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { useSocket, type OutputLine } from "./hooks/useSocket";
 import { useAgents } from "./hooks/useAgents";
 import { useDisplayNames } from "./hooks/useDisplayNames";
 import { Sidebar } from "./components/Sidebar";
@@ -13,8 +13,39 @@ const DEFAULT_SIDEBAR_WIDTH = 250;
 const MIN_SIDEBAR_WIDTH = 160;
 const MAX_SIDEBAR_WIDTH = 500;
 
+/** Subscribe to output changes for a specific session. Only triggers a
+ *  re-render when the selected session's output changes — not when any
+ *  other session receives new data. */
+function useSessionLines(
+  outputMapRef: React.RefObject<Map<string, OutputLine>>,
+  subscribeOutput: (cb: (key: string) => void) => () => void,
+  machineId?: string,
+  sessionId?: string,
+): string[] {
+  const [lines, setLines] = useState<string[]>([]);
+  const targetKey = machineId && sessionId ? `${machineId}:${sessionId}` : "";
+
+  useEffect(() => {
+    if (!targetKey) { setLines([]); return; }
+
+    // Read current cached value
+    const current = outputMapRef.current?.get(targetKey);
+    setLines(current?.lines ?? []);
+
+    // Subscribe to future updates for this session only
+    return subscribeOutput((key) => {
+      if (key === targetKey) {
+        const output = outputMapRef.current?.get(key);
+        if (output) setLines(output.lines);
+      }
+    });
+  }, [targetKey, outputMapRef, subscribeOutput]);
+
+  return lines;
+}
+
 export default function App() {
-  const { connected, machines, outputs, sendInput, startSession, closeSession, sendResize } = useSocket(WS_URL);
+  const { connected, machines, waitingSessions, outputMapRef, subscribeOutput, sendInput, startSession, closeSession, sendResize } = useSocket(WS_URL);
   const { agents, addAgent, removeAgent } = useAgents();
   const { getMachineName, getSessionName, setMachineName, setSessionName } = useDisplayNames();
   const [selectedMachine, setSelectedMachine] = useState<string>();
@@ -23,21 +54,7 @@ export default function App() {
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
   const resizing = useRef(false);
 
-  const sessionLines = useMemo(() => {
-    if (!selectedMachine || !selectedSession) return [];
-    const matching = outputs.filter(
-      (o) => o.machineId === selectedMachine && o.sessionId === selectedSession,
-    );
-    return matching.length > 0 ? matching[matching.length - 1].lines : [];
-  }, [outputs, selectedMachine, selectedSession]);
-
-  const waitingSessions = useMemo(() => {
-    const set = new Set<string>();
-    for (const o of outputs) {
-      if (o.waitingForInput) set.add(`${o.machineId}:${o.sessionId}`);
-    }
-    return set;
-  }, [outputs]);
+  const sessionLines = useSessionLines(outputMapRef, subscribeOutput, selectedMachine, selectedSession);
 
   const selectedSessionName = useMemo(() => {
     if (!selectedMachine || !selectedSession) return "";
