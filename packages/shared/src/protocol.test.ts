@@ -36,6 +36,16 @@ describe("parseAgentMessage", () => {
     expect(parseAgentMessage("not json")).toBeNull();
   });
 
+  it("parses scrollback message", () => {
+    const msg = parseAgentMessage(JSON.stringify({
+      type: "scrollback",
+      machineId: "m1",
+      sessionId: "s1",
+      lines: ["line1", "line2"],
+    }));
+    expect(msg?.type).toBe("scrollback");
+  });
+
   it("returns null for unknown type", () => {
     expect(parseAgentMessage(JSON.stringify({ type: "unknown" }))).toBeNull();
   });
@@ -67,5 +77,14 @@ describe("parseDashboardMessage", () => {
       machineId: "m1",
     }));
     expect(msg?.type).toBe("start_session");
+  });
+
+  it("parses request_scrollback message", () => {
+    const msg = parseDashboardMessage(JSON.stringify({
+      type: "request_scrollback",
+      machineId: "m1",
+      sessionId: "s1",
+    }));
+    expect(msg?.type).toBe("request_scrollback");
   });
 });

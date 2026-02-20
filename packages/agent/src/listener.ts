@@ -7,6 +7,7 @@ interface AgentListenerOptions {
   onStartSession?: (args?: string, cwd?: string) => void;
   onCloseSession?: (sessionId: string) => void;
   onResize?: (sessionId: string, cols: number, rows: number) => void;
+  onRequestScrollback?: (sessionId: string) => void;
 }
 
 export class AgentListener {
@@ -51,6 +52,8 @@ export class AgentListener {
               this.opts.onCloseSession?.(msg.sessionId);
             } else if (msg.type === "resize") {
               this.opts.onResize?.(msg.sessionId, msg.cols, msg.rows);
+            } else if (msg.type === "request_scrollback") {
+              this.opts.onRequestScrollback?.(msg.sessionId);
             }
           } catch {}
         },
@@ -90,6 +93,15 @@ export class AgentListener {
       type: "sessions",
       machineId: this.machineId,
       sessions,
+    });
+  }
+
+  sendScrollback(sessionId: string, lines: string[]) {
+    this.broadcast({
+      type: "scrollback",
+      machineId: this.machineId,
+      sessionId,
+      lines,
     });
   }
 

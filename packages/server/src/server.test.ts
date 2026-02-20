@@ -128,6 +128,55 @@ describe("Server", () => {
     dash.close();
   });
 
+  it("forwards request_scrollback from dashboard to agent and scrollback back", async () => {
+    const agent = new WebSocket(`ws://localhost:${port}/ws/agent`);
+    await new Promise<void>((r) => agent.addEventListener("open", () => r()));
+
+    agent.send(JSON.stringify({
+      type: "register",
+      machineId: "scroll-test",
+      sessions: [{ id: "s1", name: "dev", target: "local" }],
+    }));
+    await Bun.sleep(50);
+
+    const agentMsgs: any[] = [];
+    agent.addEventListener("message", (ev) => agentMsgs.push(JSON.parse(ev.data as string)));
+
+    const dashMsgs: any[] = [];
+    const dash = new WebSocket(`ws://localhost:${port}/ws/dashboard`);
+    await new Promise<void>((r) => dash.addEventListener("open", () => r()));
+    dash.addEventListener("message", (ev) => dashMsgs.push(JSON.parse(ev.data as string)));
+    await Bun.sleep(50);
+
+    // Dashboard requests scrollback
+    dash.send(JSON.stringify({
+      type: "request_scrollback",
+      machineId: "scroll-test",
+      sessionId: "s1",
+    }));
+    await Bun.sleep(50);
+
+    const reqMsg = agentMsgs.find((m) => m.type === "request_scrollback");
+    expect(reqMsg).toBeDefined();
+    expect(reqMsg.sessionId).toBe("s1");
+
+    // Agent sends scrollback response
+    agent.send(JSON.stringify({
+      type: "scrollback",
+      machineId: "scroll-test",
+      sessionId: "s1",
+      lines: ["old1", "old2", "current"],
+    }));
+    await Bun.sleep(50);
+
+    const scrollMsg = dashMsgs.find((m) => m.type === "scrollback");
+    expect(scrollMsg).toBeDefined();
+    expect(scrollMsg.lines).toEqual(["old1", "old2", "current"]);
+
+    agent.close();
+    dash.close();
+  });
+
   it("GET /api/sessions returns machine list", async () => {
     const res = await fetch(`http://localhost:${port}/api/sessions`);
     expect(res.ok).toBe(true);

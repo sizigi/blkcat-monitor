@@ -7,11 +7,14 @@ interface TerminalOutputProps {
   sessionKey?: string;
   lines: string[];
   logMapRef?: React.RefObject<Map<string, string[]>>;
+  scrollbackMapRef?: React.RefObject<Map<string, string[]>>;
+  subscribeScrollback?: (cb: (key: string) => void) => () => void;
+  onRequestScrollback?: () => void;
   onData?: (data: string) => void;
   onResize?: (cols: number, rows: number) => void;
 }
 
-export function TerminalOutput({ sessionKey, lines, logMapRef, onData, onResize }: TerminalOutputProps) {
+export function TerminalOutput({ sessionKey, lines, logMapRef, scrollbackMapRef, subscribeScrollback, onRequestScrollback, onData, onResize }: TerminalOutputProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -20,6 +23,7 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, onData, onResize 
   const scrollModeRef = useRef(false);
   const [scrollMode, setScrollMode] = useState(false);
   const [scrollInfo, setScrollInfo] = useState("");
+  const [scrollbackLoading, setScrollbackLoading] = useState(false);
   const onDataRef = useRef(onData);
   onDataRef.current = onData;
   const onResizeRef = useRef(onResize);
@@ -28,6 +32,10 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, onData, onResize 
   sessionKeyRef.current = sessionKey;
   const logMapRefRef = useRef(logMapRef);
   logMapRefRef.current = logMapRef;
+  const scrollbackMapRefRef = useRef(scrollbackMapRef);
+  scrollbackMapRefRef.current = scrollbackMapRef;
+  const onRequestScrollbackRef = useRef(onRequestScrollback);
+  onRequestScrollbackRef.current = onRequestScrollback;
 
   // Scroll mode state: offset into the full log array.
   // offset=0 → bottom (most recent), positive → scrolled up N lines.
@@ -69,11 +77,17 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, onData, onResize 
     if (!term || scrollModeRef.current) return;
     scrollModeRef.current = true;
     setScrollMode(true);
+    // Use client-side log as immediate fallback
     const log = logMapRefRef.current?.current?.get(sessionKeyRef.current ?? "") || [];
     const all = [...log, ...prevLinesRef.current];
     scrollAllRef.current = all;
     scrollOffsetRef.current = 0;
     renderScrollView();
+    // Request full tmux scrollback from agent
+    if (onRequestScrollbackRef.current) {
+      setScrollbackLoading(true);
+      onRequestScrollbackRef.current();
+    }
   }, [renderScrollView]);
 
   const exitScrollMode = useCallback(() => {
@@ -82,6 +96,7 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, onData, onResize 
     scrollModeRef.current = false;
     setScrollMode(false);
     setScrollInfo("");
+    setScrollbackLoading(false);
     scrollAllRef.current = [];
     scrollOffsetRef.current = 0;
     const latest = pendingLinesRef.current || prevLinesRef.current;
@@ -199,6 +214,26 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, onData, onResize 
     };
   }, []);
 
+  // Subscribe to scrollback responses: replace scroll buffer with full tmux history.
+  useEffect(() => {
+    if (!subscribeScrollback) return;
+    return subscribeScrollback((key) => {
+      if (!scrollModeRef.current) return;
+      if (key !== sessionKeyRef.current) return;
+      const data = scrollbackMapRefRef.current?.current?.get(key);
+      if (!data) return;
+      scrollAllRef.current = data;
+      // Maintain relative position: stay at same offset, clamped to new bounds
+      const term = termRef.current;
+      if (term) {
+        const maxOffset = Math.max(0, data.length - term.rows);
+        scrollOffsetRef.current = Math.min(scrollOffsetRef.current, maxOffset);
+      }
+      setScrollbackLoading(false);
+      renderScrollView();
+    });
+  }, [subscribeScrollback, renderScrollView]);
+
   // Reset terminal display when switching sessions.
   useEffect(() => {
     const term = termRef.current;
@@ -210,6 +245,7 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, onData, onResize 
     scrollAllRef.current = [];
     setScrollMode(false);
     setScrollInfo("");
+    setScrollbackLoading(false);
     term.clear();
     term.write("\x1b[H\x1b[2J");
   }, [sessionKey]);
@@ -233,6 +269,14 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, onData, onResize 
 
     term.write("\x1b[H\x1b[2J" + lines.join("\r\n"));
   }, [lines]);
+
+  const forceFit = useCallback(() => {
+    const fit = fitRef.current;
+    const term = termRef.current;
+    if (!fit || !term) return;
+    fit.fit();
+    onResizeRef.current?.(term.cols, term.rows);
+  }, []);
 
   const hasLog = logMapRef?.current?.has(sessionKey ?? "") ?? false;
   const pd = useCallback((e: React.MouseEvent) => e.preventDefault(), []);
@@ -277,7 +321,8 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, onData, onResize 
           }}
         >
           <span>SCROLL</span>
-          {scrollInfo && <span style={{ fontWeight: 400, fontSize: 10, opacity: 0.7 }}>{scrollInfo}</span>}
+          {scrollbackLoading && <span style={{ fontWeight: 400, fontSize: 10, opacity: 0.7 }}>loading...</span>}
+          {scrollInfo && !scrollbackLoading && <span style={{ fontWeight: 400, fontSize: 10, opacity: 0.7 }}>{scrollInfo}</span>}
           <button onMouseDown={pd} onClick={() => scrollNav("top")} style={btnBase} title="Top (Home)">&#8607;</button>
           <button onMouseDown={pd} onClick={() => scrollNav("pageUp")} style={btnBase} title="Page Up">&#8679;</button>
           <button onMouseDown={pd} onClick={() => scrollNav("pageDown")} style={btnBase} title="Page Down">&#8681;</button>
@@ -285,15 +330,12 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, onData, onResize 
           <button onMouseDown={pd} onClick={exitScrollMode} style={{ ...btnBase, fontWeight: 700, fontSize: 12 }} title="Exit (Esc)">&#10005;</button>
         </div>
       ) : (
-        (hasLog || lines.length > 0) && (
+        <div style={{ position: "absolute", top: 4, right: 4, display: "flex", gap: 4, zIndex: 10 }}>
           <button
             onMouseDown={pd}
-            onClick={enterScrollMode}
-            title="Scroll history (Shift+PageUp)"
+            onClick={forceFit}
+            title="Force resize terminal"
             style={{
-              position: "absolute",
-              top: 4,
-              right: 4,
               background: "rgba(255,255,255,0.08)",
               border: "1px solid rgba(255,255,255,0.2)",
               color: "#fff",
@@ -303,15 +345,37 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, onData, onResize 
               fontSize: 14,
               lineHeight: 1,
               opacity: 0.4,
-              zIndex: 10,
               transition: "opacity 0.15s",
             }}
             onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.9"; }}
             onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.4"; }}
           >
-            &#8597;
+            &#8862;
           </button>
-        )
+          {(hasLog || lines.length > 0) && (
+            <button
+              onMouseDown={pd}
+              onClick={enterScrollMode}
+              title="Scroll history (Shift+PageUp)"
+              style={{
+                background: "rgba(255,255,255,0.08)",
+                border: "1px solid rgba(255,255,255,0.2)",
+                color: "#fff",
+                cursor: "pointer",
+                borderRadius: 3,
+                padding: "3px 7px",
+                fontSize: 14,
+                lineHeight: 1,
+                opacity: 0.4,
+                transition: "opacity 0.15s",
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.9"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.4"; }}
+            >
+              &#8597;
+            </button>
+          )}
+        </div>
       )}
     </div>
   );

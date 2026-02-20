@@ -77,6 +77,13 @@ async function main() {
     cap.resizePane(sessionId, cols, rows);
   }
 
+  function handleRequestScrollback(sessionId: string) {
+    const cap = captures.get(sessionId);
+    if (!cap) return;
+    const lines = cap.captureScrollback(sessionId);
+    conn.sendScrollback(sessionId, lines);
+  }
+
   function handleStartSession(args?: string, cwd?: string) {
     const localCap = new TmuxCapture(bunExec);
     const paneId = localCap.startSession(args, cwd);
@@ -92,7 +99,7 @@ async function main() {
     console.log(`Started new session: ${paneId}`);
   }
 
-  let conn: { register(sessions: SessionInfo[]): void; sendOutput(sessionId: string, lines: string[], waitingForInput?: boolean): void; updateSessions(sessions: SessionInfo[]): void; close(): void };
+  let conn: { register(sessions: SessionInfo[]): void; sendOutput(sessionId: string, lines: string[], waitingForInput?: boolean): void; updateSessions(sessions: SessionInfo[]): void; sendScrollback(sessionId: string, lines: string[]): void; close(): void };
 
   if (config.listenPort) {
     const listener = new AgentListener({
@@ -102,6 +109,7 @@ async function main() {
       onStartSession: handleStartSession,
       onCloseSession: handleCloseSession,
       onResize: handleResize,
+      onRequestScrollback: handleRequestScrollback,
     });
     // When a new server connects, clear prevLines so the next poll cycle
     // re-sends the current pane content for all sessions.
@@ -117,6 +125,7 @@ async function main() {
       onStartSession: handleStartSession,
       onCloseSession: handleCloseSession,
       onResize: handleResize,
+      onRequestScrollback: handleRequestScrollback,
     });
     conn = connection;
     await connection.waitForOpen();

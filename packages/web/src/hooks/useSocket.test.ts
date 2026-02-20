@@ -304,6 +304,48 @@ describe("useSocket", () => {
     expect(result.current.logMapRef.current?.get("m1:s1")).toEqual(["line1", "line2"]);
   });
 
+  it("sends request_scrollback message", async () => {
+    const { result } = renderHook(() => useSocket("ws://test"));
+
+    await vi.waitFor(() => expect(result.current.connected).toBe(true));
+
+    act(() => {
+      result.current.requestScrollback("m1", "s1");
+    });
+
+    const ws = MockWebSocket.instances[0];
+    const sent = JSON.parse(ws.sent[0]);
+    expect(sent.type).toBe("request_scrollback");
+    expect(sent.machineId).toBe("m1");
+    expect(sent.sessionId).toBe("s1");
+  });
+
+  it("handles scrollback message and notifies subscribers", async () => {
+    const { result } = renderHook(() => useSocket("ws://test"));
+    const ws = MockWebSocket.instances[0];
+
+    await vi.waitFor(() => expect(result.current.connected).toBe(true));
+
+    const notified: string[] = [];
+    const unsub = result.current.subscribeScrollback((key) => notified.push(key));
+
+    act(() => {
+      ws.emit("message", {
+        data: JSON.stringify({
+          type: "scrollback",
+          machineId: "m1",
+          sessionId: "s1",
+          lines: ["old1", "old2", "current"],
+        }),
+      });
+    });
+
+    expect(notified).toEqual(["m1:s1"]);
+    expect(result.current.scrollbackMapRef.current?.get("m1:s1")).toEqual(["old1", "old2", "current"]);
+
+    unsub();
+  });
+
   it("preserves logs across sessions independently", async () => {
     const { result } = renderHook(() => useSocket("ws://test"));
     const ws = MockWebSocket.instances[0];

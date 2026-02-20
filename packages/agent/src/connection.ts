@@ -7,6 +7,7 @@ interface AgentConnectionOptions {
   onStartSession?: (args?: string, cwd?: string) => void;
   onCloseSession?: (sessionId: string) => void;
   onResize?: (sessionId: string, cols: number, rows: number) => void;
+  onRequestScrollback?: (sessionId: string) => void;
 }
 
 export class AgentConnection {
@@ -39,6 +40,8 @@ export class AgentConnection {
           opts.onCloseSession?.(msg.sessionId);
         } else if (msg.type === "resize") {
           opts.onResize?.(msg.sessionId, msg.cols, msg.rows);
+        } else if (msg.type === "request_scrollback") {
+          opts.onRequestScrollback?.(msg.sessionId);
         }
       } catch {}
     });
@@ -71,6 +74,15 @@ export class AgentConnection {
       type: "sessions",
       machineId: this.opts.machineId,
       sessions,
+    }));
+  }
+
+  sendScrollback(sessionId: string, lines: string[]) {
+    this.ws.send(JSON.stringify({
+      type: "scrollback",
+      machineId: this.opts.machineId,
+      sessionId,
+      lines,
     }));
   }
 

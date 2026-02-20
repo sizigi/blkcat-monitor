@@ -95,6 +95,8 @@ export function createServer(opts: ServerOptions) {
         machineId: msg.machineId,
         sessions: msg.sessions,
       });
+    } else if (msg.type === "scrollback") {
+      broadcastToDashboards(msg);
     }
   }
 
@@ -318,6 +320,14 @@ export function createServer(opts: ServerOptions) {
                 sessionId: msg.sessionId,
                 cols: msg.cols,
                 rows: msg.rows,
+              }));
+            }
+          } else if (msg.type === "request_scrollback") {
+            const machine = machines.get(msg.machineId);
+            if (machine) {
+              machine.agent.send(JSON.stringify({
+                type: "request_scrollback",
+                sessionId: msg.sessionId,
               }));
             }
           }

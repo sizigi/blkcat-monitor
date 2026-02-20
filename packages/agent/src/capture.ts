@@ -31,6 +31,17 @@ export class TmuxCapture {
     return lines;
   }
 
+  captureScrollback(target: string): string[] {
+    const cmd = [...this.sshPrefix, "tmux", "capture-pane", "-p", "-e", "-S", "-", "-t", target];
+    const result = this.exec(cmd);
+    if (!result.success) return [];
+    const lines = result.stdout.split("\n");
+    while (lines.length > 0 && lines[lines.length - 1] === "") {
+      lines.pop();
+    }
+    return lines;
+  }
+
   listSessions(): string[] {
     const cmd = [...this.sshPrefix, "tmux", "list-sessions", "-F", "#{session_name}"];
     const result = this.exec(cmd);

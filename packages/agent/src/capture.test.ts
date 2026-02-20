@@ -21,6 +21,24 @@ describe("TmuxCapture", () => {
     expect(lines).toEqual(["line1", "line2", "line3"]);
   });
 
+  it("captures full scrollback", () => {
+    const exec = mockExec({
+      "tmux capture-pane -p -e -S - -t mysession:0.0": {
+        success: true,
+        stdout: "old1\nold2\nline1\nline2\nline3\n",
+      },
+    });
+    const capture = new TmuxCapture(exec);
+    const lines = capture.captureScrollback("mysession:0.0");
+    expect(lines).toEqual(["old1", "old2", "line1", "line2", "line3"]);
+  });
+
+  it("returns empty array on scrollback failure", () => {
+    const exec = mockExec({});
+    const capture = new TmuxCapture(exec);
+    expect(capture.captureScrollback("bad:0.0")).toEqual([]);
+  });
+
   it("returns empty array on failure", () => {
     const exec = mockExec({});
     const capture = new TmuxCapture(exec);

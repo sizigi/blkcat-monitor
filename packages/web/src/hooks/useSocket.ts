@@ -56,11 +56,14 @@ export interface UseSocketReturn {
   waitingSessions: Set<string>;
   outputMapRef: React.RefObject<Map<string, OutputLine>>;
   logMapRef: React.RefObject<Map<string, string[]>>;
+  scrollbackMapRef: React.RefObject<Map<string, string[]>>;
   subscribeOutput: (cb: (key: string) => void) => () => void;
+  subscribeScrollback: (cb: (key: string) => void) => () => void;
   sendInput: (machineId: string, sessionId: string, opts: { text?: string; key?: string; data?: string }) => void;
   startSession: (machineId: string, args?: string, cwd?: string) => void;
   closeSession: (machineId: string, sessionId: string) => void;
   sendResize: (machineId: string, sessionId: string, cols: number, rows: number) => void;
+  requestScrollback: (machineId: string, sessionId: string) => void;
 }
 
 export function useSocket(url: string): UseSocketReturn {
@@ -79,9 +82,18 @@ export function useSocket(url: string): UseSocketReturn {
   const logMapRef = useRef(new Map<string, string[]>());
   const prevLinesMapRef = useRef(new Map<string, string[]>());
 
+  // Scrollback responses from agents (full tmux scrollback buffer).
+  const scrollbackMapRef = useRef(new Map<string, string[]>());
+  const scrollbackSubsRef = useRef(new Set<(key: string) => void>());
+
   const subscribeOutput = useCallback((cb: (key: string) => void) => {
     outputSubsRef.current.add(cb);
     return () => { outputSubsRef.current.delete(cb); };
+  }, []);
+
+  const subscribeScrollback = useCallback((cb: (key: string) => void) => {
+    scrollbackSubsRef.current.add(cb);
+    return () => { scrollbackSubsRef.current.delete(cb); };
   }, []);
 
   useEffect(() => {
@@ -115,6 +127,10 @@ export function useSocket(url: string): UseSocketReturn {
             }
             return [...prev, updated];
           });
+        } else if (msg.type === "scrollback") {
+          const key = `${msg.machineId}:${msg.sessionId}`;
+          scrollbackMapRef.current.set(key, msg.lines);
+          for (const sub of scrollbackSubsRef.current) sub(key);
         } else if (msg.type === "output") {
           const key = `${msg.machineId}:${msg.sessionId}`;
           const entry: OutputLine = {
@@ -210,5 +226,15 @@ export function useSocket(url: string): UseSocketReturn {
     [],
   );
 
-  return { connected, machines, waitingSessions, outputMapRef, logMapRef, subscribeOutput, sendInput, startSession, closeSession, sendResize };
+  const requestScrollback = useCallback(
+    (machineId: string, sessionId: string) => {
+      const ws = wsRef.current;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "request_scrollback", machineId, sessionId }));
+      }
+    },
+    [],
+  );
+
+  return { connected, machines, waitingSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, sendResize, requestScrollback };
 }

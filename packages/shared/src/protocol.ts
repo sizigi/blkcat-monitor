@@ -36,10 +36,18 @@ export interface AgentSessionsMessage {
   sessions: SessionInfo[];
 }
 
+export interface AgentScrollbackMessage {
+  type: "scrollback";
+  machineId: string;
+  sessionId: string;
+  lines: string[];
+}
+
 export type AgentToServerMessage =
   | AgentRegisterMessage
   | AgentOutputMessage
-  | AgentSessionsMessage;
+  | AgentSessionsMessage
+  | AgentScrollbackMessage;
 
 // --- Server -> Agent messages ---
 
@@ -69,7 +77,12 @@ export interface ServerResizeMessage {
   rows: number;
 }
 
-export type ServerToAgentMessage = ServerInputMessage | ServerStartSessionMessage | ServerCloseSessionMessage | ServerResizeMessage;
+export interface ServerRequestScrollbackMessage {
+  type: "request_scrollback";
+  sessionId: string;
+}
+
+export type ServerToAgentMessage = ServerInputMessage | ServerStartSessionMessage | ServerCloseSessionMessage | ServerResizeMessage | ServerRequestScrollbackMessage;
 
 // --- Server -> Dashboard messages ---
 
@@ -94,10 +107,18 @@ export interface ServerOutputMessage {
   waitingForInput?: boolean;
 }
 
+export interface ServerScrollbackMessage {
+  type: "scrollback";
+  machineId: string;
+  sessionId: string;
+  lines: string[];
+}
+
 export type ServerToDashboardMessage =
   | ServerSnapshotMessage
   | ServerMachineUpdateMessage
-  | ServerOutputMessage;
+  | ServerOutputMessage
+  | ServerScrollbackMessage;
 
 // --- Dashboard -> Server messages ---
 
@@ -131,7 +152,13 @@ export interface DashboardResizeMessage {
   rows: number;
 }
 
-export type DashboardToServerMessage = DashboardInputMessage | DashboardStartSessionMessage | DashboardCloseSessionMessage | DashboardResizeMessage;
+export interface DashboardRequestScrollbackMessage {
+  type: "request_scrollback";
+  machineId: string;
+  sessionId: string;
+}
+
+export type DashboardToServerMessage = DashboardInputMessage | DashboardStartSessionMessage | DashboardCloseSessionMessage | DashboardResizeMessage | DashboardRequestScrollbackMessage;
 
 // --- Outbound agent info ---
 
@@ -143,8 +170,8 @@ export interface OutboundAgentInfo {
 
 // --- Parsers ---
 
-const AGENT_TYPES = new Set(["register", "output", "sessions"]);
-const DASHBOARD_TYPES = new Set(["input", "start_session", "close_session", "resize"]);
+const AGENT_TYPES = new Set(["register", "output", "sessions", "scrollback"]);
+const DASHBOARD_TYPES = new Set(["input", "start_session", "close_session", "resize", "request_scrollback"]);
 
 export function parseAgentMessage(raw: string): AgentToServerMessage | null {
   try {
