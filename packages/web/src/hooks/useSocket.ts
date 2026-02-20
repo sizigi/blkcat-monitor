@@ -63,6 +63,7 @@ export interface UseSocketReturn {
   sendInput: (machineId: string, sessionId: string, opts: { text?: string; key?: string; data?: string }) => void;
   startSession: (machineId: string, args?: string, cwd?: string) => void;
   closeSession: (machineId: string, sessionId: string) => void;
+  reloadSession: (machineId: string, sessionId: string) => void;
   sendResize: (machineId: string, sessionId: string, cols: number, rows: number) => void;
   requestScrollback: (machineId: string, sessionId: string) => void;
   hookEventsRef: React.RefObject<AgentHookEventMessage[]>;
@@ -240,6 +241,16 @@ export function useSocket(url: string): UseSocketReturn {
     [],
   );
 
+  const reloadSession = useCallback(
+    (machineId: string, sessionId: string) => {
+      const ws = wsRef.current;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "reload_session", machineId, sessionId }));
+      }
+    },
+    [],
+  );
+
   const sendResize = useCallback(
     (machineId: string, sessionId: string, cols: number, rows: number) => {
       const ws = wsRef.current;
@@ -260,5 +271,5 @@ export function useSocket(url: string): UseSocketReturn {
     [],
   );
 
-  return { connected, machines, waitingSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents };
+  return { connected, machines, waitingSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents };
 }

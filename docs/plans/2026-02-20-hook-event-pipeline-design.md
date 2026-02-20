@@ -143,6 +143,14 @@ New UI: a collapsible right-side panel.
 - Ring buffer is in-memory only, no persistence across server restarts
 - Agent HTTP server on separate port from listener WebSocket (BLKCAT_HOOKS_PORT)
 
+### 7. Session Reload
+
+A "Reload" button in the session detail header kills the running Claude Code process and restarts it with `--resume` in the same tmux pane. This lets users reload skills, plugins, and hooks without losing session context.
+
+Flow: Dashboard sends `reload_session` -> Server forwards to agent -> Agent calls `tmux respawn-pane -k -t <target> 'claude --resume'`.
+
+The pane ID is preserved so the session stays in the captures map and continues to be monitored. Previous output lines are cleared so the fresh output is sent immediately.
+
 ## Future Extensions
 
 - Server-side automation: register handlers in `handleHookEvent()` to trigger actions on specific events (webhooks, Slack notifications, scripts)

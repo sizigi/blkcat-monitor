@@ -346,6 +346,14 @@ export function createServer(opts: ServerOptions) {
                 sessionId: msg.sessionId,
               }));
             }
+          } else if (msg.type === "reload_session") {
+            const machine = machines.get(msg.machineId);
+            if (machine) {
+              machine.agent.send(JSON.stringify({
+                type: "reload_session",
+                sessionId: msg.sessionId,
+              }));
+            }
           }
         }
       },

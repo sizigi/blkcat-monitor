@@ -89,6 +89,14 @@ async function main() {
     conn.sendScrollback(sessionId, lines);
   }
 
+  function handleReloadSession(sessionId: string) {
+    const cap = captures.get(sessionId);
+    if (!cap) return;
+    cap.respawnPane(sessionId, "claude --resume");
+    prevLines.delete(sessionId);
+    console.log(`Reloaded session: ${sessionId}`);
+  }
+
   function handleStartSession(args?: string, cwd?: string) {
     const localCap = new TmuxCapture(bunExec);
     const paneId = localCap.startSession(args, cwd);
@@ -122,6 +130,7 @@ async function main() {
       onCloseSession: handleCloseSession,
       onResize: handleResize,
       onRequestScrollback: handleRequestScrollback,
+      onReloadSession: handleReloadSession,
     });
     // When a new server connects, clear prevLines so the next poll cycle
     // re-sends the current pane content for all sessions.
@@ -138,6 +147,7 @@ async function main() {
       onCloseSession: handleCloseSession,
       onResize: handleResize,
       onRequestScrollback: handleRequestScrollback,
+      onReloadSession: handleReloadSession,
     });
     conn = connection;
     await connection.waitForOpen();

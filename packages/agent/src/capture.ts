@@ -87,6 +87,11 @@ export class TmuxCapture {
     return this.exec(cmd).success;
   }
 
+  respawnPane(target: string, shellCommand: string): boolean {
+    const cmd = [...this.sshPrefix, "tmux", "respawn-pane", "-k", "-t", target, shellCommand];
+    return this.exec(cmd).success;
+  }
+
   startSession(args?: string, cwd?: string): string | null {
     const claudeCmd = args ? `claude ${args}` : "claude";
     const cmd = [...this.sshPrefix, "tmux", "new-window", "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}"];

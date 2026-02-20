@@ -8,6 +8,7 @@ interface AgentListenerOptions {
   onCloseSession?: (sessionId: string) => void;
   onResize?: (sessionId: string, cols: number, rows: number) => void;
   onRequestScrollback?: (sessionId: string) => void;
+  onReloadSession?: (sessionId: string) => void;
 }
 
 export class AgentListener {
@@ -54,6 +55,8 @@ export class AgentListener {
               this.opts.onResize?.(msg.sessionId, msg.cols, msg.rows);
             } else if (msg.type === "request_scrollback") {
               this.opts.onRequestScrollback?.(msg.sessionId);
+            } else if (msg.type === "reload_session") {
+              this.opts.onReloadSession?.(msg.sessionId);
             }
           } catch {}
         },

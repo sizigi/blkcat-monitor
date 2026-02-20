@@ -94,7 +94,12 @@ export interface ServerRequestScrollbackMessage {
   sessionId: string;
 }
 
-export type ServerToAgentMessage = ServerInputMessage | ServerStartSessionMessage | ServerCloseSessionMessage | ServerResizeMessage | ServerRequestScrollbackMessage;
+export interface ServerReloadSessionMessage {
+  type: "reload_session";
+  sessionId: string;
+}
+
+export type ServerToAgentMessage = ServerInputMessage | ServerStartSessionMessage | ServerCloseSessionMessage | ServerResizeMessage | ServerRequestScrollbackMessage | ServerReloadSessionMessage;
 
 // --- Server -> Dashboard messages ---
 
@@ -181,7 +186,13 @@ export interface DashboardRequestScrollbackMessage {
   sessionId: string;
 }
 
-export type DashboardToServerMessage = DashboardInputMessage | DashboardStartSessionMessage | DashboardCloseSessionMessage | DashboardResizeMessage | DashboardRequestScrollbackMessage;
+export interface DashboardReloadSessionMessage {
+  type: "reload_session";
+  machineId: string;
+  sessionId: string;
+}
+
+export type DashboardToServerMessage = DashboardInputMessage | DashboardStartSessionMessage | DashboardCloseSessionMessage | DashboardResizeMessage | DashboardRequestScrollbackMessage | DashboardReloadSessionMessage;
 
 // --- Outbound agent info ---
 
@@ -194,7 +205,7 @@ export interface OutboundAgentInfo {
 // --- Parsers ---
 
 const AGENT_TYPES = new Set(["register", "output", "sessions", "scrollback", "hook_event"]);
-const DASHBOARD_TYPES = new Set(["input", "start_session", "close_session", "resize", "request_scrollback"]);
+const DASHBOARD_TYPES = new Set(["input", "start_session", "close_session", "resize", "request_scrollback", "reload_session"]);
 
 export function parseAgentMessage(raw: string): AgentToServerMessage | null {
   try {

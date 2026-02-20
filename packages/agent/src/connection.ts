@@ -8,6 +8,7 @@ interface AgentConnectionOptions {
   onCloseSession?: (sessionId: string) => void;
   onResize?: (sessionId: string, cols: number, rows: number) => void;
   onRequestScrollback?: (sessionId: string) => void;
+  onReloadSession?: (sessionId: string) => void;
 }
 
 export class AgentConnection {
@@ -42,6 +43,8 @@ export class AgentConnection {
           opts.onResize?.(msg.sessionId, msg.cols, msg.rows);
         } else if (msg.type === "request_scrollback") {
           opts.onRequestScrollback?.(msg.sessionId);
+        } else if (msg.type === "reload_session") {
+          opts.onReloadSession?.(msg.sessionId);
         }
       } catch {}
     });

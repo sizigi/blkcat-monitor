@@ -15,6 +15,7 @@ interface SessionDetailProps {
   onSendKey: (key: string) => void;
   onSendData: (data: string) => void;
   onResize?: (cols: number, rows: number) => void;
+  onReload?: () => void;
 }
 
 export function SessionDetail({
@@ -30,6 +31,7 @@ export function SessionDetail({
   onSendKey,
   onSendData,
   onResize,
+  onReload,
 }: SessionDetailProps) {
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
@@ -47,6 +49,24 @@ export function SessionDetail({
         <span style={{ color: "var(--text-muted)", fontSize: 12 }}>
           {machineId} / {sessionId}
         </span>
+        {onReload && (
+          <button
+            onClick={onReload}
+            title="Reload session (claude --resume)"
+            style={{
+              marginLeft: "auto",
+              background: "none",
+              border: "1px solid var(--border)",
+              color: "var(--text-muted)",
+              cursor: "pointer",
+              fontSize: 12,
+              padding: "2px 8px",
+              borderRadius: 4,
+            }}
+          >
+            Reload
+          </button>
+        )}
       </div>
       <TerminalOutput sessionKey={`${machineId}:${sessionId}`} lines={lines} logMapRef={logMapRef} scrollbackMapRef={scrollbackMapRef} subscribeScrollback={subscribeScrollback} onRequestScrollback={onRequestScrollback} onData={onSendData} onResize={onResize} />
       <div style={{ borderTop: "1px solid var(--border)" }}>
