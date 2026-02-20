@@ -5,6 +5,7 @@ import { useDisplayNames } from "./hooks/useDisplayNames";
 import { Sidebar } from "./components/Sidebar";
 import { SessionDetail } from "./components/SessionDetail";
 import { EventFeed } from "./components/EventFeed";
+import { NotificationList } from "./components/NotificationList";
 
 const WS_URL =
   (import.meta as any).env?.VITE_WS_URL ??
@@ -53,7 +54,7 @@ export default function App() {
   const [selectedSession, setSelectedSession] = useState<string>();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
-  const [eventPanelOpen, setEventPanelOpen] = useState(false);
+  const [panelTab, setPanelTab] = useState<"events" | "notifications" | null>(null);
   const resizing = useRef(false);
 
   const sessionLines = useSessionLines(outputMapRef, subscribeOutput, selectedMachine, selectedSession);
@@ -202,35 +203,80 @@ export default function App() {
           </div>
         )}
       </main>
-      {/* Event panel toggle */}
-      <button
-        onClick={() => setEventPanelOpen((v) => !v)}
-        title={eventPanelOpen ? "Hide events" : "Show events"}
-        style={{
-          position: "absolute",
-          right: eventPanelOpen ? 300 : 0,
-          top: 8,
-          zIndex: 10,
-          background: "var(--bg-secondary)",
-          border: "1px solid var(--border)",
-          borderRight: eventPanelOpen ? "none" : "1px solid var(--border)",
-          color: "var(--text-muted)",
-          cursor: "pointer",
-          fontSize: 12,
-          padding: "4px 8px",
-          borderRadius: eventPanelOpen ? "4px 0 0 4px" : "4px",
-        }}
-      >
-        Events
-      </button>
-      {eventPanelOpen && (
-        <div style={{ width: 300, flexShrink: 0 }}>
-          <EventFeed
-            hookEventsRef={hookEventsRef}
-            subscribeHookEvents={subscribeHookEvents}
-          />
+      {/* Right overlay panel */}
+      <div style={{
+        position: "absolute",
+        top: 0,
+        right: 0,
+        bottom: 0,
+        display: "flex",
+        flexDirection: "column",
+        zIndex: 20,
+        pointerEvents: "none",
+      }}>
+        {/* Tab buttons */}
+        <div style={{
+          display: "flex",
+          gap: 0,
+          padding: "8px 8px 0",
+          justifyContent: "flex-end",
+          pointerEvents: "auto",
+        }}>
+          {(["events", "notifications"] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setPanelTab((v) => v === tab ? null : tab)}
+              style={{
+                background: panelTab === tab ? "var(--bg-secondary)" : "var(--bg-tertiary)",
+                border: "1px solid var(--border)",
+                borderBottom: panelTab === tab ? "none" : "1px solid var(--border)",
+                color: panelTab === tab ? "var(--text-primary)" : "var(--text-muted)",
+                cursor: "pointer",
+                fontSize: 12,
+                padding: "4px 10px",
+                borderRadius: tab === "events" ? "4px 0 0 0" : "0 4px 0 0",
+              }}
+            >
+              {tab === "events" ? "Events" : "Notifications"}
+              {tab === "notifications" && (() => {
+                let total = 0;
+                for (const c of notificationCounts.values()) total += c;
+                return total > 0 ? ` (${total})` : "";
+              })()}
+            </button>
+          ))}
         </div>
-      )}
+        {/* Panel content */}
+        {panelTab && (
+          <div style={{
+            width: 320,
+            flex: 1,
+            pointerEvents: "auto",
+            alignSelf: "flex-end",
+            overflow: "hidden",
+          }}>
+            {panelTab === "events" ? (
+              <EventFeed
+                hookEventsRef={hookEventsRef}
+                subscribeHookEvents={subscribeHookEvents}
+              />
+            ) : (
+              <NotificationList
+                hookEventsRef={hookEventsRef}
+                subscribeHookEvents={subscribeHookEvents}
+                onSelectSession={(m, s) => {
+                  setSelectedMachine(m);
+                  setSelectedSession(s);
+                  clearNotifications(`${m}:${s}`);
+                  setPanelTab(null);
+                }}
+                getMachineName={getMachineName}
+                getSessionName={getSessionName}
+              />
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
