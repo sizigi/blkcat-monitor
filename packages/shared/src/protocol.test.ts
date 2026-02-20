@@ -46,6 +46,32 @@ describe("parseAgentMessage", () => {
     expect(msg?.type).toBe("scrollback");
   });
 
+  it("parses hook_event message", () => {
+    const msg = parseAgentMessage(JSON.stringify({
+      type: "hook_event",
+      machineId: "m1",
+      sessionId: "s1",
+      hookEventName: "PostToolUse",
+      matcher: "Bash",
+      data: { tool_name: "Bash", tool_input: { command: "npm test" } },
+      timestamp: Date.now(),
+    }));
+    expect(msg?.type).toBe("hook_event");
+  });
+
+  it("parses hook_event with null sessionId", () => {
+    const msg = parseAgentMessage(JSON.stringify({
+      type: "hook_event",
+      machineId: "m1",
+      sessionId: null,
+      hookEventName: "SessionStart",
+      matcher: null,
+      data: {},
+      timestamp: Date.now(),
+    }));
+    expect(msg?.type).toBe("hook_event");
+  });
+
   it("returns null for unknown type", () => {
     expect(parseAgentMessage(JSON.stringify({ type: "unknown" }))).toBeNull();
   });
