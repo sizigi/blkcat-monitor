@@ -270,4 +270,80 @@ describe("useSocket", () => {
 
     expect(result.current.waitingSessions.has("m1:s1")).toBe(false);
   });
+
+  it("accumulates scrolled-off lines into per-session log", async () => {
+    const { result } = renderHook(() => useSocket("ws://test"));
+    const ws = MockWebSocket.instances[0];
+
+    await vi.waitFor(() => expect(result.current.connected).toBe(true));
+
+    // First viewport: 3 lines
+    act(() => {
+      ws.emit("message", {
+        data: JSON.stringify({
+          type: "output", machineId: "m1", sessionId: "s1",
+          lines: ["line1", "line2", "line3"], timestamp: 1,
+        }),
+      });
+    });
+
+    // Log should be empty (no previous to diff against)
+    expect(result.current.logMapRef.current?.get("m1:s1")).toBeUndefined();
+
+    // Second viewport: scrolled by 2 (line1/line2 gone, line3 stays at top)
+    act(() => {
+      ws.emit("message", {
+        data: JSON.stringify({
+          type: "output", machineId: "m1", sessionId: "s1",
+          lines: ["line3", "line4", "line5"], timestamp: 2,
+        }),
+      });
+    });
+
+    // line1 and line2 should be in the log
+    expect(result.current.logMapRef.current?.get("m1:s1")).toEqual(["line1", "line2"]);
+  });
+
+  it("preserves logs across sessions independently", async () => {
+    const { result } = renderHook(() => useSocket("ws://test"));
+    const ws = MockWebSocket.instances[0];
+
+    await vi.waitFor(() => expect(result.current.connected).toBe(true));
+
+    // Session 1: two updates with scroll
+    act(() => {
+      ws.emit("message", {
+        data: JSON.stringify({
+          type: "output", machineId: "m1", sessionId: "s1",
+          lines: ["A", "B"], timestamp: 1,
+        }),
+      });
+      ws.emit("message", {
+        data: JSON.stringify({
+          type: "output", machineId: "m1", sessionId: "s1",
+          lines: ["B", "C"], timestamp: 2,
+        }),
+      });
+    });
+
+    // Session 2: two updates with scroll
+    act(() => {
+      ws.emit("message", {
+        data: JSON.stringify({
+          type: "output", machineId: "m1", sessionId: "s2",
+          lines: ["X", "Y"], timestamp: 3,
+        }),
+      });
+      ws.emit("message", {
+        data: JSON.stringify({
+          type: "output", machineId: "m1", sessionId: "s2",
+          lines: ["Y", "Z"], timestamp: 4,
+        }),
+      });
+    });
+
+    // Both session logs should have their scrolled-off lines
+    expect(result.current.logMapRef.current?.get("m1:s1")).toEqual(["A"]);
+    expect(result.current.logMapRef.current?.get("m1:s2")).toEqual(["X"]);
+  });
 });

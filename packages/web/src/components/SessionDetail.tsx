@@ -7,6 +7,7 @@ interface SessionDetailProps {
   sessionId: string;
   sessionName: string;
   lines: string[];
+  logMapRef?: React.RefObject<Map<string, string[]>>;
   onSendText: (text: string) => void;
   onSendKey: (key: string) => void;
   onSendData: (data: string) => void;
@@ -18,6 +19,7 @@ export function SessionDetail({
   sessionId,
   sessionName,
   lines,
+  logMapRef,
   onSendText,
   onSendKey,
   onSendData,
@@ -40,7 +42,7 @@ export function SessionDetail({
           {machineId} / {sessionId}
         </span>
       </div>
-      <TerminalOutput sessionKey={`${machineId}:${sessionId}`} lines={lines} onData={onSendData} onResize={onResize} />
+      <TerminalOutput sessionKey={`${machineId}:${sessionId}`} lines={lines} logMapRef={logMapRef} onData={onSendData} onResize={onResize} />
       <div style={{ borderTop: "1px solid var(--border)" }}>
         <ChatInput onSendText={onSendText} onSendKey={onSendKey} />
       </div>

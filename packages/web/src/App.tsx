@@ -45,7 +45,7 @@ function useSessionLines(
 }
 
 export default function App() {
-  const { connected, machines, waitingSessions, outputMapRef, subscribeOutput, sendInput, startSession, closeSession, sendResize } = useSocket(WS_URL);
+  const { connected, machines, waitingSessions, outputMapRef, logMapRef, subscribeOutput, sendInput, startSession, closeSession, sendResize } = useSocket(WS_URL);
   const { agents, addAgent, removeAgent } = useAgents();
   const { getMachineName, getSessionName, setMachineName, setSessionName } = useDisplayNames();
   const [selectedMachine, setSelectedMachine] = useState<string>();
@@ -174,6 +174,7 @@ export default function App() {
             sessionId={selectedSession}
             sessionName={selectedSessionName}
             lines={sessionLines}
+            logMapRef={logMapRef}
             onSendText={(text) => sendInput(selectedMachine, selectedSession, { text })}
             onSendKey={(key) => sendInput(selectedMachine, selectedSession, { key })}
             onSendData={(data) => sendInput(selectedMachine, selectedSession, { data })}

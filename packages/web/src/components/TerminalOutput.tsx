@@ -6,25 +6,17 @@ import "@xterm/xterm/css/xterm.css";
 interface TerminalOutputProps {
   sessionKey?: string;
   lines: string[];
+  logMapRef?: React.RefObject<Map<string, string[]>>;
   onData?: (data: string) => void;
   onResize?: (cols: number, rows: number) => void;
 }
 
-const MAX_LOG_LINES = 10000;
-
-// Strip ANSI escape codes and trailing whitespace for reliable comparison.
-// tmux may emit different escape sequences between captures for the same text.
-function stripAnsi(s: string): string {
-  return s.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "").trimEnd();
-}
-
-export function TerminalOutput({ sessionKey, lines, onData, onResize }: TerminalOutputProps) {
+export function TerminalOutput({ sessionKey, lines, logMapRef, onData, onResize }: TerminalOutputProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const prevLinesRef = useRef<string[]>([]);
   const pendingLinesRef = useRef<string[] | null>(null);
-  const logRef = useRef<string[]>([]);
   const scrollModeRef = useRef(false);
   const [scrollMode, setScrollMode] = useState(false);
   const onResizeRef = useRef(onResize);
@@ -74,8 +66,9 @@ export function TerminalOutput({ sessionKey, lines, onData, onResize }: Terminal
         scrollModeRef.current = true;
         setScrollMode(true);
         // Populate terminal with full log + current viewport
+        const log = logMapRef?.current?.get(sessionKey ?? "") || [];
         term.clear();
-        const all = [...logRef.current, ...prevLinesRef.current];
+        const all = [...log, ...prevLinesRef.current];
         term.write("\x1b[H\x1b[2J" + all.join("\r\n"));
         // Let xterm handle the PageUp to scroll up
         return true;
@@ -129,13 +122,12 @@ export function TerminalOutput({ sessionKey, lines, onData, onResize }: Terminal
     return () => disposable.dispose();
   }, [onData]);
 
-  // Reset terminal state when switching sessions.
+  // Reset terminal display when switching sessions.
   useEffect(() => {
     const term = termRef.current;
     if (!term) return;
     prevLinesRef.current = [];
     pendingLinesRef.current = null;
-    logRef.current = [];
     scrollModeRef.current = false;
     setScrollMode(false);
     term.clear();
@@ -146,47 +138,6 @@ export function TerminalOutput({ sessionKey, lines, onData, onResize }: Terminal
     const term = termRef.current;
     if (!term) return;
     if (lines === prevLinesRef.current) return;
-    const prev = prevLinesRef.current;
-
-    // Overlap detection: distinguish scrolling from in-place edits so we
-    // know which lines scrolled off the top and should go into the log.
-    const prevStripped = prev.map(stripAnsi);
-    const linesStripped = lines.map(stripAnsi);
-
-    // 1. Scroll overlap: longest suffix of prev matching prefix of new.
-    let scrollOverlap = 0;
-    if (prev.length > 0 && lines.length > 0) {
-      const maxK = Math.min(prev.length, lines.length);
-      for (let k = maxK; k >= 1; k--) {
-        let match = true;
-        for (let i = 0; i < k; i++) {
-          if (prevStripped[prev.length - k + i] !== linesStripped[i]) {
-            match = false;
-            break;
-          }
-        }
-        if (match) { scrollOverlap = k; break; }
-      }
-    }
-
-    // 2. In-place match: lines identical at the same position.
-    let inPlaceMatch = 0;
-    const minLen = Math.min(prevStripped.length, linesStripped.length);
-    for (let i = 0; i < minLen; i++) {
-      if (prevStripped[i] === linesStripped[i]) inPlaceMatch++;
-    }
-
-    const scrolled = scrollOverlap > inPlaceMatch
-      ? prev.length - scrollOverlap
-      : 0;
-
-    // Accumulate scrolled-off lines into the log buffer.
-    if (scrolled > 0) {
-      logRef.current.push(...prev.slice(0, scrolled));
-      if (logRef.current.length > MAX_LOG_LINES) {
-        logRef.current = logRef.current.slice(-MAX_LOG_LINES);
-      }
-    }
 
     prevLinesRef.current = lines;
 

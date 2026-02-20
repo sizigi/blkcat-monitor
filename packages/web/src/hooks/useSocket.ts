@@ -12,11 +12,50 @@ export interface OutputLine {
   waitingForInput?: boolean;
 }
 
+const MAX_LOG_LINES = 10000;
+
+function stripAnsi(s: string): string {
+  return s.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "").trimEnd();
+}
+
+/** Detect how many lines scrolled off the top between two viewport snapshots.
+ *  Returns 0 for in-place edits (spinners, typing). */
+function detectScrolled(prev: string[], curr: string[]): number {
+  if (prev.length === 0 || curr.length === 0) return 0;
+
+  const prevStripped = prev.map(stripAnsi);
+  const currStripped = curr.map(stripAnsi);
+
+  // Scroll overlap: longest suffix of prev matching prefix of curr
+  let scrollOverlap = 0;
+  const maxK = Math.min(prev.length, curr.length);
+  for (let k = maxK; k >= 1; k--) {
+    let match = true;
+    for (let i = 0; i < k; i++) {
+      if (prevStripped[prev.length - k + i] !== currStripped[i]) {
+        match = false;
+        break;
+      }
+    }
+    if (match) { scrollOverlap = k; break; }
+  }
+
+  // In-place match: lines identical at the same position
+  let inPlaceMatch = 0;
+  const minLen = Math.min(prevStripped.length, currStripped.length);
+  for (let i = 0; i < minLen; i++) {
+    if (prevStripped[i] === currStripped[i]) inPlaceMatch++;
+  }
+
+  return scrollOverlap > inPlaceMatch ? prev.length - scrollOverlap : 0;
+}
+
 export interface UseSocketReturn {
   connected: boolean;
   machines: MachineSnapshot[];
   waitingSessions: Set<string>;
   outputMapRef: React.RefObject<Map<string, OutputLine>>;
+  logMapRef: React.RefObject<Map<string, string[]>>;
   subscribeOutput: (cb: (key: string) => void) => () => void;
   sendInput: (machineId: string, sessionId: string, opts: { text?: string; key?: string; data?: string }) => void;
   startSession: (machineId: string, args?: string, cwd?: string) => void;
@@ -34,6 +73,11 @@ export function useSocket(url: string): UseSocketReturn {
   // App-level re-renders on every output message from every session.
   const outputMapRef = useRef(new Map<string, OutputLine>());
   const outputSubsRef = useRef(new Set<(key: string) => void>());
+
+  // Per-session log buffers and previous-output tracking for overlap detection.
+  // Runs for ALL sessions so logs accumulate even when not selected.
+  const logMapRef = useRef(new Map<string, string[]>());
+  const prevLinesMapRef = useRef(new Map<string, string[]>());
 
   const subscribeOutput = useCallback((cb: (key: string) => void) => {
     outputSubsRef.current.add(cb);
@@ -81,6 +125,19 @@ export function useSocket(url: string): UseSocketReturn {
             waitingForInput: (msg as any).waitingForInput,
           };
           outputMapRef.current.set(key, entry);
+
+          // Accumulate scrolled-off lines into per-session log
+          const prev = prevLinesMapRef.current.get(key) || [];
+          const scrolled = detectScrolled(prev, msg.lines);
+          if (scrolled > 0) {
+            let log = logMapRef.current.get(key);
+            if (!log) { log = []; logMapRef.current.set(key, log); }
+            log.push(...prev.slice(0, scrolled));
+            if (log.length > MAX_LOG_LINES) {
+              logMapRef.current.set(key, log.slice(-MAX_LOG_LINES));
+            }
+          }
+          prevLinesMapRef.current.set(key, msg.lines);
 
           // Notify subscribers (only the selected session's hook re-renders)
           for (const sub of outputSubsRef.current) sub(key);
@@ -153,5 +210,5 @@ export function useSocket(url: string): UseSocketReturn {
     [],
   );
 
-  return { connected, machines, waitingSessions, outputMapRef, subscribeOutput, sendInput, startSession, closeSession, sendResize };
+  return { connected, machines, waitingSessions, outputMapRef, logMapRef, subscribeOutput, sendInput, startSession, closeSession, sendResize };
 }
