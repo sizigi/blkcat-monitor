@@ -1,4 +1,4 @@
-import type { SessionInfo, ServerToAgentMessage } from "@blkcat/shared";
+import type { SessionInfo, ServerToAgentMessage, AgentHookEventMessage } from "@blkcat/shared";
 
 interface AgentConnectionOptions {
   serverUrl: string;
@@ -84,6 +84,10 @@ export class AgentConnection {
       sessionId,
       lines,
     }));
+  }
+
+  sendHookEvent(event: AgentHookEventMessage) {
+    this.ws.send(JSON.stringify(event));
   }
 
   close() { this.ws.close(); }

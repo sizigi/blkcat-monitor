@@ -1,4 +1,4 @@
-import type { SessionInfo, ServerToAgentMessage } from "@blkcat/shared";
+import type { SessionInfo, ServerToAgentMessage, AgentHookEventMessage } from "@blkcat/shared";
 
 interface AgentListenerOptions {
   port: number;
@@ -103,6 +103,10 @@ export class AgentListener {
       sessionId,
       lines,
     });
+  }
+
+  sendHookEvent(event: AgentHookEventMessage) {
+    this.broadcast(event);
   }
 
   close() {

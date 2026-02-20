@@ -4,7 +4,12 @@ import { AgentListener } from "./listener";
 import { TmuxCapture, bunExec } from "./capture";
 import { discoverClaudeSessions } from "./discovery";
 import { hasChanged } from "./diff";
+import { HooksServer } from "./hooks-server";
+import { installHooks } from "./hooks-install";
 import type { SessionInfo } from "@blkcat/shared";
+import type { AgentHookEventMessage } from "@blkcat/shared";
+import { resolve, dirname } from "path";
+import { fileURLToPath } from "url";
 
 async function main() {
   const config = await loadConfig();
@@ -99,7 +104,14 @@ async function main() {
     console.log(`Started new session: ${paneId}`);
   }
 
-  let conn: { register(sessions: SessionInfo[]): void; sendOutput(sessionId: string, lines: string[], waitingForInput?: boolean): void; updateSessions(sessions: SessionInfo[]): void; sendScrollback(sessionId: string, lines: string[]): void; close(): void };
+  let conn: {
+    register(sessions: SessionInfo[]): void;
+    sendOutput(sessionId: string, lines: string[], waitingForInput?: boolean): void;
+    updateSessions(sessions: SessionInfo[]): void;
+    sendScrollback(sessionId: string, lines: string[]): void;
+    sendHookEvent(event: AgentHookEventMessage): void;
+    close(): void;
+  };
 
   if (config.listenPort) {
     const listener = new AgentListener({
@@ -132,6 +144,31 @@ async function main() {
     conn.register(allSessions);
     console.log(`Connected to ${config.serverUrl} as ${config.machineId}`);
   }
+
+  // Start hooks HTTP server
+  const hooksServer = new HooksServer({
+    port: config.hooksPort,
+    machineId: config.machineId,
+    onHookEvent: (event) => {
+      conn.sendHookEvent(event);
+    },
+    resolvePaneId: (tmuxPane) => {
+      return captures.has(tmuxPane) ? tmuxPane : null;
+    },
+  });
+  console.log(`Hooks server listening on port ${hooksServer.port}`);
+
+  // Auto-install Claude Code hooks
+  const scriptPath = resolve(dirname(fileURLToPath(import.meta.url)), "../blkcat-hook.sh");
+  installHooks({
+    settingsPath: resolve(process.env.HOME ?? "~", ".claude/settings.json"),
+    hooksPort: config.hooksPort,
+    scriptPath,
+  }).then(() => {
+    console.log("Claude Code hooks installed");
+  }).catch((err) => {
+    console.warn("Failed to install Claude Code hooks:", err);
+  });
 
   const prevLines = new Map<string, string[]>();
 
