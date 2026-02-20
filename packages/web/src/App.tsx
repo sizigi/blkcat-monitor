@@ -46,7 +46,7 @@ function useSessionLines(
 }
 
 export default function App() {
-  const { connected, machines, waitingSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents } = useSocket(WS_URL);
+  const { connected, machines, waitingSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications } = useSocket(WS_URL);
   const { agents, addAgent, removeAgent } = useAgents();
   const { getMachineName, getSessionName, setMachineName, setSessionName } = useDisplayNames();
   const [selectedMachine, setSelectedMachine] = useState<string>();
@@ -97,9 +97,11 @@ export default function App() {
           machines={machines}
           selectedMachine={selectedMachine}
           selectedSession={selectedSession}
+          notificationCounts={notificationCounts}
           onSelectSession={(m, s) => {
             setSelectedMachine(m);
             setSelectedSession(s);
+            clearNotifications(`${m}:${s}`);
           }}
           onStartSession={startSession}
           onCloseSession={(machineId, sessionId) => {

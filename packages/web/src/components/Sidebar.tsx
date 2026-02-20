@@ -15,6 +15,7 @@ interface SidebarProps {
   getSessionName?: (sessionId: string, defaultName: string) => string;
   onRenameMachine?: (machineId: string, name: string) => void;
   onRenameSession?: (sessionId: string, name: string) => void;
+  notificationCounts?: Map<string, number>;
   waitingSessions?: Set<string>;
   agents?: OutboundAgentInfo[];
   onAddAgent?: (address: string) => Promise<{ ok: boolean; error?: string }>;
@@ -35,6 +36,7 @@ export function Sidebar({
   getSessionName,
   onRenameMachine,
   onRenameSession,
+  notificationCounts,
   waitingSessions,
   agents,
   onAddAgent,
@@ -342,6 +344,27 @@ export function Sidebar({
                       )}
                     </span>
                   )}
+                  {(() => {
+                    const count = notificationCounts?.get(`${machine.machineId}:${session.id}`) ?? 0;
+                    if (count === 0) return null;
+                    return (
+                      <span style={{
+                        background: "var(--red)",
+                        color: "#fff",
+                        borderRadius: 8,
+                        padding: "0 5px",
+                        fontSize: 10,
+                        fontWeight: 700,
+                        marginLeft: 4,
+                        minWidth: 16,
+                        textAlign: "center" as const,
+                        lineHeight: "16px",
+                        display: "inline-block",
+                      }}>
+                        {count}
+                      </span>
+                    );
+                  })()}
                 </button>
                 {onReloadSession && (
                   <button
