@@ -95,6 +95,30 @@ describe("Sidebar", () => {
     expect(onStart).toHaveBeenCalledWith("m1", undefined, "/home/user/project");
   });
 
+  it("closes form on Escape key", () => {
+    render(
+      <Sidebar machines={machines} onSelectSession={() => {}} onStartSession={() => {}} />,
+    );
+
+    fireEvent.click(screen.getByTestId("new-session-m1"));
+    expect(screen.getByTestId("new-session-form-m1")).toBeInTheDocument();
+
+    fireEvent.keyDown(screen.getByTestId("new-session-cwd-m1"), { key: "Escape" });
+    expect(screen.queryByTestId("new-session-form-m1")).not.toBeInTheDocument();
+  });
+
+  it("shows x button when form is expanded", () => {
+    render(
+      <Sidebar machines={machines} onSelectSession={() => {}} onStartSession={() => {}} />,
+    );
+
+    const btn = screen.getByTestId("new-session-m1");
+    expect(btn.textContent).toBe("+");
+
+    fireEvent.click(btn);
+    expect(btn.textContent).toBe("\u00d7");
+  });
+
   it("renders AgentManager when agent props provided", () => {
     render(
       <Sidebar

@@ -6,6 +6,7 @@ interface AgentConnectionOptions {
   onInput: (msg: { sessionId: string; text?: string; key?: string; data?: string }) => void;
   onStartSession?: (args?: string, cwd?: string) => void;
   onCloseSession?: (sessionId: string) => void;
+  onResize?: (sessionId: string, cols: number, rows: number) => void;
 }
 
 export class AgentConnection {
@@ -36,6 +37,8 @@ export class AgentConnection {
           opts.onStartSession?.(msg.args, msg.cwd);
         } else if (msg.type === "close_session") {
           opts.onCloseSession?.(msg.sessionId);
+        } else if (msg.type === "resize") {
+          opts.onResize?.(msg.sessionId, msg.cols, msg.rows);
         }
       } catch {}
     });

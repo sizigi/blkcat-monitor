@@ -19,6 +19,7 @@ export interface UseSocketReturn {
   sendInput: (machineId: string, sessionId: string, opts: { text?: string; key?: string; data?: string }) => void;
   startSession: (machineId: string, args?: string, cwd?: string) => void;
   closeSession: (machineId: string, sessionId: string) => void;
+  sendResize: (machineId: string, sessionId: string, cols: number, rows: number) => void;
 }
 
 export function useSocket(url: string): UseSocketReturn {
@@ -121,5 +122,15 @@ export function useSocket(url: string): UseSocketReturn {
     [],
   );
 
-  return { connected, machines, outputs, sendInput, startSession, closeSession };
+  const sendResize = useCallback(
+    (machineId: string, sessionId: string, cols: number, rows: number) => {
+      const ws = wsRef.current;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "resize", machineId, sessionId, cols, rows }));
+      }
+    },
+    [],
+  );
+
+  return { connected, machines, outputs, sendInput, startSession, closeSession, sendResize };
 }

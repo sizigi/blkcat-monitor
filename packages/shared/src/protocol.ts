@@ -62,7 +62,14 @@ export interface ServerCloseSessionMessage {
   sessionId: string;
 }
 
-export type ServerToAgentMessage = ServerInputMessage | ServerStartSessionMessage | ServerCloseSessionMessage;
+export interface ServerResizeMessage {
+  type: "resize";
+  sessionId: string;
+  cols: number;
+  rows: number;
+}
+
+export type ServerToAgentMessage = ServerInputMessage | ServerStartSessionMessage | ServerCloseSessionMessage | ServerResizeMessage;
 
 // --- Server -> Dashboard messages ---
 
@@ -116,7 +123,15 @@ export interface DashboardCloseSessionMessage {
   sessionId: string;
 }
 
-export type DashboardToServerMessage = DashboardInputMessage | DashboardStartSessionMessage | DashboardCloseSessionMessage;
+export interface DashboardResizeMessage {
+  type: "resize";
+  machineId: string;
+  sessionId: string;
+  cols: number;
+  rows: number;
+}
+
+export type DashboardToServerMessage = DashboardInputMessage | DashboardStartSessionMessage | DashboardCloseSessionMessage | DashboardResizeMessage;
 
 // --- Outbound agent info ---
 
@@ -129,7 +144,7 @@ export interface OutboundAgentInfo {
 // --- Parsers ---
 
 const AGENT_TYPES = new Set(["register", "output", "sessions"]);
-const DASHBOARD_TYPES = new Set(["input", "start_session", "close_session"]);
+const DASHBOARD_TYPES = new Set(["input", "start_session", "close_session", "resize"]);
 
 export function parseAgentMessage(raw: string): AgentToServerMessage | null {
   try {

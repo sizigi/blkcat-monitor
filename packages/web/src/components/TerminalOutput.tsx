@@ -6,6 +6,7 @@ import "@xterm/xterm/css/xterm.css";
 interface TerminalOutputProps {
   lines: string[];
   onData?: (data: string) => void;
+  onResize?: (cols: number, rows: number) => void;
 }
 
 // Strip ANSI escape codes and trailing whitespace for reliable comparison.
@@ -14,11 +15,13 @@ function stripAnsi(s: string): string {
   return s.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "").trimEnd();
 }
 
-export function TerminalOutput({ lines, onData }: TerminalOutputProps) {
+export function TerminalOutput({ lines, onData, onResize }: TerminalOutputProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const prevLinesRef = useRef<string[]>([]);
+  const onResizeRef = useRef(onResize);
+  onResizeRef.current = onResize;
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -45,10 +48,18 @@ export function TerminalOutput({ lines, onData }: TerminalOutputProps) {
     termRef.current = term;
     fitRef.current = fit;
 
-    const resizeObserver = new ResizeObserver(() => fit.fit());
+    let resizeTimer: ReturnType<typeof setTimeout> | undefined;
+    const resizeObserver = new ResizeObserver(() => {
+      fit.fit();
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        onResizeRef.current?.(term.cols, term.rows);
+      }, 300);
+    });
     resizeObserver.observe(containerRef.current);
 
     return () => {
+      clearTimeout(resizeTimer);
       resizeObserver.disconnect();
       term.dispose();
     };

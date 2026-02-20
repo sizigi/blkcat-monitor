@@ -3,6 +3,7 @@ import type { MachineSnapshot, OutboundAgentInfo } from "@blkcat/shared";
 import { AgentManager } from "./AgentManager";
 
 interface SidebarProps {
+  width?: number;
   machines: MachineSnapshot[];
   selectedMachine?: string;
   selectedSession?: string;
@@ -17,9 +18,11 @@ interface SidebarProps {
   agents?: OutboundAgentInfo[];
   onAddAgent?: (address: string) => Promise<{ ok: boolean; error?: string }>;
   onRemoveAgent?: (address: string) => Promise<void>;
+  onCollapse?: () => void;
 }
 
 export function Sidebar({
+  width = 250,
   machines,
   selectedMachine,
   selectedSession,
@@ -34,6 +37,7 @@ export function Sidebar({
   agents,
   onAddAgent,
   onRemoveAgent,
+  onCollapse,
 }: SidebarProps) {
   const [expandedMachine, setExpandedMachine] = useState<string | null>(null);
   const [sessionArgs, setSessionArgs] = useState("");
@@ -43,7 +47,7 @@ export function Sidebar({
   return (
     <aside
       style={{
-        width: 250,
+        width,
         borderRight: "1px solid var(--border)",
         background: "var(--bg-secondary)",
         display: "flex",
@@ -52,8 +56,25 @@ export function Sidebar({
       }}
     >
       <div style={{ flex: 1, overflowY: "auto" }}>
-      <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)" }}>
+      <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <h2 style={{ fontSize: 16, fontWeight: 600 }}>Machines</h2>
+        {onCollapse && (
+          <button
+            onClick={onCollapse}
+            title="Hide sidebar"
+            style={{
+              background: "none",
+              border: "none",
+              color: "var(--text-muted)",
+              cursor: "pointer",
+              fontSize: 14,
+              lineHeight: 1,
+              padding: "2px 4px",
+            }}
+          >
+            &#x2039;&#x2039;
+          </button>
+        )}
       </div>
       {machines.length === 0 && (
         <p style={{ padding: 16, color: "var(--text-muted)" }}>No machines connected</p>
@@ -143,7 +164,7 @@ export function Sidebar({
                   padding: "2px 6px",
                 }}
               >
-                +
+                {expandedMachine === machine.machineId ? "\u00d7" : "+"}
               </button>
             )}
           </div>
@@ -157,6 +178,13 @@ export function Sidebar({
                 setSessionArgs("");
                 setSessionCwd("");
               }}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  setExpandedMachine(null);
+                  setSessionArgs("");
+                  setSessionCwd("");
+                }
+              }}
               style={{
                 padding: "4px 16px 8px 32px",
                 display: "flex",
@@ -165,6 +193,7 @@ export function Sidebar({
               }}
             >
               <input
+                autoFocus
                 data-testid={`new-session-cwd-${machine.machineId}`}
                 type="text"
                 value={sessionCwd}

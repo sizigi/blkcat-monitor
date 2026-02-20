@@ -69,7 +69,7 @@ export function AgentManager({ agents, onAdd, onRemove }: AgentManagerProps) {
         <form
           data-testid="add-agent-form"
           onSubmit={handleSubmit}
-          style={{ padding: "0 16px 8px", display: "flex", gap: 4 }}
+          style={{ padding: "0 16px 8px", display: "flex", flexDirection: "column", gap: 4 }}
         >
           <input
             data-testid="add-agent-input"
@@ -78,44 +78,49 @@ export function AgentManager({ agents, onAdd, onRemove }: AgentManagerProps) {
             onChange={(e) => setAddress(e.target.value)}
             placeholder="host:port"
             style={{
-              flex: 1,
+              width: "100%",
               padding: "4px 8px",
               fontSize: 12,
               background: "var(--bg)",
               color: "var(--text)",
               border: "1px solid var(--border)",
               borderRadius: 4,
+              boxSizing: "border-box",
             }}
           />
-          <button
-            type="submit"
-            style={{
-              padding: "4px 8px",
-              fontSize: 12,
-              background: "var(--accent)",
-              color: "#fff",
-              border: "none",
-              borderRadius: 4,
-              cursor: "pointer",
-            }}
-          >
-            Connect
-          </button>
-          <button
-            type="button"
-            onClick={() => { setShowForm(false); setError(null); }}
-            style={{
-              padding: "4px 8px",
-              fontSize: 12,
-              background: "none",
-              color: "var(--text-muted)",
-              border: "1px solid var(--border)",
-              borderRadius: 4,
-              cursor: "pointer",
-            }}
-          >
-            Cancel
-          </button>
+          <div style={{ display: "flex", gap: 4 }}>
+            <button
+              type="submit"
+              style={{
+                flex: 1,
+                padding: "4px 8px",
+                fontSize: 12,
+                background: "var(--accent)",
+                color: "#fff",
+                border: "none",
+                borderRadius: 4,
+                cursor: "pointer",
+              }}
+            >
+              Connect
+            </button>
+            <button
+              type="button"
+              onClick={() => { setShowForm(false); setError(null); }}
+              style={{
+                flex: 1,
+                padding: "4px 8px",
+                fontSize: 12,
+                background: "none",
+                color: "var(--text-muted)",
+                border: "1px solid var(--border)",
+                borderRadius: 4,
+                cursor: "pointer",
+              }}
+            >
+              Cancel
+            </button>
+          </div>
         </form>
       )}
 
@@ -141,6 +146,7 @@ export function AgentManager({ agents, onAdd, onRemove }: AgentManagerProps) {
             display: "flex",
             alignItems: "center",
             gap: 6,
+            minWidth: 0,
           }}
         >
           <span

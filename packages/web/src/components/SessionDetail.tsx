@@ -10,6 +10,7 @@ interface SessionDetailProps {
   onSendText: (text: string) => void;
   onSendKey: (key: string) => void;
   onSendData: (data: string) => void;
+  onResize?: (cols: number, rows: number) => void;
 }
 
 export function SessionDetail({
@@ -20,6 +21,7 @@ export function SessionDetail({
   onSendText,
   onSendKey,
   onSendData,
+  onResize,
 }: SessionDetailProps) {
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
@@ -38,7 +40,7 @@ export function SessionDetail({
           {machineId} / {sessionId}
         </span>
       </div>
-      <TerminalOutput lines={lines} onData={onSendData} />
+      <TerminalOutput lines={lines} onData={onSendData} onResize={onResize} />
       <div style={{ borderTop: "1px solid var(--border)" }}>
         <ChatInput onSendText={onSendText} onSendKey={onSendKey} />
       </div>

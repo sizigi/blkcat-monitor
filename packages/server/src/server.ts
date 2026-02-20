@@ -12,6 +12,7 @@ interface ServerOptions {
   hostname?: string;
   staticDir?: string;
   agents?: string[];
+  onAgentsSaved?: (addresses: string[]) => void;
 }
 
 interface WsData {
@@ -109,6 +110,12 @@ export function createServer(opts: ServerOptions) {
     }
   }
 
+  function getApiAgentAddresses(): string[] {
+    return Array.from(outboundAgents.values())
+      .filter((a) => a.source === "api")
+      .map((a) => a.address);
+  }
+
   function connectToAgent(address: string, source: "env" | "api"): boolean {
     if (outboundAgents.has(address)) return false;
 
@@ -121,6 +128,10 @@ export function createServer(opts: ServerOptions) {
       removed: false,
     };
     outboundAgents.set(address, entry);
+
+    if (source === "api" && opts.onAgentsSaved) {
+      opts.onAgentsSaved(getApiAgentAddresses());
+    }
 
     let delay = 1000;
     const MAX_DELAY = 30000;
@@ -167,12 +178,17 @@ export function createServer(opts: ServerOptions) {
     const entry = outboundAgents.get(address);
     if (!entry) return false;
 
+    const wasApi = entry.source === "api";
     entry.removed = true;
     if (entry.reconnectTimer) clearTimeout(entry.reconnectTimer);
     if (entry.ws) {
       try { entry.ws.close(); } catch {}
     }
     outboundAgents.delete(address);
+
+    if (wasApi && opts.onAgentsSaved) {
+      opts.onAgentsSaved(getApiAgentAddresses());
+    }
     return true;
   }
 
@@ -294,6 +310,16 @@ export function createServer(opts: ServerOptions) {
                 sessionId: msg.sessionId,
               }));
             }
+          } else if (msg.type === "resize") {
+            const machine = machines.get(msg.machineId);
+            if (machine) {
+              machine.agent.send(JSON.stringify({
+                type: "resize",
+                sessionId: msg.sessionId,
+                cols: msg.cols,
+                rows: msg.rows,
+              }));
+            }
           }
         }
       },
@@ -318,6 +344,7 @@ export function createServer(opts: ServerOptions) {
 
   return {
     port: server.port,
+    connectToAgent,
     stop: () => {
       for (const entry of outboundAgents.values()) {
         entry.removed = true;

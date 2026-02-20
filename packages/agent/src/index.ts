@@ -71,6 +71,12 @@ async function main() {
     console.log(`Closed session: ${sessionId}`);
   }
 
+  function handleResize(sessionId: string, cols: number, rows: number) {
+    const cap = captures.get(sessionId);
+    if (!cap) return;
+    cap.resizePane(sessionId, cols, rows);
+  }
+
   function handleStartSession(args?: string, cwd?: string) {
     const localCap = new TmuxCapture(bunExec);
     const paneId = localCap.startSession(args, cwd);
@@ -95,6 +101,7 @@ async function main() {
       onInput: handleInput,
       onStartSession: handleStartSession,
       onCloseSession: handleCloseSession,
+      onResize: handleResize,
     });
     conn = listener;
     conn.register(allSessions);
@@ -106,6 +113,7 @@ async function main() {
       onInput: handleInput,
       onStartSession: handleStartSession,
       onCloseSession: handleCloseSession,
+      onResize: handleResize,
     });
     conn = connection;
     await connection.waitForOpen();

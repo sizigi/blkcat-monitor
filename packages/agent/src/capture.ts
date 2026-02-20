@@ -64,6 +64,13 @@ export class TmuxCapture {
     this.exec(cmd);
   }
 
+  resizePane(target: string, cols: number, rows: number): boolean {
+    // Extract window target from pane target (e.g., "sess:0.0" → "sess:0")
+    const window = target.replace(/\.\d+$/, "");
+    const cmd = [...this.sshPrefix, "tmux", "resize-window", "-x", String(cols), "-y", String(rows), "-t", window];
+    return this.exec(cmd).success;
+  }
+
   killPane(target: string): boolean {
     const cmd = [...this.sshPrefix, "tmux", "kill-pane", "-t", target];
     return this.exec(cmd).success;
