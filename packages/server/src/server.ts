@@ -6,6 +6,7 @@ import {
   type SessionInfo,
   parseAgentMessage,
   parseDashboardMessage,
+  NOTIFY_HOOK_EVENTS,
 } from "@blkcat/shared";
 
 interface ServerOptions {
@@ -14,6 +15,10 @@ interface ServerOptions {
   staticDir?: string;
   agents?: string[];
   onAgentsSaved?: (addresses: string[]) => void;
+  /** Shell command to run when Claude is waiting for user input.
+   *  Triggered by Stop, Notification, and PermissionRequest hook events. */
+  notifyCommand?: string;
+  notifyEnv?: Record<string, string>;
 }
 
 interface WsData {
@@ -113,6 +118,20 @@ export function createServer(opts: ServerOptions) {
         }
       }
       broadcastToDashboards(msg);
+      if (opts.notifyCommand && NOTIFY_HOOK_EVENTS.has(msg.hookEventName)) {
+        console.log(`[notify] ${msg.hookEventName} from ${msg.machineId}/${msg.sessionId ?? "?"}`);
+        Bun.spawn(["sh", "-c", opts.notifyCommand], {
+          stdout: "ignore",
+          stderr: "ignore",
+          env: {
+            ...process.env,
+            ...opts.notifyEnv,
+            BLKCAT_MACHINE_ID: msg.machineId,
+            BLKCAT_SESSION_ID: msg.sessionId ?? "",
+            BLKCAT_HOOK_EVENT: msg.hookEventName,
+          },
+        });
+      }
     }
   }
 
