@@ -33,7 +33,7 @@ export async function loadConfig(): Promise<AgentConfig> {
   return {
     serverUrl: process.env.BLKCAT_SERVER_URL ?? "ws://localhost:3000/ws/agent",
     machineId: process.env.BLKCAT_MACHINE_ID ?? os.hostname(),
-    pollInterval: parseInt(process.env.BLKCAT_POLL_INTERVAL ?? "300"),
+    pollInterval: parseInt(process.env.BLKCAT_POLL_INTERVAL ?? "150"),
     targets,
     listenPort,
   };
