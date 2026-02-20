@@ -61,21 +61,33 @@ export function TerminalOutput({ lines, onData }: TerminalOutputProps) {
     if (lines === prevLinesRef.current) return;
     const prev = prevLinesRef.current;
 
-    // Check if new lines are an append-only extension of previous content.
-    // This preserves scrollback history for the common case of Claude streaming output.
-    let isAppend = prev.length > 0 && lines.length > prev.length;
-    if (isAppend) {
-      for (let i = 0; i < prev.length; i++) {
-        if (prev[i] !== lines[i]) { isAppend = false; break; }
+    // tmux capture-pane sends a viewport snapshot each time. When content
+    // scrolls, old lines disappear from the top and new ones appear at the
+    // bottom. Find the overlap between the end of prev and the start of
+    // lines, then append only the truly new lines — preserving scrollback.
+    let overlap = 0;
+    if (prev.length > 0 && lines.length > 0) {
+      // Find the largest k where prev's last k lines == lines' first k lines
+      const maxK = Math.min(prev.length, lines.length);
+      for (let k = maxK; k >= 1; k--) {
+        let match = true;
+        for (let i = 0; i < k; i++) {
+          if (prev[prev.length - k + i] !== lines[i]) { match = false; break; }
+        }
+        if (match) { overlap = k; break; }
       }
     }
 
-    if (isAppend) {
-      // Only write the newly appended lines
-      const newLines = lines.slice(prev.length);
-      term.write("\r\n" + newLines.join("\r\n"));
+    if (overlap > 0) {
+      // Append only the new lines that scrolled into view
+      const newLines = lines.slice(overlap);
+      if (newLines.length > 0) {
+        // Move cursor to the last row, then write new lines below
+        term.write("\x1b[" + lines.length + ";1H");
+        term.write("\r\n" + newLines.join("\r\n"));
+      }
     } else {
-      // Full redraw — content changed significantly
+      // No overlap — full redraw (e.g. switched session, cleared screen)
       term.clear();
       term.write("\x1b[H\x1b[2J" + lines.join("\r\n"));
     }
