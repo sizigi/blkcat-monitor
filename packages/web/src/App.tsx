@@ -264,6 +264,7 @@ export default function App() {
               <NotificationList
                 hookEventsRef={hookEventsRef}
                 subscribeHookEvents={subscribeHookEvents}
+                machines={machines}
                 onSelectSession={(m, s) => {
                   setSelectedMachine(m);
                   setSelectedSession(s);

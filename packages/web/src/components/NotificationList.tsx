@@ -1,20 +1,15 @@
 import React, { useState, useEffect, useRef } from "react";
-import type { AgentHookEventMessage } from "@blkcat/shared";
+import type { AgentHookEventMessage, MachineSnapshot } from "@blkcat/shared";
 import { NOTIFY_HOOK_EVENTS } from "@blkcat/shared";
 
 interface NotificationListProps {
   hookEventsRef: React.RefObject<AgentHookEventMessage[]>;
   subscribeHookEvents: (cb: (event: AgentHookEventMessage) => void) => () => void;
+  machines: MachineSnapshot[];
   onSelectSession?: (machineId: string, sessionId: string) => void;
   getMachineName?: (machineId: string) => string;
   getSessionName?: (sessionId: string, defaultName: string) => string;
 }
-
-const EVENT_LABELS: Record<string, string> = {
-  Stop: "Response complete",
-  Notification: "Notification",
-  PermissionRequest: "Permission needed",
-};
 
 const EVENT_COLORS: Record<string, string> = {
   Stop: "#2196f3",
@@ -27,9 +22,47 @@ function formatTime(ts: number): string {
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
+function getEventDetail(event: AgentHookEventMessage): string {
+  const data = event.data;
+  switch (event.hookEventName) {
+    case "Stop":
+      return String(data.stop_hook_reason ?? "response complete");
+    case "Notification": {
+      const title = data.title ? String(data.title) : "";
+      const message = data.message ? String(data.message) : "";
+      const text = title && message ? `${title}: ${message}` : title || message || "notification";
+      return text.length > 80 ? text.slice(0, 77) + "..." : text;
+    }
+    case "PermissionRequest": {
+      const tool = data.tool_name ? String(data.tool_name) : "";
+      if (tool === "Bash" && data.tool_input && typeof (data.tool_input as any).command === "string") {
+        const cmd = (data.tool_input as any).command as string;
+        return `${tool}: ${cmd.length > 60 ? cmd.slice(0, 57) + "..." : cmd}`;
+      }
+      if ((tool === "Edit" || tool === "Write") && data.tool_input && (data.tool_input as any).file_path) {
+        return `${tool}: ${(data.tool_input as any).file_path}`;
+      }
+      return tool ? `permission: ${tool}` : "permission needed";
+    }
+    default:
+      return event.hookEventName;
+  }
+}
+
+function lookupSessionName(
+  machines: MachineSnapshot[],
+  machineId: string,
+  sessionId: string,
+): string {
+  const machine = machines.find((m) => m.machineId === machineId);
+  const session = machine?.sessions.find((s) => s.id === sessionId);
+  return session?.name ?? sessionId;
+}
+
 export function NotificationList({
   hookEventsRef,
   subscribeHookEvents,
+  machines,
   onSelectSession,
   getMachineName,
   getSessionName,
@@ -113,16 +146,23 @@ export function NotificationList({
                 {event.hookEventName}
               </span>
             </div>
-            <div style={{ marginTop: 2, color: "var(--text-muted)", fontSize: 11 }}>
+            <div style={{ marginTop: 2, fontSize: 11, fontWeight: 600 }}>
               {getMachineName ? getMachineName(event.machineId) : event.machineId}
               {event.sessionId && (
                 <> / {getSessionName
-                  ? getSessionName(event.sessionId, event.sessionId)
-                  : event.sessionId}</>
+                  ? getSessionName(event.sessionId, lookupSessionName(machines, event.machineId, event.sessionId))
+                  : lookupSessionName(machines, event.machineId, event.sessionId)}</>
               )}
             </div>
-            <div style={{ marginTop: 1, fontSize: 11 }}>
-              {EVENT_LABELS[event.hookEventName] ?? event.hookEventName}
+            <div style={{
+              marginTop: 2,
+              fontSize: 11,
+              color: "var(--text-muted)",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}>
+              {getEventDetail(event)}
             </div>
           </div>
         ))}
