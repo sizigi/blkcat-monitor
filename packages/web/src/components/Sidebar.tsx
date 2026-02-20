@@ -10,6 +10,7 @@ interface SidebarProps {
   onSelectSession: (machineId: string, sessionId: string) => void;
   onStartSession?: (machineId: string, args?: string, cwd?: string) => void;
   onCloseSession?: (machineId: string, sessionId: string) => void;
+  onReloadSession?: (machineId: string, sessionId: string) => void;
   getMachineName?: (machineId: string) => string;
   getSessionName?: (sessionId: string, defaultName: string) => string;
   onRenameMachine?: (machineId: string, name: string) => void;
@@ -29,6 +30,7 @@ export function Sidebar({
   onSelectSession,
   onStartSession,
   onCloseSession,
+  onReloadSession,
   getMachineName,
   getSessionName,
   onRenameMachine,
@@ -341,6 +343,29 @@ export function Sidebar({
                     </span>
                   )}
                 </button>
+                {onReloadSession && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onReloadSession(machine.machineId, session.id);
+                    }}
+                    title="Reload session (claude --resume)"
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "var(--text-muted)",
+                      cursor: "pointer",
+                      fontSize: 12,
+                      padding: "4px 8px",
+                      lineHeight: 1,
+                      opacity: 0.5,
+                    }}
+                    onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; }}
+                    onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.5"; }}
+                  >
+                    ↻
+                  </button>
+                )}
                 {onCloseSession && (
                   <button
                     data-testid={`close-session-${session.id}`}

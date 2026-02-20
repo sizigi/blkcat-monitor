@@ -109,6 +109,7 @@ export default function App() {
               setSelectedSession(undefined);
             }
           }}
+          onReloadSession={reloadSession}
           getMachineName={getMachineName}
           getSessionName={getSessionName}
           onRenameMachine={setMachineName}
@@ -184,7 +185,6 @@ export default function App() {
             onSendKey={(key) => sendInput(selectedMachine, selectedSession, { key })}
             onSendData={(data) => sendInput(selectedMachine, selectedSession, { data })}
             onResize={(cols, rows) => sendResize(selectedMachine, selectedSession, cols, rows)}
-            onReload={() => reloadSession(selectedMachine, selectedSession)}
           />
         ) : (
           <div
