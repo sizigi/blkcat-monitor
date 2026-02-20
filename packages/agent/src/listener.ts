@@ -15,6 +15,7 @@ export class AgentListener {
   private machineId: string;
   private currentSessions: SessionInfo[] = [];
   private opts: AgentListenerOptions;
+  onNewClient?: () => void;
 
   constructor(opts: AgentListenerOptions) {
     this.opts = opts;
@@ -35,6 +36,8 @@ export class AgentListener {
             machineId: this.machineId,
             sessions: this.currentSessions,
           }));
+          // Notify the agent to re-send current pane content
+          this.onNewClient?.();
         },
         message: (_ws, message) => {
           try {

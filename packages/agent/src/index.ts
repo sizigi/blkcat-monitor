@@ -103,6 +103,9 @@ async function main() {
       onCloseSession: handleCloseSession,
       onResize: handleResize,
     });
+    // When a new server connects, clear prevLines so the next poll cycle
+    // re-sends the current pane content for all sessions.
+    listener.onNewClient = () => { prevLines.clear(); };
     conn = listener;
     conn.register(allSessions);
     console.log(`Listening on port ${listener.port} as ${config.machineId}`);
