@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
@@ -23,6 +23,48 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, onData, onResize 
   onDataRef.current = onData;
   const onResizeRef = useRef(onResize);
   onResizeRef.current = onResize;
+  const sessionKeyRef = useRef(sessionKey);
+  sessionKeyRef.current = sessionKey;
+  const logMapRefRef = useRef(logMapRef);
+  logMapRefRef.current = logMapRef;
+
+  const enterScrollMode = useCallback(() => {
+    const term = termRef.current;
+    if (!term || scrollModeRef.current) return;
+    scrollModeRef.current = true;
+    setScrollMode(true);
+    const log = logMapRefRef.current?.current?.get(sessionKeyRef.current ?? "") || [];
+    term.clear();
+    const all = [...log, ...prevLinesRef.current];
+    // Use write callback to scroll after content is flushed
+    term.write("\x1b[H\x1b[2J" + all.join("\r\n"), () => {
+      term.scrollToTop();
+    });
+  }, []);
+
+  const exitScrollMode = useCallback(() => {
+    const term = termRef.current;
+    if (!term || !scrollModeRef.current) return;
+    scrollModeRef.current = false;
+    setScrollMode(false);
+    term.clear();
+    const latest = pendingLinesRef.current || prevLinesRef.current;
+    pendingLinesRef.current = null;
+    term.write("\x1b[H\x1b[2J" + latest.join("\r\n"));
+    term.focus();
+  }, []);
+
+  const scrollNav = useCallback((action: "pageUp" | "pageDown" | "top" | "bottom") => {
+    const term = termRef.current;
+    if (!term || !scrollModeRef.current) return;
+    switch (action) {
+      case "pageUp": term.scrollLines(-term.rows); break;
+      case "pageDown": term.scrollLines(term.rows); break;
+      case "top": term.scrollToTop(); break;
+      case "bottom": term.scrollToBottom(); break;
+    }
+    term.focus();
+  }, []);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -71,25 +113,14 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, onData, onResize 
 
       // Shift+PageUp: enter scroll mode
       if (!scrollModeRef.current && event.shiftKey && event.key === "PageUp") {
-        scrollModeRef.current = true;
-        setScrollMode(true);
-        // Populate terminal with full log + current viewport
-        const log = logMapRef?.current?.get(sessionKey ?? "") || [];
-        term.clear();
-        const all = [...log, ...prevLinesRef.current];
-        term.write("\x1b[H\x1b[2J" + all.join("\r\n"));
+        enterScrollMode();
         // Let xterm handle the PageUp to scroll up
         return true;
       }
 
       // Escape or q: exit scroll mode
       if (scrollModeRef.current && (event.key === "Escape" || event.key === "q")) {
-        scrollModeRef.current = false;
-        setScrollMode(false);
-        term.clear();
-        const latest = pendingLinesRef.current || prevLinesRef.current;
-        pendingLinesRef.current = null;
-        term.write("\x1b[H\x1b[2J" + latest.join("\r\n"));
+        exitScrollMode();
         return false;
       }
 
@@ -159,19 +190,43 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, onData, onResize 
     term.write("\x1b[H\x1b[2J" + lines.join("\r\n"));
   }, [lines]);
 
+  const hasLog = logMapRef?.current?.has(sessionKey ?? "") ?? false;
+
+  // Prevent mousedown on toolbar buttons from stealing focus from the terminal
+  const pd = useCallback((e: React.MouseEvent) => e.preventDefault(), []);
+
+  const btnStyle: React.CSSProperties = {
+    background: "none",
+    border: "1px solid rgba(255,255,255,0.2)",
+    color: "#fff",
+    cursor: "pointer",
+    borderRadius: 3,
+    padding: "2px 6px",
+    fontSize: 13,
+    lineHeight: 1,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: 26,
+  };
+
   return (
     <div style={{ position: "relative", flex: 1, minHeight: 0 }}>
       <div
         ref={containerRef}
         style={{ height: "100%", background: "#0d1117" }}
       />
-      {scrollMode && (
+      {/* Scroll mode toolbar */}
+      {scrollMode ? (
         <div
           style={{
             position: "absolute",
             top: 0,
             right: 0,
-            padding: "2px 8px",
+            display: "flex",
+            alignItems: "center",
+            gap: 4,
+            padding: "4px 8px",
             background: "rgba(255, 200, 0, 0.9)",
             color: "#000",
             fontSize: 11,
@@ -180,8 +235,38 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, onData, onResize 
             zIndex: 10,
           }}
         >
-          SCROLL &middot; Esc to exit
+          <span>SCROLL</span>
+          <button onMouseDown={pd} onClick={() => scrollNav("top")} style={{ ...btnStyle, color: "#000", borderColor: "rgba(0,0,0,0.3)" }} title="Top">&#8607;</button>
+          <button onMouseDown={pd} onClick={() => scrollNav("pageUp")} style={{ ...btnStyle, color: "#000", borderColor: "rgba(0,0,0,0.3)" }} title="Page Up">&#8679;</button>
+          <button onMouseDown={pd} onClick={() => scrollNav("pageDown")} style={{ ...btnStyle, color: "#000", borderColor: "rgba(0,0,0,0.3)" }} title="Page Down">&#8681;</button>
+          <button onMouseDown={pd} onClick={() => scrollNav("bottom")} style={{ ...btnStyle, color: "#000", borderColor: "rgba(0,0,0,0.3)" }} title="Bottom">&#8609;</button>
+          <button onMouseDown={pd} onClick={exitScrollMode} style={{ ...btnStyle, color: "#000", borderColor: "rgba(0,0,0,0.3)", fontWeight: 700, fontSize: 12 }} title="Exit scroll mode (Esc)">&#10005;</button>
         </div>
+      ) : (
+        /* Enter scroll mode button — only show when there's log history */
+        (hasLog || lines.length > 0) && (
+          <button
+            onMouseDown={pd}
+            onClick={enterScrollMode}
+            title="Scroll history (Shift+PageUp)"
+            style={{
+              position: "absolute",
+              top: 4,
+              right: 4,
+              ...btnStyle,
+              background: "rgba(255,255,255,0.08)",
+              padding: "3px 7px",
+              fontSize: 14,
+              opacity: 0.4,
+              zIndex: 10,
+              transition: "opacity 0.15s",
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.9"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.4"; }}
+          >
+            &#8597;
+          </button>
+        )
       )}
     </div>
   );
