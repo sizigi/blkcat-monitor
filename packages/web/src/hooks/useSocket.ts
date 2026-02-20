@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import type {
   MachineSnapshot,
   ServerToDashboardMessage,
+  AgentHookEventMessage,
 } from "@blkcat/shared";
 
 export interface OutputLine {
@@ -64,6 +65,8 @@ export interface UseSocketReturn {
   closeSession: (machineId: string, sessionId: string) => void;
   sendResize: (machineId: string, sessionId: string, cols: number, rows: number) => void;
   requestScrollback: (machineId: string, sessionId: string) => void;
+  hookEventsRef: React.RefObject<AgentHookEventMessage[]>;
+  subscribeHookEvents: (cb: (event: AgentHookEventMessage) => void) => () => void;
 }
 
 export function useSocket(url: string): UseSocketReturn {
@@ -85,6 +88,14 @@ export function useSocket(url: string): UseSocketReturn {
   // Scrollback responses from agents (full tmux scrollback buffer).
   const scrollbackMapRef = useRef(new Map<string, string[]>());
   const scrollbackSubsRef = useRef(new Set<(key: string) => void>());
+
+  const hookEventsRef = useRef<AgentHookEventMessage[]>([]);
+  const hookEventSubsRef = useRef(new Set<(event: AgentHookEventMessage) => void>());
+
+  const subscribeHookEvents = useCallback((cb: (event: AgentHookEventMessage) => void) => {
+    hookEventSubsRef.current.add(cb);
+    return () => { hookEventSubsRef.current.delete(cb); };
+  }, []);
 
   const subscribeOutput = useCallback((cb: (key: string) => void) => {
     outputSubsRef.current.add(cb);
@@ -109,6 +120,12 @@ export function useSocket(url: string): UseSocketReturn {
 
         if (msg.type === "snapshot") {
           setMachines(msg.machines);
+          // Seed hook events from snapshot
+          for (const machine of msg.machines) {
+            if (machine.recentEvents) {
+              hookEventsRef.current.push(...machine.recentEvents);
+            }
+          }
         } else if (msg.type === "machine_update") {
           setMachines((prev) => {
             if (msg.online === false) {
@@ -172,6 +189,13 @@ export function useSocket(url: string): UseSocketReturn {
             }
             return prev;
           });
+        } else if (msg.type === "hook_event") {
+          const hookEvent = msg as unknown as AgentHookEventMessage;
+          hookEventsRef.current.push(hookEvent);
+          if (hookEventsRef.current.length > 1000) {
+            hookEventsRef.current = hookEventsRef.current.slice(-1000);
+          }
+          for (const sub of hookEventSubsRef.current) sub(hookEvent);
         }
       } catch {}
     });
@@ -236,5 +260,5 @@ export function useSocket(url: string): UseSocketReturn {
     [],
   );
 
-  return { connected, machines, waitingSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, sendResize, requestScrollback };
+  return { connected, machines, waitingSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents };
 }

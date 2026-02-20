@@ -13,6 +13,7 @@ export interface AgentConfig {
   pollInterval: number;
   targets: TargetConfig[];
   listenPort?: number;
+  hooksPort: number;
 }
 
 export async function loadConfig(): Promise<AgentConfig> {
@@ -36,5 +37,6 @@ export async function loadConfig(): Promise<AgentConfig> {
     pollInterval: parseInt(process.env.BLKCAT_POLL_INTERVAL ?? "150"),
     targets,
     listenPort,
+    hooksPort: parseInt(process.env.BLKCAT_HOOKS_PORT ?? "3001"),
   };
 }

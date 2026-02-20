@@ -11,6 +11,7 @@ export interface MachineSnapshot {
   machineId: string;
   sessions: SessionInfo[];
   lastSeen: number;
+  recentEvents?: AgentHookEventMessage[];
 }
 
 // --- Agent -> Server messages ---
@@ -43,11 +44,22 @@ export interface AgentScrollbackMessage {
   lines: string[];
 }
 
+export interface AgentHookEventMessage {
+  type: "hook_event";
+  machineId: string;
+  sessionId: string | null;
+  hookEventName: string;
+  matcher: string | null;
+  data: Record<string, unknown>;
+  timestamp: number;
+}
+
 export type AgentToServerMessage =
   | AgentRegisterMessage
   | AgentOutputMessage
   | AgentSessionsMessage
-  | AgentScrollbackMessage;
+  | AgentScrollbackMessage
+  | AgentHookEventMessage;
 
 // --- Server -> Agent messages ---
 
@@ -114,11 +126,22 @@ export interface ServerScrollbackMessage {
   lines: string[];
 }
 
+export interface ServerHookEventMessage {
+  type: "hook_event";
+  machineId: string;
+  sessionId: string | null;
+  hookEventName: string;
+  matcher: string | null;
+  data: Record<string, unknown>;
+  timestamp: number;
+}
+
 export type ServerToDashboardMessage =
   | ServerSnapshotMessage
   | ServerMachineUpdateMessage
   | ServerOutputMessage
-  | ServerScrollbackMessage;
+  | ServerScrollbackMessage
+  | ServerHookEventMessage;
 
 // --- Dashboard -> Server messages ---
 
@@ -170,7 +193,7 @@ export interface OutboundAgentInfo {
 
 // --- Parsers ---
 
-const AGENT_TYPES = new Set(["register", "output", "sessions", "scrollback"]);
+const AGENT_TYPES = new Set(["register", "output", "sessions", "scrollback", "hook_event"]);
 const DASHBOARD_TYPES = new Set(["input", "start_session", "close_session", "resize", "request_scrollback"]);
 
 export function parseAgentMessage(raw: string): AgentToServerMessage | null {

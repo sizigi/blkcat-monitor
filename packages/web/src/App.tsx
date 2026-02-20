@@ -4,6 +4,7 @@ import { useAgents } from "./hooks/useAgents";
 import { useDisplayNames } from "./hooks/useDisplayNames";
 import { Sidebar } from "./components/Sidebar";
 import { SessionDetail } from "./components/SessionDetail";
+import { EventFeed } from "./components/EventFeed";
 
 const WS_URL =
   (import.meta as any).env?.VITE_WS_URL ??
@@ -45,13 +46,14 @@ function useSessionLines(
 }
 
 export default function App() {
-  const { connected, machines, waitingSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, sendResize, requestScrollback } = useSocket(WS_URL);
+  const { connected, machines, waitingSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents } = useSocket(WS_URL);
   const { agents, addAgent, removeAgent } = useAgents();
   const { getMachineName, getSessionName, setMachineName, setSessionName } = useDisplayNames();
   const [selectedMachine, setSelectedMachine] = useState<string>();
   const [selectedSession, setSelectedSession] = useState<string>();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
+  const [eventPanelOpen, setEventPanelOpen] = useState(false);
   const resizing = useRef(false);
 
   const sessionLines = useSessionLines(outputMapRef, subscribeOutput, selectedMachine, selectedSession);
@@ -88,7 +90,7 @@ export default function App() {
   }, [sidebarWidth]);
 
   return (
-    <div style={{ display: "flex", height: "100vh" }}>
+    <div style={{ display: "flex", height: "100vh", position: "relative" }}>
       {!sidebarCollapsed && (
         <Sidebar
           width={sidebarWidth}
@@ -197,6 +199,35 @@ export default function App() {
           </div>
         )}
       </main>
+      {/* Event panel toggle */}
+      <button
+        onClick={() => setEventPanelOpen((v) => !v)}
+        title={eventPanelOpen ? "Hide events" : "Show events"}
+        style={{
+          position: "absolute",
+          right: eventPanelOpen ? 300 : 0,
+          top: 8,
+          zIndex: 10,
+          background: "var(--bg-secondary)",
+          border: "1px solid var(--border)",
+          borderRight: eventPanelOpen ? "none" : "1px solid var(--border)",
+          color: "var(--text-muted)",
+          cursor: "pointer",
+          fontSize: 12,
+          padding: "4px 8px",
+          borderRadius: eventPanelOpen ? "4px 0 0 4px" : "4px",
+        }}
+      >
+        Events
+      </button>
+      {eventPanelOpen && (
+        <div style={{ width: 300, flexShrink: 0 }}>
+          <EventFeed
+            hookEventsRef={hookEventsRef}
+            subscribeHookEvents={subscribeHookEvents}
+          />
+        </div>
+      )}
     </div>
   );
 }
