@@ -28,25 +28,50 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, onData, onResize 
   const logMapRefRef = useRef(logMapRef);
   logMapRefRef.current = logMapRef;
 
+  // Scroll mode: we manage the offset ourselves instead of relying on
+  // xterm's scrollback buffer (which has async/race issues with term.write).
+  // scrollOffset = 0 means "show the end (most recent)", positive means
+  // "N lines scrolled up from the bottom".
+  const scrollOffsetRef = useRef(0);
+  const scrollAllRef = useRef<string[]>([]);
+
+  /** Render a window of `scrollAllRef` at the current offset into the terminal. */
+  const renderScrollView = useCallback(() => {
+    const term = termRef.current;
+    if (!term) return;
+    const all = scrollAllRef.current;
+    const rows = term.rows;
+    // offset=0 → show last `rows` lines; offset=N → shift window up by N
+    const end = all.length - scrollOffsetRef.current;
+    const start = Math.max(0, end - rows);
+    const slice = all.slice(start, end);
+    term.write("\x1b[H\x1b[2J" + slice.join("\r\n"));
+  }, []);
+
   const enterScrollMode = useCallback(() => {
     const term = termRef.current;
     if (!term || scrollModeRef.current) return;
     scrollModeRef.current = true;
     setScrollMode(true);
     const log = logMapRefRef.current?.current?.get(sessionKeyRef.current ?? "") || [];
-    term.clear();
     const all = [...log, ...prevLinesRef.current];
-    // Use write callback to scroll after content is flushed
-    term.write("\x1b[H\x1b[2J" + all.join("\r\n"), () => {
-      term.scrollToTop();
-    });
-  }, []);
+    scrollAllRef.current = all;
+    scrollOffsetRef.current = 0;
+    // Disable xterm scrollback so our own scroll management isn't confused
+    term.options.scrollback = 0;
+    term.clear();
+    renderScrollView();
+  }, [renderScrollView]);
 
   const exitScrollMode = useCallback(() => {
     const term = termRef.current;
     if (!term || !scrollModeRef.current) return;
     scrollModeRef.current = false;
     setScrollMode(false);
+    scrollAllRef.current = [];
+    scrollOffsetRef.current = 0;
+    // Restore scrollback (not used in live mode but reset to default)
+    term.options.scrollback = 5000;
     term.clear();
     const latest = pendingLinesRef.current || prevLinesRef.current;
     pendingLinesRef.current = null;
@@ -54,17 +79,35 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, onData, onResize 
     term.focus();
   }, []);
 
-  const scrollNav = useCallback((action: "pageUp" | "pageDown" | "top" | "bottom") => {
+  const scrollNav = useCallback((action: "pageUp" | "pageDown" | "top" | "bottom" | "lineUp" | "lineDown") => {
     const term = termRef.current;
     if (!term || !scrollModeRef.current) return;
+    const all = scrollAllRef.current;
+    const rows = term.rows;
+    const maxOffset = Math.max(0, all.length - rows);
+
     switch (action) {
-      case "pageUp": term.scrollLines(-term.rows); break;
-      case "pageDown": term.scrollLines(term.rows); break;
-      case "top": term.scrollToTop(); break;
-      case "bottom": term.scrollToBottom(); break;
+      case "pageUp":
+        scrollOffsetRef.current = Math.min(maxOffset, scrollOffsetRef.current + rows);
+        break;
+      case "pageDown":
+        scrollOffsetRef.current = Math.max(0, scrollOffsetRef.current - rows);
+        break;
+      case "lineUp":
+        scrollOffsetRef.current = Math.min(maxOffset, scrollOffsetRef.current + 1);
+        break;
+      case "lineDown":
+        scrollOffsetRef.current = Math.max(0, scrollOffsetRef.current - 1);
+        break;
+      case "top":
+        scrollOffsetRef.current = maxOffset;
+        break;
+      case "bottom":
+        scrollOffsetRef.current = 0;
+        break;
     }
-    term.focus();
-  }, []);
+    renderScrollView();
+  }, [renderScrollView]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -107,28 +150,31 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, onData, onResize 
       }
     });
 
-    // Keyboard shortcuts for scroll mode (like byobu F7 / tmux copy-mode)
+    // Keyboard shortcuts for scroll mode
     term.attachCustomKeyEventHandler((event) => {
       if (event.type !== "keydown") return true;
 
-      // Shift+PageUp: enter scroll mode
+      // Shift+PageUp: enter scroll mode and immediately page up
       if (!scrollModeRef.current && event.shiftKey && event.key === "PageUp") {
         enterScrollMode();
-        // Let xterm handle the PageUp to scroll up
-        return true;
+        // Now page up one screen from the bottom
+        scrollNav("pageUp");
+        return false; // We handle it ourselves
       }
 
-      // Escape or q: exit scroll mode
-      if (scrollModeRef.current && (event.key === "Escape" || event.key === "q")) {
-        exitScrollMode();
-        return false;
-      }
-
-      // In scroll mode, block input keys from reaching the session
-      // but allow navigation keys (PageUp/Down, arrows, Home/End)
       if (scrollModeRef.current) {
-        const nav = ["PageUp", "PageDown", "ArrowUp", "ArrowDown", "Home", "End"];
-        if (nav.includes(event.key)) return true;
+        // Exit on Escape or q
+        if (event.key === "Escape" || event.key === "q") {
+          exitScrollMode();
+          return false;
+        }
+        // Navigation keys — we handle them ourselves
+        if (event.key === "PageUp") { scrollNav("pageUp"); return false; }
+        if (event.key === "PageDown") { scrollNav("pageDown"); return false; }
+        if (event.key === "ArrowUp") { scrollNav("lineUp"); return false; }
+        if (event.key === "ArrowDown") { scrollNav("lineDown"); return false; }
+        if (event.key === "Home") { scrollNav("top"); return false; }
+        if (event.key === "End") { scrollNav("bottom"); return false; }
         // Block everything else (typing, enter, etc.)
         return false;
       }
@@ -162,7 +208,10 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, onData, onResize 
     prevLinesRef.current = [];
     pendingLinesRef.current = null;
     scrollModeRef.current = false;
+    scrollOffsetRef.current = 0;
+    scrollAllRef.current = [];
     setScrollMode(false);
+    term.options.scrollback = 5000;
     term.clear();
     term.write("\x1b[H\x1b[2J");
   }, [sessionKey]);
