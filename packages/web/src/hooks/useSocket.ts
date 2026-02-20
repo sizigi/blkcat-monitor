@@ -4,6 +4,7 @@ import type {
   ServerToDashboardMessage,
   AgentHookEventMessage,
 } from "@blkcat/shared";
+import { NOTIFY_HOOK_EVENTS } from "@blkcat/shared";
 
 export interface OutputLine {
   machineId: string;
@@ -68,6 +69,8 @@ export interface UseSocketReturn {
   requestScrollback: (machineId: string, sessionId: string) => void;
   hookEventsRef: React.RefObject<AgentHookEventMessage[]>;
   subscribeHookEvents: (cb: (event: AgentHookEventMessage) => void) => () => void;
+  notificationCounts: Map<string, number>;
+  clearNotifications: (sessionKey: string) => void;
 }
 
 export function useSocket(url: string): UseSocketReturn {
@@ -92,6 +95,17 @@ export function useSocket(url: string): UseSocketReturn {
 
   const hookEventsRef = useRef<AgentHookEventMessage[]>([]);
   const hookEventSubsRef = useRef(new Set<(event: AgentHookEventMessage) => void>());
+
+  const [notificationCounts, setNotificationCounts] = useState<Map<string, number>>(new Map());
+
+  const clearNotifications = useCallback((sessionKey: string) => {
+    setNotificationCounts((prev) => {
+      if (!prev.has(sessionKey)) return prev;
+      const next = new Map(prev);
+      next.delete(sessionKey);
+      return next;
+    });
+  }, []);
 
   const subscribeHookEvents = useCallback((cb: (event: AgentHookEventMessage) => void) => {
     hookEventSubsRef.current.add(cb);
@@ -127,6 +141,18 @@ export function useSocket(url: string): UseSocketReturn {
               hookEventsRef.current.push(...machine.recentEvents);
             }
           }
+          const counts = new Map<string, number>();
+          for (const machine of msg.machines) {
+            if (machine.recentEvents) {
+              for (const ev of machine.recentEvents) {
+                if (NOTIFY_HOOK_EVENTS.has(ev.hookEventName) && ev.sessionId) {
+                  const key = `${machine.machineId}:${ev.sessionId}`;
+                  counts.set(key, (counts.get(key) ?? 0) + 1);
+                }
+              }
+            }
+          }
+          if (counts.size > 0) setNotificationCounts(counts);
         } else if (msg.type === "machine_update") {
           setMachines((prev) => {
             if (msg.online === false) {
@@ -197,6 +223,14 @@ export function useSocket(url: string): UseSocketReturn {
             hookEventsRef.current = hookEventsRef.current.slice(-1000);
           }
           for (const sub of hookEventSubsRef.current) sub(hookEvent);
+          if (NOTIFY_HOOK_EVENTS.has(hookEvent.hookEventName) && hookEvent.sessionId) {
+            const key = `${hookEvent.machineId}:${hookEvent.sessionId}`;
+            setNotificationCounts((prev) => {
+              const next = new Map(prev);
+              next.set(key, (next.get(key) ?? 0) + 1);
+              return next;
+            });
+          }
         }
       } catch {}
     });
@@ -271,5 +305,5 @@ export function useSocket(url: string): UseSocketReturn {
     [],
   );
 
-  return { connected, machines, waitingSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents };
+  return { connected, machines, waitingSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications };
 }
