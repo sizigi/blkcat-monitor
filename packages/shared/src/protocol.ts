@@ -202,6 +202,9 @@ export interface OutboundAgentInfo {
   source: "env" | "api";
 }
 
+/** Hook events that indicate Claude is waiting for user action. */
+export const NOTIFY_HOOK_EVENTS = new Set(["Stop", "Notification", "PermissionRequest"]);
+
 // --- Parsers ---
 
 const AGENT_TYPES = new Set(["register", "output", "sessions", "scrollback", "hook_event"]);
