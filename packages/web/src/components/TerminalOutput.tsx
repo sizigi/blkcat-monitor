@@ -8,6 +8,12 @@ interface TerminalOutputProps {
   onData?: (data: string) => void;
 }
 
+// Strip ANSI escape codes and trailing whitespace for reliable comparison.
+// tmux may emit different escape sequences between captures for the same text.
+function stripAnsi(s: string): string {
+  return s.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "").trimEnd();
+}
+
 export function TerminalOutput({ lines, onData }: TerminalOutputProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
@@ -61,36 +67,38 @@ export function TerminalOutput({ lines, onData }: TerminalOutputProps) {
     if (lines === prevLinesRef.current) return;
     const prev = prevLinesRef.current;
 
-    // tmux capture-pane sends a viewport snapshot each time. When content
-    // scrolls, old lines disappear from the top and new ones appear at the
-    // bottom. Find the overlap between the end of prev and the start of
-    // lines, then append only the truly new lines — preserving scrollback.
+    // tmux capture-pane sends viewport snapshots. When content scrolls, old
+    // lines leave the top and new ones appear at the bottom. We find the
+    // overlap (stripping ANSI codes which can differ between captures), then
+    // push scrolled-off lines into xterm's scrollback buffer before redrawing
+    // the visible viewport.
     let overlap = 0;
     if (prev.length > 0 && lines.length > 0) {
-      // Find the largest k where prev's last k lines == lines' first k lines
+      const prevStripped = prev.map(stripAnsi);
+      const linesStripped = lines.map(stripAnsi);
       const maxK = Math.min(prev.length, lines.length);
       for (let k = maxK; k >= 1; k--) {
         let match = true;
         for (let i = 0; i < k; i++) {
-          if (prev[prev.length - k + i] !== lines[i]) { match = false; break; }
+          if (prevStripped[prev.length - k + i] !== linesStripped[i]) {
+            match = false;
+            break;
+          }
         }
         if (match) { overlap = k; break; }
       }
     }
 
-    if (overlap > 0) {
-      // Append only the new lines that scrolled into view
-      const newLines = lines.slice(overlap);
-      if (newLines.length > 0) {
-        // Move cursor to the last row, then write new lines below
-        term.write("\x1b[" + lines.length + ";1H");
-        term.write("\r\n" + newLines.join("\r\n"));
-      }
-    } else {
-      // No overlap — full redraw (e.g. switched session, cleared screen)
-      term.clear();
-      term.write("\x1b[H\x1b[2J" + lines.join("\r\n"));
+    // Number of lines that scrolled off the top since last snapshot
+    const scrolled = prev.length - overlap;
+    if (scrolled > 0) {
+      // Write newlines at the bottom to push old lines into scrollback
+      term.write("\r\n".repeat(scrolled));
     }
+
+    // Overwrite the visible viewport with the current snapshot.
+    // \x1b[H = cursor home, \x1b[2J = clear visible screen (scrollback preserved)
+    term.write("\x1b[H\x1b[2J" + lines.join("\r\n"));
     prevLinesRef.current = lines;
   }, [lines]);
 
