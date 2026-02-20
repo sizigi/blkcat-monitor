@@ -20,6 +20,7 @@ export function TerminalOutput({ lines, onData, onResize }: TerminalOutputProps)
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const prevLinesRef = useRef<string[]>([]);
+  const pendingLinesRef = useRef<string[] | null>(null);
   const onResizeRef = useRef(onResize);
   onResizeRef.current = onResize;
 
@@ -48,6 +49,16 @@ export function TerminalOutput({ lines, onData, onResize }: TerminalOutputProps)
     termRef.current = term;
     fitRef.current = fit;
 
+    // When user clears selection, flush any deferred terminal updates
+    const selDisposable = term.onSelectionChange(() => {
+      if (!term.hasSelection() && pendingLinesRef.current) {
+        const deferred = pendingLinesRef.current;
+        pendingLinesRef.current = null;
+        prevLinesRef.current = deferred;
+        term.write("\x1b[H\x1b[2J" + deferred.join("\r\n"));
+      }
+    });
+
     let resizeTimer: ReturnType<typeof setTimeout> | undefined;
     const resizeObserver = new ResizeObserver(() => {
       fit.fit();
@@ -61,6 +72,7 @@ export function TerminalOutput({ lines, onData, onResize }: TerminalOutputProps)
     return () => {
       clearTimeout(resizeTimer);
       resizeObserver.disconnect();
+      selDisposable.dispose();
       term.dispose();
     };
   }, []);
@@ -98,6 +110,13 @@ export function TerminalOutput({ lines, onData, onResize }: TerminalOutputProps)
         }
         if (match) { overlap = k; break; }
       }
+    }
+
+    // If the user has text selected (e.g. for copy), defer the redraw so
+    // the selection isn't destroyed by the screen clear.
+    if (term.hasSelection()) {
+      pendingLinesRef.current = lines;
+      return;
     }
 
     // Number of lines that scrolled off the top since last snapshot
