@@ -177,6 +177,84 @@ describe("Server", () => {
     dash.close();
   });
 
+  it("broadcasts hook_event from agent to dashboard", async () => {
+    const agent = new WebSocket(`ws://localhost:${port}/ws/agent`);
+    await new Promise<void>((r) => agent.addEventListener("open", () => r()));
+
+    agent.send(JSON.stringify({
+      type: "register",
+      machineId: "hook-test",
+      sessions: [{ id: "s1", name: "dev", target: "local" }],
+    }));
+    await Bun.sleep(50);
+
+    const dashMsgs: any[] = [];
+    const dash = new WebSocket(`ws://localhost:${port}/ws/dashboard`);
+    await new Promise<void>((r) => dash.addEventListener("open", () => r()));
+    dash.addEventListener("message", (ev) => dashMsgs.push(JSON.parse(ev.data as string)));
+    await Bun.sleep(50);
+
+    agent.send(JSON.stringify({
+      type: "hook_event",
+      machineId: "hook-test",
+      sessionId: "s1",
+      hookEventName: "PostToolUse",
+      matcher: "Bash",
+      data: { tool_name: "Bash" },
+      timestamp: Date.now(),
+    }));
+    await Bun.sleep(50);
+
+    const hookMsg = dashMsgs.find((m) => m.type === "hook_event");
+    expect(hookMsg).toBeDefined();
+    expect(hookMsg.hookEventName).toBe("PostToolUse");
+    expect(hookMsg.matcher).toBe("Bash");
+
+    agent.close();
+    dash.close();
+  });
+
+  it("includes recentEvents in snapshot for late-connecting dashboards", async () => {
+    const agent = new WebSocket(`ws://localhost:${port}/ws/agent`);
+    await new Promise<void>((r) => agent.addEventListener("open", () => r()));
+
+    agent.send(JSON.stringify({
+      type: "register",
+      machineId: "hook-snap",
+      sessions: [{ id: "s1", name: "dev", target: "local" }],
+    }));
+    await Bun.sleep(50);
+
+    // Send hook event BEFORE dashboard connects
+    agent.send(JSON.stringify({
+      type: "hook_event",
+      machineId: "hook-snap",
+      sessionId: "s1",
+      hookEventName: "SessionStart",
+      matcher: null,
+      data: {},
+      timestamp: Date.now(),
+    }));
+    await Bun.sleep(50);
+
+    // Now connect dashboard
+    const dashMsgs: any[] = [];
+    const dash = new WebSocket(`ws://localhost:${port}/ws/dashboard`);
+    await new Promise<void>((r) => dash.addEventListener("open", () => r()));
+    dash.addEventListener("message", (ev) => dashMsgs.push(JSON.parse(ev.data as string)));
+    await Bun.sleep(50);
+
+    const snapshot = dashMsgs.find((m) => m.type === "snapshot");
+    expect(snapshot).toBeDefined();
+    const machine = snapshot.machines.find((m: any) => m.machineId === "hook-snap");
+    expect(machine).toBeDefined();
+    expect(machine.recentEvents?.length).toBeGreaterThan(0);
+    expect(machine.recentEvents[0].hookEventName).toBe("SessionStart");
+
+    agent.close();
+    dash.close();
+  });
+
   it("GET /api/sessions returns machine list", async () => {
     const res = await fetch(`http://localhost:${port}/api/sessions`);
     expect(res.ok).toBe(true);

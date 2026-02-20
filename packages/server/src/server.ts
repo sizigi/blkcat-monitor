@@ -1,5 +1,6 @@
 import {
   type AgentToServerMessage,
+  type AgentHookEventMessage,
   type MachineSnapshot,
   type OutboundAgentInfo,
   type SessionInfo,
@@ -25,11 +26,14 @@ interface AgentSocket {
   machineId?: string;
 }
 
+const MAX_HOOK_EVENTS = 100;
+
 interface MachineState {
   agent: AgentSocket;
   sessions: SessionInfo[];
   lastSeen: number;
   lastOutputs: Map<string, AgentToServerMessage>;
+  hookEvents: AgentHookEventMessage[];
 }
 
 interface OutboundAgent {
@@ -59,6 +63,7 @@ export function createServer(opts: ServerOptions) {
       machineId: id,
       sessions: state.sessions,
       lastSeen: state.lastSeen,
+      recentEvents: state.hookEvents.length > 0 ? state.hookEvents : undefined,
     }));
   }
 
@@ -71,6 +76,7 @@ export function createServer(opts: ServerOptions) {
       machines.set(msg.machineId, {
         agent, sessions: msg.sessions, lastSeen: Date.now(),
         lastOutputs: new Map(),
+        hookEvents: [],
       });
       broadcastToDashboards({
         type: "machine_update",
@@ -96,6 +102,16 @@ export function createServer(opts: ServerOptions) {
         sessions: msg.sessions,
       });
     } else if (msg.type === "scrollback") {
+      broadcastToDashboards(msg);
+    } else if (msg.type === "hook_event") {
+      const machine = machines.get(msg.machineId);
+      if (machine) {
+        machine.lastSeen = Date.now();
+        machine.hookEvents.push(msg);
+        if (machine.hookEvents.length > MAX_HOOK_EVENTS) {
+          machine.hookEvents.shift();
+        }
+      }
       broadcastToDashboards(msg);
     }
   }
