@@ -19,6 +19,8 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, onData, onResize 
   const pendingLinesRef = useRef<string[] | null>(null);
   const scrollModeRef = useRef(false);
   const [scrollMode, setScrollMode] = useState(false);
+  const onDataRef = useRef(onData);
+  onDataRef.current = onData;
   const onResizeRef = useRef(onResize);
   onResizeRef.current = onResize;
 
@@ -46,6 +48,12 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, onData, onResize 
 
     termRef.current = term;
     fitRef.current = fit;
+
+    // Subscribe once to terminal input with a stable wrapper. The actual
+    // callback is read from onDataRef so it always calls the latest prop
+    // without re-subscribing (which would drop keystrokes between dispose
+    // and re-register since React effects run after paint).
+    const dataDisposable = term.onData((data) => { onDataRef.current?.(data); });
 
     // When user clears selection, flush any deferred terminal updates
     const selDisposable = term.onSelectionChange(() => {
@@ -110,17 +118,11 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, onData, onResize 
     return () => {
       clearTimeout(resizeTimer);
       resizeObserver.disconnect();
+      dataDisposable.dispose();
       selDisposable.dispose();
       term.dispose();
     };
   }, []);
-
-  useEffect(() => {
-    const term = termRef.current;
-    if (!term || !onData) return;
-    const disposable = term.onData(onData);
-    return () => disposable.dispose();
-  }, [onData]);
 
   // Reset terminal display when switching sessions.
   useEffect(() => {
