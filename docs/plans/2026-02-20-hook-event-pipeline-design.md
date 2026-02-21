@@ -54,7 +54,10 @@ The agent starts a small HTTP server on `BLKCAT_HOOKS_PORT` (default 3001):
 Endpoint: `POST /hooks`
 
 - Validates the payload has a `hook_event_name` field
-- Maps `tmux_pane` to blkcat `sessionId` using the agent's known pane mappings
+- Maps `tmux_pane` to blkcat `sessionId` using the agent's known pane mappings:
+  - `$TMUX_PANE` uses tmux's internal `%N` format (e.g. `%0`, `%1`)
+  - blkcat tracks panes in `session:window.pane` format (e.g. `dev:1.0`)
+  - Resolution: runs `tmux display-message -p -t %N '#{session_name}:#{window_index}.#{pane_index}'` to convert, then checks against monitored captures
 - Wraps with `machineId` and `timestamp`
 - Forwards as a `hook_event` message to the server
 
@@ -139,7 +142,7 @@ New UI: a collapsible right-side panel.
 
 - All hooks are `async: true` -- never block Claude Code
 - Event data passes through untransformed (future-proof)
-- Session correlation via `$TMUX_PANE` environment variable
+- Session correlation via `$TMUX_PANE` environment variable (resolved from `%N` format to `session:window.pane` via `tmux display-message`)
 - Ring buffer is in-memory only, no persistence across server restarts
 - Agent HTTP server on separate port from listener WebSocket (BLKCAT_HOOKS_PORT)
 

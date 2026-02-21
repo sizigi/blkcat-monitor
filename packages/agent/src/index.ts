@@ -176,7 +176,17 @@ async function main() {
       conn.sendHookEvent(event);
     },
     resolvePaneId: (tmuxPane) => {
-      return captures.has(tmuxPane) ? tmuxPane : null;
+      // Direct match (session:window.pane format)
+      if (captures.has(tmuxPane)) return tmuxPane;
+      // tmux pane IDs from $TMUX_PANE are like %0, %1 — resolve to session:window.pane
+      if (tmuxPane.startsWith("%")) {
+        const result = bunExec(["tmux", "display-message", "-p", "-t", tmuxPane, "#{session_name}:#{window_index}.#{pane_index}"]);
+        if (result.success) {
+          const resolved = result.stdout.trim();
+          if (captures.has(resolved)) return resolved;
+        }
+      }
+      return null;
     },
   });
   console.log(`Hooks server listening on port ${hooksServer.port}`);
