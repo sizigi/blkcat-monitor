@@ -13,6 +13,7 @@ interface ServerOptions {
   port: number;
   hostname?: string;
   staticDir?: string;
+  skillsDir?: string;
   agents?: string[];
   onAgentsSaved?: (addresses: string[]) => void;
   /** Shell command to run when Claude is waiting for user input.
@@ -48,6 +49,39 @@ interface OutboundAgent {
   ws: WebSocket | null;
   reconnectTimer: ReturnType<typeof setTimeout> | null;
   removed: boolean;
+}
+
+async function readSkillsDir(dir: string): Promise<{ name: string; files: { path: string; content: string }[] }[]> {
+  const { readdir, stat } = await import("fs/promises");
+  const { join, relative } = await import("path");
+
+  const entries = await readdir(dir);
+  const skills: { name: string; files: { path: string; content: string }[] }[] = [];
+
+  for (const entry of entries) {
+    const entryPath = join(dir, entry);
+    const s = await stat(entryPath);
+    if (!s.isDirectory()) continue;
+
+    const files: { path: string; content: string }[] = [];
+    async function walk(p: string) {
+      const items = await readdir(p);
+      for (const item of items) {
+        const full = join(p, item);
+        const st = await stat(full);
+        if (st.isDirectory()) {
+          await walk(full);
+        } else {
+          const content = await Bun.file(full).text();
+          files.push({ path: relative(entryPath, full), content });
+        }
+      }
+    }
+    await walk(entryPath);
+    skills.push({ name: entry, files });
+  }
+
+  return skills;
 }
 
 export function createServer(opts: ServerOptions) {
@@ -133,6 +167,8 @@ export function createServer(opts: ServerOptions) {
         });
       }
     } else if (msg.type === "directory_listing") {
+      broadcastToDashboards(msg);
+    } else if (msg.type === "deploy_result" || msg.type === "settings_snapshot" || msg.type === "settings_result") {
       broadcastToDashboards(msg);
     }
   }
@@ -277,6 +313,18 @@ export function createServer(opts: ServerOptions) {
         }
       }
 
+      if (url.pathname === "/api/skills" && req.method === "GET") {
+        if (!opts.skillsDir) {
+          return Response.json({ skills: [] });
+        }
+        try {
+          const skills = await readSkillsDir(opts.skillsDir);
+          return Response.json({ skills });
+        } catch (err: any) {
+          return Response.json({ skills: [], error: err?.message }, { status: 500 });
+        }
+      }
+
       if (url.pathname.startsWith("/api/agents/") && req.method === "DELETE") {
         const address = decodeURIComponent(url.pathname.slice("/api/agents/".length));
         const removed = disconnectAgent(address);
@@ -384,6 +432,38 @@ export function createServer(opts: ServerOptions) {
                 requestId: msg.requestId,
                 path: msg.path,
               }));
+            }
+          } else if (msg.type === "deploy_skills") {
+            const machine = machines.get(msg.machineId);
+            if (machine) {
+              machine.agent.send(JSON.stringify({
+                type: "deploy_skills",
+                requestId: msg.requestId,
+                skills: msg.skills,
+              }));
+            }
+          } else if (msg.type === "get_settings") {
+            const machine = machines.get(msg.machineId);
+            if (machine) {
+              const fwd: Record<string, any> = {
+                type: "get_settings",
+                requestId: msg.requestId,
+                scope: msg.scope,
+              };
+              if (msg.projectPath) fwd.projectPath = msg.projectPath;
+              machine.agent.send(JSON.stringify(fwd));
+            }
+          } else if (msg.type === "update_settings") {
+            const machine = machines.get(msg.machineId);
+            if (machine) {
+              const fwd: Record<string, any> = {
+                type: "update_settings",
+                requestId: msg.requestId,
+                scope: msg.scope,
+                settings: msg.settings,
+              };
+              if (msg.projectPath) fwd.projectPath = msg.projectPath;
+              machine.agent.send(JSON.stringify(fwd));
             }
           }
         }
