@@ -5,6 +5,7 @@ export interface SessionInfo {
   name: string;
   target: "local" | "ssh";
   host?: string;
+  args?: string;
 }
 
 export interface MachineSnapshot {
@@ -54,12 +55,22 @@ export interface AgentHookEventMessage {
   timestamp: number;
 }
 
+export interface AgentDirectoryListingMessage {
+  type: "directory_listing";
+  machineId: string;
+  requestId: string;
+  path: string;
+  entries: { name: string; isDir: boolean }[];
+  error?: string;
+}
+
 export type AgentToServerMessage =
   | AgentRegisterMessage
   | AgentOutputMessage
   | AgentSessionsMessage
   | AgentScrollbackMessage
-  | AgentHookEventMessage;
+  | AgentHookEventMessage
+  | AgentDirectoryListingMessage;
 
 // --- Server -> Agent messages ---
 
@@ -99,7 +110,13 @@ export interface ServerReloadSessionMessage {
   sessionId: string;
 }
 
-export type ServerToAgentMessage = ServerInputMessage | ServerStartSessionMessage | ServerCloseSessionMessage | ServerResizeMessage | ServerRequestScrollbackMessage | ServerReloadSessionMessage;
+export interface ServerListDirectoryMessage {
+  type: "list_directory";
+  requestId: string;
+  path: string;
+}
+
+export type ServerToAgentMessage = ServerInputMessage | ServerStartSessionMessage | ServerCloseSessionMessage | ServerResizeMessage | ServerRequestScrollbackMessage | ServerReloadSessionMessage | ServerListDirectoryMessage;
 
 // --- Server -> Dashboard messages ---
 
@@ -141,12 +158,22 @@ export interface ServerHookEventMessage {
   timestamp: number;
 }
 
+export interface ServerDirectoryListingMessage {
+  type: "directory_listing";
+  machineId: string;
+  requestId: string;
+  path: string;
+  entries: { name: string; isDir: boolean }[];
+  error?: string;
+}
+
 export type ServerToDashboardMessage =
   | ServerSnapshotMessage
   | ServerMachineUpdateMessage
   | ServerOutputMessage
   | ServerScrollbackMessage
-  | ServerHookEventMessage;
+  | ServerHookEventMessage
+  | ServerDirectoryListingMessage;
 
 // --- Dashboard -> Server messages ---
 
@@ -192,7 +219,14 @@ export interface DashboardReloadSessionMessage {
   sessionId: string;
 }
 
-export type DashboardToServerMessage = DashboardInputMessage | DashboardStartSessionMessage | DashboardCloseSessionMessage | DashboardResizeMessage | DashboardRequestScrollbackMessage | DashboardReloadSessionMessage;
+export interface DashboardListDirectoryMessage {
+  type: "list_directory";
+  machineId: string;
+  requestId: string;
+  path: string;
+}
+
+export type DashboardToServerMessage = DashboardInputMessage | DashboardStartSessionMessage | DashboardCloseSessionMessage | DashboardResizeMessage | DashboardRequestScrollbackMessage | DashboardReloadSessionMessage | DashboardListDirectoryMessage;
 
 // --- Outbound agent info ---
 
@@ -207,8 +241,8 @@ export const NOTIFY_HOOK_EVENTS = new Set(["Stop", "Notification", "PermissionRe
 
 // --- Parsers ---
 
-const AGENT_TYPES = new Set(["register", "output", "sessions", "scrollback", "hook_event"]);
-const DASHBOARD_TYPES = new Set(["input", "start_session", "close_session", "resize", "request_scrollback", "reload_session"]);
+const AGENT_TYPES = new Set(["register", "output", "sessions", "scrollback", "hook_event", "directory_listing"]);
+const DASHBOARD_TYPES = new Set(["input", "start_session", "close_session", "resize", "request_scrollback", "reload_session", "list_directory"]);
 
 export function parseAgentMessage(raw: string): AgentToServerMessage | null {
   try {

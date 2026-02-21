@@ -72,6 +72,17 @@ describe("parseAgentMessage", () => {
     expect(msg?.type).toBe("hook_event");
   });
 
+  it("parses directory_listing message", () => {
+    const msg = parseAgentMessage(JSON.stringify({
+      type: "directory_listing",
+      machineId: "m1",
+      requestId: "req-1",
+      path: "/home/user",
+      entries: [{ name: "src", isDir: true }, { name: "README.md", isDir: false }],
+    }));
+    expect(msg?.type).toBe("directory_listing");
+  });
+
   it("returns null for unknown type", () => {
     expect(parseAgentMessage(JSON.stringify({ type: "unknown" }))).toBeNull();
   });
@@ -112,5 +123,15 @@ describe("parseDashboardMessage", () => {
       sessionId: "s1",
     }));
     expect(msg?.type).toBe("request_scrollback");
+  });
+
+  it("parses list_directory message", () => {
+    const msg = parseDashboardMessage(JSON.stringify({
+      type: "list_directory",
+      machineId: "m1",
+      requestId: "req-1",
+      path: "/home/user",
+    }));
+    expect(msg?.type).toBe("list_directory");
   });
 });
