@@ -240,21 +240,23 @@ describe("useSocket", () => {
 
     expect(result.current.waitingSessions.size).toBe(0);
 
+    // Stop hook event marks session as waiting
     act(() => {
       ws.emit("message", {
         data: JSON.stringify({
-          type: "output",
+          type: "hook_event",
           machineId: "m1",
           sessionId: "s1",
-          lines: ["$ "],
+          hookEventName: "Stop",
+          data: {},
           timestamp: 1,
-          waitingForInput: true,
         }),
       });
     });
 
     expect(result.current.waitingSessions.has("m1:s1")).toBe(true);
 
+    // Output clears waiting state (Claude is generating)
     act(() => {
       ws.emit("message", {
         data: JSON.stringify({
@@ -263,7 +265,6 @@ describe("useSocket", () => {
           sessionId: "s1",
           lines: ["running..."],
           timestamp: 2,
-          waitingForInput: false,
         }),
       });
     });

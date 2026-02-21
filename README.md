@@ -85,9 +85,10 @@ Open http://localhost:5173 — select a session from the sidebar to view termina
 ## Dashboard Features
 
 - **Terminal streaming** — live xterm.js terminal with scrollback history (5000 lines). Scroll up with mouse wheel to view previous output.
-- **Session management** — start new Claude sessions with the "+" button, close sessions with the "x" button next to each session name.
-- **Rename sessions & machines** — double-click any session or machine name in the sidebar to set a custom display name. Names persist in browser localStorage.
+- **Session management** — start new Claude sessions with the "+" button. The start session modal lets you set a session name, browse and select a working directory, and toggle flags like `--resume` and `--dangerously-skip-permissions`. Close sessions with the "x" button, reload with the "↻" button (`claude --resume`).
+- **Rename sessions & machines** — double-click any session or machine name in the sidebar to set a custom display name. Names are scoped per machine and persist in browser localStorage.
 - **Input indicator** — a pulsing blue dot appears next to sessions that are waiting for user input (e.g. Claude prompting for a response).
+- **Hook events & notifications** — the agent auto-installs Claude Code hooks to forward events (Stop, Notification, PermissionRequest) to the dashboard. View events in the Events panel and action-required notifications in the Notifications panel, accessible from the top-right tabs. Notification badges appear on sidebar sessions.
 - **Outbound agent management** — add or remove reverse-connection agents from the dashboard UI.
 
 ## Packages
@@ -109,6 +110,7 @@ Open http://localhost:5173 — select a session from the sidebar to view termina
 | `BLKCAT_HOST` | `0.0.0.0` | Server bind address |
 | `BLKCAT_STATIC_DIR` | — | Serve static files from this directory |
 | `BLKCAT_AGENTS` | — | Comma-separated `host:port` list of agents in listener mode to connect to |
+| `BLKCAT_NOTIFY_CMD` | — | Shell command to run when Claude is waiting for input (triggered by Stop, Notification, PermissionRequest hook events) |
 
 ### Agent
 
@@ -116,9 +118,10 @@ Open http://localhost:5173 — select a session from the sidebar to view termina
 |----------|---------|-------------|
 | `BLKCAT_SERVER_URL` | `ws://localhost:3000/ws/agent` | Server WebSocket URL (outbound mode) |
 | `BLKCAT_MACHINE_ID` | hostname | Machine identifier |
-| `BLKCAT_POLL_INTERVAL` | `300` | Pane capture interval in ms |
+| `BLKCAT_POLL_INTERVAL` | `150` | Pane capture interval in ms |
 | `BLKCAT_CONFIG` | — | Path to JSON config file |
 | `BLKCAT_LISTEN_PORT` | — | Port to listen on for incoming server connections (listener mode) |
+| `BLKCAT_HOOKS_PORT` | `3001` | HTTP port for Claude Code hooks server |
 
 #### Config file
 
@@ -170,8 +173,13 @@ The dashboard communicates with the server over WebSocket (`/ws/dashboard`). Key
 | Server → Dashboard | `machine_update` | Session list changed for a machine |
 | Server → Dashboard | `output` | Terminal output update (includes `waitingForInput` flag) |
 | Dashboard → Server | `input` | Send text/key/data to a session |
-| Dashboard → Server | `start_session` | Create a new Claude session |
+| Server → Dashboard | `hook_event` | Claude Code hook event (Stop, Notification, PermissionRequest) |
+| Server → Dashboard | `directory_listing` | Response to directory listing request |
+| Dashboard → Server | `start_session` | Create a new Claude session (with optional name, cwd, args) |
 | Dashboard → Server | `close_session` | Kill a tmux session |
+| Dashboard → Server | `reload_session` | Reload session with `claude --resume` |
+| Dashboard → Server | `resize` | Resize terminal dimensions |
+| Dashboard → Server | `list_directory` | Browse directories on agent machine |
 
 ## Testing
 

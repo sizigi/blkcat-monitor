@@ -38,7 +38,7 @@ All packages depend on **`@blkcat/shared`** which defines the WebSocket message 
 
 - **shared** — Message types and `parseAgentMessage()`/`parseDashboardMessage()` parsers. No deps, no build step.
 - **server** — Bun WebSocket hub routing messages between agents (`/ws/agent`) and dashboards (`/ws/dashboard`). REST endpoints at `/api/sessions` and `/api/agents`. Supports outbound connections to agents in listener mode.
-- **agent** — Polls tmux panes (default 300ms), auto-discovers Claude sessions, streams output to server. Supports two connection modes: outbound (agent connects to server) and listener (server connects to agent). Key modules: `capture.ts` (tmux wrapper), `discovery.ts` (session finder), `connection.ts` (outbound WS), `listener.ts` (inbound WS server).
+- **agent** — Polls tmux panes (default 150ms), auto-discovers Claude sessions, streams output to server. Supports two connection modes: outbound (agent connects to server) and listener (server connects to agent). Auto-installs Claude Code hooks for event forwarding. Key modules: `capture.ts` (tmux wrapper), `discovery.ts` (session finder), `connection.ts` (outbound WS), `listener.ts` (inbound WS server), `hooks-server.ts` (hook event HTTP receiver), `hooks-install.ts` (auto-install hooks into Claude settings).
 - **web** — React 19 + Vite. Uses xterm.js for terminal rendering with 5000-line scrollback. State managed via `useSocket` hook (WebSocket) and `useAgents` hook (REST). Vite dev server proxies `/ws` and `/api` to the backend.
 
 ## Testing
@@ -47,9 +47,16 @@ All packages depend on **`@blkcat/shared`** which defines the WebSocket message 
 - Web package uses Vitest with jsdom environment and Testing Library
 - Test files live alongside source files (e.g., `server.test.ts` next to `server.ts`)
 
+## Documentation
+
+When adding new features, changing configuration options, or modifying the WebSocket protocol, update `README.md` accordingly (dashboard features, config tables, message types).
+
 ## Key Conventions
 
 - Runtime is **Bun** everywhere (not Node) — use Bun APIs (`Bun.serve`, `Bun.spawnSync`, etc.)
 - TypeScript strict mode, ESNext target/module, bundler module resolution
 - Agent detects "waiting for input" by stripping ANSI codes then checking for prompt patterns
 - Terminal output diffing strips ANSI for comparison but preserves raw output for display
+- `Bun.spawnSync` does **not** expand `~` — always resolve tilde to `$HOME` before passing paths to external commands
+- Display names in `useDisplayNames` are scoped by `machineId:sessionId` to prevent cross-machine collisions in localStorage
+- Agent auto-installs Claude Code hooks on startup (`hooks-install.ts`) to forward hook events (Stop, Notification, PermissionRequest) to the dashboard

@@ -18,6 +18,7 @@ interface SidebarProps {
   onRenameSession?: (machineId: string, sessionId: string, name: string) => void;
   notificationCounts?: Map<string, number>;
   waitingSessions?: Set<string>;
+  activeSessions?: Set<string>;
   agents?: OutboundAgentInfo[];
   onAddAgent?: (address: string) => Promise<{ ok: boolean; error?: string }>;
   onRemoveAgent?: (address: string) => Promise<void>;
@@ -40,6 +41,7 @@ export function Sidebar({
   onRenameSession,
   notificationCounts,
   waitingSessions,
+  activeSessions,
   agents,
   onAddAgent,
   onRemoveAgent,
@@ -172,6 +174,7 @@ export function Sidebar({
               selectedMachine === machine.machineId &&
               selectedSession === session.id;
             const isWaiting = waitingSessions?.has(`${machine.machineId}:${session.id}`);
+            const isActive = activeSessions?.has(`${machine.machineId}:${session.id}`);
             const isDangerous = session.args?.includes("--dangerously-skip-permissions");
             return (
               <div
@@ -203,17 +206,17 @@ export function Sidebar({
                   }}
                 >
                   <span
-                    className={isWaiting ? "waiting-indicator" : undefined}
+                    className={isActive ? "active-indicator" : isWaiting ? "waiting-indicator" : undefined}
                     style={{
                       width: 6,
                       height: 6,
                       borderRadius: "50%",
-                      background: isDangerous ? "var(--red)" : isWaiting ? "var(--accent)" : "var(--text-muted)",
+                      background: isActive ? "var(--green)" : isWaiting ? "var(--accent)" : "var(--text-muted)",
                       display: "inline-block",
                       flexShrink: 0,
-                      opacity: isWaiting ? 1 : 0.3,
+                      opacity: isActive || isWaiting ? 1 : 0.3,
                     }}
-                    title={isWaiting ? "Waiting for input" : ""}
+                    title={isActive ? "Active" : isWaiting ? "Waiting for input" : ""}
                   />
                   {editingId === `session:${session.id}` ? (
                     <input

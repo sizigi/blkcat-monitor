@@ -56,6 +56,7 @@ export interface UseSocketReturn {
   connected: boolean;
   machines: MachineSnapshot[];
   waitingSessions: Set<string>;
+  activeSessions: Set<string>;
   outputMapRef: React.RefObject<Map<string, OutputLine>>;
   logMapRef: React.RefObject<Map<string, string[]>>;
   scrollbackMapRef: React.RefObject<Map<string, string[]>>;
@@ -78,6 +79,8 @@ export function useSocket(url: string): UseSocketReturn {
   const [connected, setConnected] = useState(false);
   const [machines, setMachines] = useState<MachineSnapshot[]>([]);
   const [waitingSessions, setWaitingSessions] = useState<Set<string>>(new Set());
+  const [activeSessions, setActiveSessions] = useState<Set<string>>(new Set());
+  const activeTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const wsRef = useRef<WebSocket | null>(null);
 
   // Store outputs in a ref-based Map for O(1) lookup without triggering
@@ -205,19 +208,34 @@ export function useSocket(url: string): UseSocketReturn {
           // Notify subscribers (only the selected session's hook re-renders)
           for (const sub of outputSubsRef.current) sub(key);
 
-          // Update waitingSessions only when membership actually changes
-          setWaitingSessions((prev) => {
-            const has = prev.has(key);
-            if (entry.waitingForInput && !has) {
+          // Track active sessions (recently received output)
+          setActiveSessions((prev) => {
+            if (!prev.has(key)) {
               const next = new Set(prev);
               next.add(key);
               return next;
-            } else if (!entry.waitingForInput && has) {
+            }
+            return prev;
+          });
+          // Reset inactivity timer
+          const prevTimer = activeTimersRef.current.get(key);
+          if (prevTimer) clearTimeout(prevTimer);
+          activeTimersRef.current.set(key, setTimeout(() => {
+            activeTimersRef.current.delete(key);
+            setActiveSessions((prev) => {
+              if (!prev.has(key)) return prev;
               const next = new Set(prev);
               next.delete(key);
               return next;
-            }
-            return prev;
+            });
+          }, 3000));
+
+          // Clear waiting state when output flows (Claude is generating)
+          setWaitingSessions((prev) => {
+            if (!prev.has(key)) return prev;
+            const next = new Set(prev);
+            next.delete(key);
+            return next;
           });
         } else if (msg.type === "hook_event") {
           const hookEvent = msg as unknown as AgentHookEventMessage;
@@ -226,6 +244,16 @@ export function useSocket(url: string): UseSocketReturn {
             hookEventsRef.current = hookEventsRef.current.slice(-1000);
           }
           for (const sub of hookEventSubsRef.current) sub(hookEvent);
+          // Mark session as waiting on Stop / PermissionRequest
+          if ((hookEvent.hookEventName === "Stop" || hookEvent.hookEventName === "PermissionRequest") && hookEvent.sessionId) {
+            const key = `${hookEvent.machineId}:${hookEvent.sessionId}`;
+            setWaitingSessions((prev) => {
+              if (prev.has(key)) return prev;
+              const next = new Set(prev);
+              next.add(key);
+              return next;
+            });
+          }
           if (NOTIFY_HOOK_EVENTS.has(hookEvent.hookEventName) && hookEvent.sessionId) {
             const key = `${hookEvent.machineId}:${hookEvent.sessionId}`;
             setNotificationCounts((prev) => {
@@ -256,6 +284,14 @@ export function useSocket(url: string): UseSocketReturn {
         if (opts.key) msg.key = opts.key;
         if (opts.data) msg.data = opts.data;
         ws.send(JSON.stringify(msg));
+        // Clear waiting state when user sends input
+        const key = `${machineId}:${sessionId}`;
+        setWaitingSessions((prev) => {
+          if (!prev.has(key)) return prev;
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
       }
     },
     [],
@@ -337,5 +373,5 @@ export function useSocket(url: string): UseSocketReturn {
     [],
   );
 
-  return { connected, machines, waitingSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory };
+  return { connected, machines, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory };
 }

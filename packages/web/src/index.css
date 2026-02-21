@@ -47,3 +47,12 @@ html, body, #root {
 .waiting-indicator {
   animation: pulse-waiting 1.5s ease-in-out infinite;
 }
+
+@keyframes pulse-active {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.7); }
+}
+
+.active-indicator {
+  animation: pulse-active 0.8s ease-in-out infinite;
+}
