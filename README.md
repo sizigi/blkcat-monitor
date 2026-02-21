@@ -89,6 +89,10 @@ Open http://localhost:5173 — select a session from the sidebar to view termina
 - **Rename sessions & machines** — double-click any session or machine name in the sidebar to set a custom display name. Names persist in browser localStorage.
 - **Input indicator** — a pulsing blue dot appears next to sessions that are waiting for user input (e.g. Claude prompting for a response).
 - **Outbound agent management** — add or remove reverse-connection agents from the dashboard UI.
+- **Settings panel** — a "Settings" tab in the right panel provides remote management of agents:
+  - **Skills Manager** — browse skills from the server's configured skills directory and deploy them to selected agents. Each skill is a subdirectory containing files that get written to the agent's `~/.claude/commands/` directory.
+  - **Plugin Management** — enable or disable Claude Code plugins on remote agents by toggling entries in their `permissions.allow` list.
+  - **Settings Editor** — view and edit `~/.claude/settings.json` on remote agents (global or project-level). The `hooks` section is protected as read-only to prevent accidental removal of blkcat-monitor's hook integration.
 
 ## Packages
 
@@ -109,6 +113,19 @@ Open http://localhost:5173 — select a session from the sidebar to view termina
 | `BLKCAT_HOST` | `0.0.0.0` | Server bind address |
 | `BLKCAT_STATIC_DIR` | — | Serve static files from this directory |
 | `BLKCAT_AGENTS` | — | Comma-separated `host:port` list of agents in listener mode to connect to |
+| `BLKCAT_SKILLS_DIR` | — | Directory containing skill subdirectories to make available for deployment to agents |
+
+Server options can also be set in `~/.blkcat/server.json` (environment variables take precedence):
+
+```json
+{
+  "port": 3000,
+  "hostname": "0.0.0.0",
+  "staticDir": "packages/web/dist",
+  "agents": ["host1:4000", "host2:4000"],
+  "skillsDir": "/path/to/skills"
+}
+```
 
 ### Agent
 
@@ -160,6 +177,23 @@ Open http://localhost:5173 — select a session from the sidebar to view termina
 }
 ```
 
+`GET /api/skills` — returns available skills from the configured `BLKCAT_SKILLS_DIR`. Each skill is a subdirectory containing files that can be deployed to agents:
+
+```json
+{
+  "skills": [
+    {
+      "name": "my-skill",
+      "files": [
+        { "path": "my-skill.md", "content": "..." }
+      ]
+    }
+  ]
+}
+```
+
+Returns `{"skills":[]}` if no skills directory is configured.
+
 ### WebSocket Messages
 
 The dashboard communicates with the server over WebSocket (`/ws/dashboard`). Key message types:
@@ -172,6 +206,12 @@ The dashboard communicates with the server over WebSocket (`/ws/dashboard`). Key
 | Dashboard → Server | `input` | Send text/key/data to a session |
 | Dashboard → Server | `start_session` | Create a new Claude session |
 | Dashboard → Server | `close_session` | Kill a tmux session |
+| Dashboard → Server | `deploy_skills` | Deploy skill files to an agent's `~/.claude/commands/` |
+| Dashboard → Server | `get_settings` | Request an agent's `settings.json` (global or project scope) |
+| Dashboard → Server | `update_settings` | Write updated `settings.json` to an agent |
+| Server → Dashboard | `deploy_result` | Result of a skill deployment (success/error) |
+| Server → Dashboard | `settings_snapshot` | Agent's current settings and installed plugins |
+| Server → Dashboard | `settings_result` | Result of a settings update (success/error) |
 
 ## Testing
 
