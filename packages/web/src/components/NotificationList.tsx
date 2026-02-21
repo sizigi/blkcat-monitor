@@ -8,7 +8,7 @@ interface NotificationListProps {
   machines: MachineSnapshot[];
   onSelectSession?: (machineId: string, sessionId: string) => void;
   getMachineName?: (machineId: string) => string;
-  getSessionName?: (sessionId: string, defaultName: string) => string;
+  getSessionName?: (machineId: string, sessionId: string, defaultName: string) => string;
 }
 
 const EVENT_COLORS: Record<string, string> = {
@@ -152,7 +152,7 @@ export function NotificationList({
               {getMachineName ? getMachineName(event.machineId) : event.machineId}
               {event.sessionId && (
                 <> / {getSessionName
-                  ? getSessionName(event.sessionId, lookupSessionName(machines, event.machineId, event.sessionId))
+                  ? getSessionName(event.machineId, event.sessionId, lookupSessionName(machines, event.machineId, event.sessionId))
                   : lookupSessionName(machines, event.machineId, event.sessionId)}</>
               )}
             </div>

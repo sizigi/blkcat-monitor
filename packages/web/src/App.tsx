@@ -64,7 +64,7 @@ export default function App() {
     const machine = machines.find((m) => m.machineId === selectedMachine);
     const session = machine?.sessions.find((s) => s.id === selectedSession);
     const defaultName = session?.name ?? selectedSession;
-    return getSessionName(selectedSession, defaultName);
+    return getSessionName(selectedMachine, selectedSession, defaultName);
   }, [machines, selectedMachine, selectedSession, getSessionName]);
 
   const handleResizeStart = useCallback((e: React.MouseEvent) => {

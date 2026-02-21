@@ -94,10 +94,14 @@ export class TmuxCapture {
 
   startSession(args?: string, cwd?: string): string | null {
     const claudeCmd = args ? `claude ${args}` : "claude";
+    // Resolve ~ since Bun.spawnSync doesn't invoke a shell for tilde expansion
+    const resolvedCwd = cwd?.startsWith("~")
+      ? cwd.replace("~", process.env.HOME ?? "/root")
+      : cwd;
     // Create window with no command — starts an interactive shell that
     // sources .bashrc/.zshrc so env vars are available regardless of shell
     const cmd = [...this.sshPrefix, "tmux", "new-window", "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}"];
-    if (cwd) cmd.push("-c", cwd);
+    if (resolvedCwd) cmd.push("-c", resolvedCwd);
     const result = this.exec(cmd);
     if (!result.success) return null;
     const target = result.stdout.trim();

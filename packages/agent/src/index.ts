@@ -114,12 +114,16 @@ async function main() {
   }
 
   function handleListDirectory(requestId: string, path: string) {
+    // Resolve ~ so the web UI receives absolute paths
+    const resolved = path.startsWith("~")
+      ? path.replace("~", process.env.HOME ?? "/root")
+      : path;
     const localCap = new TmuxCapture(bunExec);
-    const result = localCap.listDirectory(path);
+    const result = localCap.listDirectory(resolved);
     if ("error" in result) {
-      conn.sendDirectoryListing(config.machineId, requestId, path, [], result.error);
+      conn.sendDirectoryListing(config.machineId, requestId, resolved, [], result.error);
     } else {
-      conn.sendDirectoryListing(config.machineId, requestId, path, result.entries);
+      conn.sendDirectoryListing(config.machineId, requestId, resolved, result.entries);
     }
   }
 

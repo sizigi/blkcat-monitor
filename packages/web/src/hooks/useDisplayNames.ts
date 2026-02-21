@@ -31,10 +31,11 @@ export function useDisplayNames() {
     });
   }, []);
 
-  const setSessionName = useCallback((sessionId: string, name: string) => {
+  const setSessionName = useCallback((machineId: string, sessionId: string, name: string) => {
+    const key = `${machineId}:${sessionId}`;
     setNames((prev) => {
-      const next = { ...prev, sessions: { ...prev.sessions, [sessionId]: name } };
-      if (!name) delete next.sessions[sessionId];
+      const next = { ...prev, sessions: { ...prev.sessions, [key]: name } };
+      if (!name) delete next.sessions[key];
       save(next);
       return next;
     });
@@ -46,7 +47,8 @@ export function useDisplayNames() {
   );
 
   const getSessionName = useCallback(
-    (sessionId: string, defaultName: string) => names.sessions[sessionId] || defaultName,
+    (machineId: string, sessionId: string, defaultName: string) =>
+      names.sessions[`${machineId}:${sessionId}`] || defaultName,
     [names],
   );
 

@@ -13,9 +13,9 @@ interface SidebarProps {
   onCloseSession?: (machineId: string, sessionId: string) => void;
   onReloadSession?: (machineId: string, sessionId: string) => void;
   getMachineName?: (machineId: string) => string;
-  getSessionName?: (sessionId: string, defaultName: string) => string;
+  getSessionName?: (machineId: string, sessionId: string, defaultName: string) => string;
   onRenameMachine?: (machineId: string, name: string) => void;
-  onRenameSession?: (sessionId: string, name: string) => void;
+  onRenameSession?: (machineId: string, sessionId: string, name: string) => void;
   notificationCounts?: Map<string, number>;
   waitingSessions?: Set<string>;
   agents?: OutboundAgentInfo[];
@@ -222,12 +222,18 @@ export function Sidebar({
                       onChange={(e) => setEditValue(e.target.value)}
                       onClick={(e) => e.stopPropagation()}
                       onBlur={() => {
-                        onRenameSession?.(session.id, editValue.trim());
+                        const currentName = getSessionName
+                          ? getSessionName(machine.machineId, session.id, session.name)
+                          : session.name;
+                        const trimmed = editValue.trim();
+                        if (trimmed && trimmed !== currentName) {
+                          onRenameSession?.(machine.machineId, session.id, trimmed);
+                        }
                         setEditingId(null);
                       }}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
-                          onRenameSession?.(session.id, editValue.trim());
+                          onRenameSession?.(machine.machineId, session.id, editValue.trim());
                           setEditingId(null);
                         } else if (e.key === "Escape") {
                           setEditingId(null);
@@ -251,12 +257,12 @@ export function Sidebar({
                         e.stopPropagation();
                         setEditingId(`session:${session.id}`);
                         setEditValue(
-                          getSessionName ? getSessionName(session.id, session.name) : session.name,
+                          getSessionName ? getSessionName(machine.machineId, session.id, session.name) : session.name,
                         );
                       }}
                       title="Double-click to rename"
                     >
-                      {getSessionName ? getSessionName(session.id, session.name) : session.name}
+                      {getSessionName ? getSessionName(machine.machineId, session.id, session.name) : session.name}
                       {session.target === "ssh" && (
                         <span style={{ color: "var(--text-muted)", marginLeft: 4 }}>
                           (ssh)
