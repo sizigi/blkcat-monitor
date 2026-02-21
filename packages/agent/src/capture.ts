@@ -94,12 +94,31 @@ export class TmuxCapture {
 
   startSession(args?: string, cwd?: string): string | null {
     const claudeCmd = args ? `claude ${args}` : "claude";
+    // Create window with no command — starts an interactive shell that
+    // sources .bashrc/.zshrc so env vars are available regardless of shell
     const cmd = [...this.sshPrefix, "tmux", "new-window", "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}"];
     if (cwd) cmd.push("-c", cwd);
-    cmd.push(claudeCmd);
     const result = this.exec(cmd);
     if (!result.success) return null;
-    return result.stdout.trim();
+    const target = result.stdout.trim();
+    // Send the claude command to the interactive shell
+    this.sendText(target, claudeCmd);
+    this.sendKey(target, "Enter");
+    return target;
+  }
+
+  listDirectory(path: string): { entries: { name: string; isDir: boolean }[] } | { error: string } {
+    const resolved = path.startsWith("~")
+      ? path.replace("~", process.env.HOME ?? "/root")
+      : path;
+    const cmd = [...this.sshPrefix, "ls", "-1", "-p", resolved];
+    const result = this.exec(cmd);
+    if (!result.success) return { error: "Failed to list directory" };
+    const entries = result.stdout.split("\n").filter(Boolean).map((entry) => {
+      const isDir = entry.endsWith("/");
+      return { name: isDir ? entry.slice(0, -1) : entry, isDir };
+    });
+    return { entries };
   }
 
   static forSSH(host: string, key?: string): TmuxCapture {

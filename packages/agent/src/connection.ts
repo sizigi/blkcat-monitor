@@ -9,6 +9,7 @@ interface AgentConnectionOptions {
   onResize?: (sessionId: string, cols: number, rows: number) => void;
   onRequestScrollback?: (sessionId: string) => void;
   onReloadSession?: (sessionId: string) => void;
+  onListDirectory?: (requestId: string, path: string) => void;
 }
 
 export class AgentConnection {
@@ -45,6 +46,8 @@ export class AgentConnection {
           opts.onRequestScrollback?.(msg.sessionId);
         } else if (msg.type === "reload_session") {
           opts.onReloadSession?.(msg.sessionId);
+        } else if (msg.type === "list_directory") {
+          opts.onListDirectory?.(msg.requestId, msg.path);
         }
       } catch {}
     });
@@ -91,6 +94,18 @@ export class AgentConnection {
 
   sendHookEvent(event: AgentHookEventMessage) {
     this.ws.send(JSON.stringify(event));
+  }
+
+  sendDirectoryListing(machineId: string, requestId: string, path: string, entries: { name: string; isDir: boolean }[], error?: string) {
+    const msg: Record<string, any> = {
+      type: "directory_listing",
+      machineId,
+      requestId,
+      path,
+      entries,
+    };
+    if (error) msg.error = error;
+    this.ws.send(JSON.stringify(msg));
   }
 
   close() { this.ws.close(); }

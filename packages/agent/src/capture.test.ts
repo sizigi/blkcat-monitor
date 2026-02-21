@@ -74,10 +74,12 @@ describe("TmuxCapture", () => {
 
   it("starts a new session with args", () => {
     const exec = mockExec({
-      "tmux new-window -P -F #{session_name}:#{window_index}.#{pane_index} claude --model sonnet": {
+      "tmux new-window -P -F #{session_name}:#{window_index}.#{pane_index}": {
         success: true,
         stdout: "dev:1.0\n",
       },
+      "tmux send-keys -l -t dev:1.0 claude --model sonnet": { success: true, stdout: "" },
+      "tmux send-keys -t dev:1.0 Enter": { success: true, stdout: "" },
     });
     const capture = new TmuxCapture(exec);
     const paneId = capture.startSession("--model sonnet");
@@ -86,10 +88,12 @@ describe("TmuxCapture", () => {
 
   it("starts a new session with cwd", () => {
     const exec = mockExec({
-      "tmux new-window -P -F #{session_name}:#{window_index}.#{pane_index} -c /home/user/project claude --model sonnet": {
+      "tmux new-window -P -F #{session_name}:#{window_index}.#{pane_index} -c /home/user/project": {
         success: true,
         stdout: "dev:1.0\n",
       },
+      "tmux send-keys -l -t dev:1.0 claude --model sonnet": { success: true, stdout: "" },
+      "tmux send-keys -t dev:1.0 Enter": { success: true, stdout: "" },
     });
     const capture = new TmuxCapture(exec);
     const paneId = capture.startSession("--model sonnet", "/home/user/project");
@@ -98,10 +102,12 @@ describe("TmuxCapture", () => {
 
   it("starts a new session without args", () => {
     const exec = mockExec({
-      "tmux new-window -P -F #{session_name}:#{window_index}.#{pane_index} claude": {
+      "tmux new-window -P -F #{session_name}:#{window_index}.#{pane_index}": {
         success: true,
         stdout: "dev:1.0\n",
       },
+      "tmux send-keys -l -t dev:1.0 claude": { success: true, stdout: "" },
+      "tmux send-keys -t dev:1.0 Enter": { success: true, stdout: "" },
     });
     const capture = new TmuxCapture(exec);
     const paneId = capture.startSession();
@@ -112,5 +118,31 @@ describe("TmuxCapture", () => {
     const exec = mockExec({});
     const capture = new TmuxCapture(exec);
     expect(capture.startSession()).toBeNull();
+  });
+
+  it("lists directory entries", () => {
+    const exec = mockExec({
+      "ls -1 -p /home/user/projects": {
+        success: true,
+        stdout: "src/\npackages/\nREADME.md\npackage.json\n",
+      },
+    });
+    const capture = new TmuxCapture(exec);
+    const result = capture.listDirectory("/home/user/projects");
+    expect(result).toEqual({
+      entries: [
+        { name: "src", isDir: true },
+        { name: "packages", isDir: true },
+        { name: "README.md", isDir: false },
+        { name: "package.json", isDir: false },
+      ],
+    });
+  });
+
+  it("returns error when directory does not exist", () => {
+    const exec = mockExec({});
+    const capture = new TmuxCapture(exec);
+    const result = capture.listDirectory("/nonexistent");
+    expect(result).toEqual({ error: "Failed to list directory" });
   });
 });

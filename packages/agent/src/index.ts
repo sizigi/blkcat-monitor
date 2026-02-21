@@ -105,11 +105,21 @@ async function main() {
       return;
     }
     captures.set(paneId, localCap);
-    const session: SessionInfo = { id: paneId, name: `claude${args ? ` ${args}` : ""}`, target: "local" };
+    const session: SessionInfo = { id: paneId, name: `claude${args ? ` ${args}` : ""}`, target: "local", args: args || undefined };
     manualSessions.push(session);
     const all = [...autoSessions, ...manualSessions];
     conn.updateSessions(all);
     console.log(`Started new session: ${paneId}`);
+  }
+
+  function handleListDirectory(requestId: string, path: string) {
+    const localCap = new TmuxCapture(bunExec);
+    const result = localCap.listDirectory(path);
+    if ("error" in result) {
+      conn.sendDirectoryListing(config.machineId, requestId, path, [], result.error);
+    } else {
+      conn.sendDirectoryListing(config.machineId, requestId, path, result.entries);
+    }
   }
 
   let conn: {
@@ -118,6 +128,7 @@ async function main() {
     updateSessions(sessions: SessionInfo[]): void;
     sendScrollback(sessionId: string, lines: string[]): void;
     sendHookEvent(event: AgentHookEventMessage): void;
+    sendDirectoryListing(machineId: string, requestId: string, path: string, entries: { name: string; isDir: boolean }[], error?: string): void;
     close(): void;
   };
 
@@ -131,6 +142,7 @@ async function main() {
       onResize: handleResize,
       onRequestScrollback: handleRequestScrollback,
       onReloadSession: handleReloadSession,
+      onListDirectory: handleListDirectory,
     });
     // When a new server connects, clear prevLines so the next poll cycle
     // re-sends the current pane content for all sessions.
@@ -148,6 +160,7 @@ async function main() {
       onResize: handleResize,
       onRequestScrollback: handleRequestScrollback,
       onReloadSession: handleReloadSession,
+      onListDirectory: handleListDirectory,
     });
     conn = connection;
     await connection.waitForOpen();

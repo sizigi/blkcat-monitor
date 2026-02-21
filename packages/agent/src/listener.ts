@@ -9,6 +9,7 @@ interface AgentListenerOptions {
   onResize?: (sessionId: string, cols: number, rows: number) => void;
   onRequestScrollback?: (sessionId: string) => void;
   onReloadSession?: (sessionId: string) => void;
+  onListDirectory?: (requestId: string, path: string) => void;
 }
 
 export class AgentListener {
@@ -57,6 +58,8 @@ export class AgentListener {
               this.opts.onRequestScrollback?.(msg.sessionId);
             } else if (msg.type === "reload_session") {
               this.opts.onReloadSession?.(msg.sessionId);
+            } else if (msg.type === "list_directory") {
+              this.opts.onListDirectory?.(msg.requestId, msg.path);
             }
           } catch {}
         },
@@ -110,6 +113,18 @@ export class AgentListener {
 
   sendHookEvent(event: AgentHookEventMessage) {
     this.broadcast(event);
+  }
+
+  sendDirectoryListing(machineId: string, requestId: string, path: string, entries: { name: string; isDir: boolean }[], error?: string) {
+    const msg: Record<string, any> = {
+      type: "directory_listing",
+      machineId: this.machineId,
+      requestId,
+      path,
+      entries,
+    };
+    if (error) msg.error = error;
+    this.broadcast(msg);
   }
 
   close() {
