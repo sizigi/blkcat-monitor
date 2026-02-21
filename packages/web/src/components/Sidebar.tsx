@@ -24,6 +24,7 @@ interface SidebarProps {
   onRemoveAgent?: (address: string) => Promise<void>;
   onCollapse?: () => void;
   listDirectory?: (machineId: string, path: string) => Promise<{ path: string; entries: { name: string; isDir: boolean }[]; error?: string }>;
+  onSessionSettings?: (machineId: string, sessionId: string) => void;
 }
 
 export function Sidebar({
@@ -47,6 +48,7 @@ export function Sidebar({
   onRemoveAgent,
   onCollapse,
   listDirectory,
+  onSessionSettings,
 }: SidebarProps) {
   const [modalMachineId, setModalMachineId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -295,6 +297,29 @@ export function Sidebar({
                     );
                   })()}
                 </button>
+                {onSessionSettings && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSessionSettings(machine.machineId, session.id);
+                    }}
+                    title="Project settings"
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "var(--text-muted)",
+                      cursor: "pointer",
+                      fontSize: 12,
+                      padding: "4px 8px",
+                      lineHeight: 1,
+                      opacity: 0.5,
+                    }}
+                    onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; }}
+                    onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.5"; }}
+                  >
+                    ⚙
+                  </button>
+                )}
                 {onReloadSession && (
                   <button
                     onClick={(e) => {

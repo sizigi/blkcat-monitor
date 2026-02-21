@@ -8,6 +8,7 @@ import { EventFeed } from "./components/EventFeed";
 import { NotificationList } from "./components/NotificationList";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { SkillsMatrix } from "./components/SkillsMatrix";
+import { ProjectSettingsModal } from "./components/ProjectSettingsModal";
 
 const WS_URL =
   (import.meta as any).env?.VITE_WS_URL ??
@@ -57,6 +58,7 @@ export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
   const [panelTab, setPanelTab] = useState<"events" | "notifications" | "settings" | null>(null);
+  const [settingsSession, setSettingsSession] = useState<{ machineId: string; sessionId: string } | null>(null);
   const resizing = useRef(false);
 
   const sessionLines = useSessionLines(outputMapRef, subscribeOutput, selectedMachine, selectedSession);
@@ -126,6 +128,7 @@ export default function App() {
           onAddAgent={addAgent}
           onRemoveAgent={removeAgent}
           onCollapse={() => setSidebarCollapsed(true)}
+          onSessionSettings={(m, s) => setSettingsSession({ machineId: m, sessionId: s })}
         />
       )}
       {!sidebarCollapsed && (
@@ -305,6 +308,26 @@ export default function App() {
           </div>
         )}
       </div>
+      {/* Project settings modal */}
+      {settingsSession && (() => {
+        const machine = machines.find(m => m.machineId === settingsSession.machineId);
+        const session = machine?.sessions.find(s => s.id === settingsSession.sessionId);
+        const mName = getMachineName(settingsSession.machineId);
+        const sName = session ? getSessionName(settingsSession.machineId, session.id, session.name) : settingsSession.sessionId;
+        return (
+          <ProjectSettingsModal
+            machineId={settingsSession.machineId}
+            machineName={mName}
+            sessionName={sName}
+            getSettings={getSettings}
+            updateSettings={updateSettings}
+            subscribeSettingsSnapshot={subscribeSettingsSnapshot}
+            subscribeSettingsResult={subscribeSettingsResult}
+            listDirectory={listDirectory}
+            onClose={() => setSettingsSession(null)}
+          />
+        );
+      })()}
     </div>
   );
 }
