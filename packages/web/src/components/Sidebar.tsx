@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import type { MachineSnapshot, OutboundAgentInfo } from "@blkcat/shared";
 import { AgentManager } from "./AgentManager";
+import { StartSessionModal } from "./StartSessionModal";
 
 interface SidebarProps {
   width?: number;
@@ -21,6 +22,7 @@ interface SidebarProps {
   onAddAgent?: (address: string) => Promise<{ ok: boolean; error?: string }>;
   onRemoveAgent?: (address: string) => Promise<void>;
   onCollapse?: () => void;
+  listDirectory?: (machineId: string, path: string) => Promise<{ path: string; entries: { name: string; isDir: boolean }[]; error?: string }>;
 }
 
 export function Sidebar({
@@ -42,10 +44,9 @@ export function Sidebar({
   onAddAgent,
   onRemoveAgent,
   onCollapse,
+  listDirectory,
 }: SidebarProps) {
-  const [expandedMachine, setExpandedMachine] = useState<string | null>(null);
-  const [sessionArgs, setSessionArgs] = useState("");
-  const [sessionCwd, setSessionCwd] = useState("");
+  const [modalMachineId, setModalMachineId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   return (
@@ -150,13 +151,7 @@ export function Sidebar({
             {onStartSession && (
               <button
                 data-testid={`new-session-${machine.machineId}`}
-                onClick={() => {
-                  setExpandedMachine(
-                    expandedMachine === machine.machineId ? null : machine.machineId,
-                  );
-                  setSessionArgs("");
-                  setSessionCwd("");
-                }}
+                onClick={() => setModalMachineId(machine.machineId)}
                 style={{
                   background: "none",
                   border: "1px solid var(--border)",
@@ -168,91 +163,16 @@ export function Sidebar({
                   padding: "2px 6px",
                 }}
               >
-                {expandedMachine === machine.machineId ? "\u00d7" : "+"}
+                +
               </button>
             )}
           </div>
-          {expandedMachine === machine.machineId && onStartSession && (
-            <form
-              data-testid={`new-session-form-${machine.machineId}`}
-              onSubmit={(e) => {
-                e.preventDefault();
-                onStartSession(machine.machineId, sessionArgs || undefined, sessionCwd || undefined);
-                setExpandedMachine(null);
-                setSessionArgs("");
-                setSessionCwd("");
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Escape") {
-                  setExpandedMachine(null);
-                  setSessionArgs("");
-                  setSessionCwd("");
-                }
-              }}
-              style={{
-                padding: "4px 16px 8px 32px",
-                display: "flex",
-                flexDirection: "column",
-                gap: 4,
-              }}
-            >
-              <input
-                autoFocus
-                data-testid={`new-session-cwd-${machine.machineId}`}
-                type="text"
-                value={sessionCwd}
-                onChange={(e) => setSessionCwd(e.target.value)}
-                placeholder="path, e.g. ~/projects/myapp"
-                style={{
-                  width: "100%",
-                  padding: "4px 8px",
-                  fontSize: 12,
-                  background: "var(--bg)",
-                  color: "var(--text)",
-                  border: "1px solid var(--border)",
-                  borderRadius: 4,
-                  boxSizing: "border-box",
-                }}
-              />
-              <div style={{ display: "flex", gap: 4 }}>
-                <input
-                  data-testid={`new-session-args-${machine.machineId}`}
-                  type="text"
-                  value={sessionArgs}
-                  onChange={(e) => setSessionArgs(e.target.value)}
-                  placeholder="args, e.g. --model sonnet"
-                  style={{
-                    flex: 1,
-                    padding: "4px 8px",
-                    fontSize: 12,
-                    background: "var(--bg)",
-                    color: "var(--text)",
-                    border: "1px solid var(--border)",
-                    borderRadius: 4,
-                  }}
-                />
-                <button
-                  type="submit"
-                  style={{
-                    padding: "4px 8px",
-                    fontSize: 12,
-                    background: "var(--accent)",
-                    color: "#fff",
-                    border: "none",
-                    borderRadius: 4,
-                    cursor: "pointer",
-                  }}
-                >
-                  Start
-                </button>
-              </div>
-            </form>
-          )}
           {machine.sessions.map((session) => {
             const isSelected =
               selectedMachine === machine.machineId &&
               selectedSession === session.id;
             const isWaiting = waitingSessions?.has(`${machine.machineId}:${session.id}`);
+            const isDangerous = session.args?.includes("--dangerously-skip-permissions");
             return (
               <div
                 key={session.id}
@@ -274,7 +194,7 @@ export function Sidebar({
                     gap: 6,
                     background: "transparent",
                     border: "none",
-                    color: isSelected ? "var(--accent)" : "var(--text)",
+                    color: isDangerous ? "var(--red)" : isSelected ? "var(--accent)" : "var(--text)",
                     cursor: "pointer",
                     fontSize: 13,
                     overflow: "hidden",
@@ -288,7 +208,7 @@ export function Sidebar({
                       width: 6,
                       height: 6,
                       borderRadius: "50%",
-                      background: isWaiting ? "var(--accent)" : "var(--text-muted)",
+                      background: isDangerous ? "var(--red)" : isWaiting ? "var(--accent)" : "var(--text-muted)",
                       display: "inline-block",
                       flexShrink: 0,
                       opacity: isWaiting ? 1 : 0.3,
@@ -421,6 +341,18 @@ export function Sidebar({
       </div>
       {agents && onAddAgent && onRemoveAgent && (
         <AgentManager agents={agents} onAdd={onAddAgent} onRemove={onRemoveAgent} />
+      )}
+      {modalMachineId && onStartSession && listDirectory && (
+        <StartSessionModal
+          machineId={modalMachineId}
+          machineName={getMachineName ? getMachineName(modalMachineId) : modalMachineId}
+          onStart={(mid, args, cwd) => {
+            onStartSession(mid, args, cwd);
+            setModalMachineId(null);
+          }}
+          onClose={() => setModalMachineId(null)}
+          listDirectory={listDirectory}
+        />
       )}
     </aside>
   );

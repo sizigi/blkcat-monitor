@@ -52,62 +52,7 @@ describe("Sidebar", () => {
     expect(screen.queryByTestId("new-session-m1")).not.toBeInTheDocument();
   });
 
-  it("shows form on + click and calls onStartSession on submit", () => {
-    const onStart = vi.fn();
-    render(
-      <Sidebar machines={machines} onSelectSession={() => {}} onStartSession={onStart} />,
-    );
-
-    fireEvent.click(screen.getByTestId("new-session-m1"));
-    expect(screen.getByTestId("new-session-form-m1")).toBeInTheDocument();
-
-    const input = screen.getByTestId("new-session-args-m1");
-    fireEvent.change(input, { target: { value: "--model sonnet" } });
-    fireEvent.submit(screen.getByTestId("new-session-form-m1"));
-
-    expect(onStart).toHaveBeenCalledWith("m1", "--model sonnet", undefined);
-    expect(screen.queryByTestId("new-session-form-m1")).not.toBeInTheDocument();
-  });
-
-  it("calls onStartSession with undefined when args empty", () => {
-    const onStart = vi.fn();
-    render(
-      <Sidebar machines={machines} onSelectSession={() => {}} onStartSession={onStart} />,
-    );
-
-    fireEvent.click(screen.getByTestId("new-session-m1"));
-    fireEvent.submit(screen.getByTestId("new-session-form-m1"));
-
-    expect(onStart).toHaveBeenCalledWith("m1", undefined, undefined);
-  });
-
-  it("calls onStartSession with cwd when path provided", () => {
-    const onStart = vi.fn();
-    render(
-      <Sidebar machines={machines} onSelectSession={() => {}} onStartSession={onStart} />,
-    );
-
-    fireEvent.click(screen.getByTestId("new-session-m1"));
-    const cwdInput = screen.getByTestId("new-session-cwd-m1");
-    fireEvent.change(cwdInput, { target: { value: "/home/user/project" } });
-    fireEvent.submit(screen.getByTestId("new-session-form-m1"));
-
-    expect(onStart).toHaveBeenCalledWith("m1", undefined, "/home/user/project");
-  });
-
-  it("closes form on Escape key", () => {
-    render(
-      <Sidebar machines={machines} onSelectSession={() => {}} onStartSession={() => {}} />,
-    );
-
-    fireEvent.click(screen.getByTestId("new-session-m1"));
-    expect(screen.getByTestId("new-session-form-m1")).toBeInTheDocument();
-
-    fireEvent.keyDown(screen.getByTestId("new-session-cwd-m1"), { key: "Escape" });
-    expect(screen.queryByTestId("new-session-form-m1")).not.toBeInTheDocument();
-  });
-
-  it("shows x button when form is expanded", () => {
+  it("always shows + on the new session button", () => {
     render(
       <Sidebar machines={machines} onSelectSession={() => {}} onStartSession={() => {}} />,
     );
@@ -116,7 +61,24 @@ describe("Sidebar", () => {
     expect(btn.textContent).toBe("+");
 
     fireEvent.click(btn);
-    expect(btn.textContent).toBe("\u00d7");
+    expect(btn.textContent).toBe("+");
+  });
+
+  it("shows red text for sessions with --dangerously-skip-permissions", () => {
+    const dangerousMachines: MachineSnapshot[] = [
+      {
+        machineId: "m1",
+        sessions: [
+          { id: "s1", name: "dev", target: "local", args: "--dangerously-skip-permissions" },
+        ],
+        lastSeen: Date.now(),
+      },
+    ];
+    render(
+      <Sidebar machines={dangerousMachines} onSelectSession={() => {}} />,
+    );
+    const sessionBtn = screen.getByTestId("session-s1");
+    expect(sessionBtn.style.color).toBe("var(--red)");
   });
 
   it("renders AgentManager when agent props provided", () => {
