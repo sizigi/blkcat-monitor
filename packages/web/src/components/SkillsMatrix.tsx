@@ -6,9 +6,8 @@ interface SkillDef {
   files: { path: string; content: string }[];
 }
 
-interface MachineSettings {
-  enabledPlugins: Record<string, boolean>;
-  installedPlugins: Record<string, unknown>;
+interface MachineSkillData {
+  deployedSkills: Set<string>;
   loading: boolean;
 }
 
@@ -16,6 +15,7 @@ export interface SkillsMatrixProps {
   machines: MachineSnapshot[];
   getMachineName?: (machineId: string) => string;
   deploySkills: (machineId: string, skills: SkillDef[]) => string;
+  removeSkills: (machineId: string, skillNames: string[]) => string;
   getSettings: (machineId: string, scope: "global" | "project", projectPath?: string) => string;
   updateSettings: (machineId: string, scope: "global" | "project", settings: Record<string, unknown>, projectPath?: string) => string;
   subscribeDeployResult: (cb: (msg: any) => void) => () => void;
@@ -24,25 +24,24 @@ export interface SkillsMatrixProps {
   onClose: () => void;
 }
 
-type CellStatus = "deploying" | "toggling" | "deployed" | "failed";
+type CellStatus = "deploying" | "removing" | "deployed" | "removed" | "failed";
 
 export function SkillsMatrix({
   machines,
   getMachineName,
   deploySkills,
+  removeSkills,
   getSettings,
-  updateSettings,
   subscribeDeployResult,
   subscribeSettingsSnapshot,
-  subscribeSettingsResult,
   onClose,
 }: SkillsMatrixProps) {
   const [availableSkills, setAvailableSkills] = useState<SkillDef[]>([]);
   const [loadingSkills, setLoadingSkills] = useState(true);
-  const [machineData, setMachineData] = useState<Map<string, MachineSettings>>(new Map());
+  const [machineData, setMachineData] = useState<Map<string, MachineSkillData>>(new Map());
   const [cellStatus, setCellStatus] = useState<Map<string, CellStatus>>(new Map());
   const pendingDeploy = useRef(new Map<string, string>()); // requestId -> cellKey
-  const pendingToggle = useRef(new Map<string, string>()); // requestId -> cellKey
+  const pendingRemove = useRef(new Map<string, string>()); // requestId -> cellKey
 
   // Fetch available skills
   useEffect(() => {
@@ -58,24 +57,22 @@ export function SkillsMatrix({
 
   // Fetch settings for each machine
   useEffect(() => {
-    const initial = new Map<string, MachineSettings>();
+    const initial = new Map<string, MachineSkillData>();
     for (const m of machines) {
-      initial.set(m.machineId, { enabledPlugins: {}, installedPlugins: {}, loading: true });
+      initial.set(m.machineId, { deployedSkills: new Set(), loading: true });
       getSettings(m.machineId, "global");
     }
     setMachineData(initial);
   }, [machines.map(m => m.machineId).join(",")]); // eslint-disable-line
 
-  // Subscribe to settings snapshots
+  // Subscribe to settings snapshots (contains deployedSkills list)
   useEffect(() => {
     return subscribeSettingsSnapshot((msg: any) => {
       setMachineData(prev => {
         const next = new Map(prev);
-        const ep = msg.settings?.enabledPlugins ?? {};
-        const enabledPlugins: Record<string, boolean> = typeof ep === "object" && !Array.isArray(ep) ? ep : {};
+        const skills = Array.isArray(msg.deployedSkills) ? new Set<string>(msg.deployedSkills) : new Set<string>();
         next.set(msg.machineId, {
-          enabledPlugins,
-          installedPlugins: msg.installedPlugins?.plugins ?? {},
+          deployedSkills: skills,
           loading: false,
         });
         return next;
@@ -83,48 +80,46 @@ export function SkillsMatrix({
     });
   }, [subscribeSettingsSnapshot]);
 
-  // Subscribe to deploy results
+  // Subscribe to deploy/remove results (both use deploy_result message)
   useEffect(() => {
     return subscribeDeployResult((msg: any) => {
-      const cellKey = pendingDeploy.current.get(msg.requestId);
-      if (!cellKey) return;
-      pendingDeploy.current.delete(msg.requestId);
-      if (msg.success) {
-        setCellStatus(prev => { const n = new Map(prev); n.set(cellKey, "deployed"); return n; });
-        // Refresh this machine's settings
-        const machineId = cellKey.split(":")[0];
-        getSettings(machineId, "global");
-        setTimeout(() => setCellStatus(prev => { const n = new Map(prev); n.delete(cellKey); return n; }), 2000);
-      } else {
-        setCellStatus(prev => { const n = new Map(prev); n.set(cellKey, "failed"); return n; });
-        setTimeout(() => setCellStatus(prev => { const n = new Map(prev); n.delete(cellKey); return n; }), 3000);
+      // Check deploy
+      const deployCellKey = pendingDeploy.current.get(msg.requestId);
+      if (deployCellKey) {
+        pendingDeploy.current.delete(msg.requestId);
+        if (msg.success) {
+          setCellStatus(prev => { const n = new Map(prev); n.set(deployCellKey, "deployed"); return n; });
+          const machineId = deployCellKey.split(":")[0];
+          getSettings(machineId, "global");
+          setTimeout(() => setCellStatus(prev => { const n = new Map(prev); n.delete(deployCellKey); return n; }), 2000);
+        } else {
+          setCellStatus(prev => { const n = new Map(prev); n.set(deployCellKey, "failed"); return n; });
+          setTimeout(() => setCellStatus(prev => { const n = new Map(prev); n.delete(deployCellKey); return n; }), 3000);
+        }
+        return;
+      }
+      // Check remove
+      const removeCellKey = pendingRemove.current.get(msg.requestId);
+      if (removeCellKey) {
+        pendingRemove.current.delete(msg.requestId);
+        if (msg.success) {
+          setCellStatus(prev => { const n = new Map(prev); n.set(removeCellKey, "removed"); return n; });
+          const machineId = removeCellKey.split(":")[0];
+          getSettings(machineId, "global");
+          setTimeout(() => setCellStatus(prev => { const n = new Map(prev); n.delete(removeCellKey); return n; }), 2000);
+        } else {
+          setCellStatus(prev => { const n = new Map(prev); n.set(removeCellKey, "failed"); return n; });
+          setTimeout(() => setCellStatus(prev => { const n = new Map(prev); n.delete(removeCellKey); return n; }), 3000);
+        }
       }
     });
   }, [subscribeDeployResult, getSettings]);
 
-  // Subscribe to settings results (for toggle)
-  useEffect(() => {
-    return subscribeSettingsResult((msg: any) => {
-      const cellKey = pendingToggle.current.get(msg.requestId);
-      if (!cellKey) return;
-      pendingToggle.current.delete(msg.requestId);
-      if (msg.success) {
-        setCellStatus(prev => { const n = new Map(prev); n.delete(cellKey); return n; });
-        const machineId = cellKey.split(":")[0];
-        getSettings(machineId, "global");
-      } else {
-        setCellStatus(prev => { const n = new Map(prev); n.set(cellKey, "failed"); return n; });
-        setTimeout(() => setCellStatus(prev => { const n = new Map(prev); n.delete(cellKey); return n; }), 3000);
-      }
-    });
-  }, [subscribeSettingsResult, getSettings]);
-
-  // Collect all skill/plugin names across all machines + available
+  // Collect all skill names: available + deployed on any machine
   const allNames = new Set<string>();
   for (const s of availableSkills) allNames.add(s.name);
   for (const [, data] of machineData) {
-    for (const name of Object.keys(data.enabledPlugins)) allNames.add(name);
-    for (const name of Object.keys(data.installedPlugins)) allNames.add(name);
+    for (const name of data.deployedSkills) allNames.add(name);
   }
   const sortedNames = [...allNames].sort();
 
@@ -137,26 +132,16 @@ export function SkillsMatrix({
     pendingDeploy.current.set(reqId, cellKey);
   }
 
-  function handleToggle(machineId: string, skillName: string, currentlyEnabled: boolean) {
+  function handleRemove(machineId: string, skillName: string) {
     const cellKey = `${machineId}:${skillName}`;
-    setCellStatus(prev => { const n = new Map(prev); n.set(cellKey, "toggling"); return n; });
-    const data = machineData.get(machineId);
-    const ep = { ...(data?.enabledPlugins ?? {}) };
-    ep[skillName] = !currentlyEnabled;
-    const reqId = updateSettings(machineId, "global", { enabledPlugins: ep });
-    pendingToggle.current.set(reqId, cellKey);
+    setCellStatus(prev => { const n = new Map(prev); n.set(cellKey, "removing"); return n; });
+    const reqId = removeSkills(machineId, [skillName]);
+    pendingRemove.current.set(reqId, cellKey);
   }
 
-  function isInstalled(machineId: string, name: string): boolean {
+  function isDeployed(machineId: string, name: string): boolean {
     const data = machineData.get(machineId);
-    if (!data) return false;
-    return name in data.installedPlugins || name in data.enabledPlugins;
-  }
-
-  function isEnabled(machineId: string, name: string): boolean {
-    const data = machineData.get(machineId);
-    if (!data) return false;
-    return !!data.enabledPlugins[name];
+    return data?.deployedSkills.has(name) ?? false;
   }
 
   function isAvailable(name: string): boolean {
@@ -179,7 +164,7 @@ export function SkillsMatrix({
         alignItems: "center",
         justifyContent: "space-between",
       }}>
-        <h3 style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>Skills & Plugins</h3>
+        <h3 style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>Skills</h3>
         <button
           onClick={onClose}
           style={{
@@ -202,7 +187,7 @@ export function SkillsMatrix({
           <div style={{ padding: 16, color: "var(--text-muted)", fontSize: 13 }}>Loading...</div>
         ) : sortedNames.length === 0 ? (
           <div style={{ padding: 16, color: "var(--text-muted)", fontSize: 13 }}>
-            No skills or plugins found.
+            No skills found.
           </div>
         ) : (
           <table style={{
@@ -223,7 +208,7 @@ export function SkillsMatrix({
                   background: "var(--bg-secondary)",
                   zIndex: 1,
                 }}>
-                  Skill / Plugin
+                  Skill
                 </th>
                 {machines.map(m => (
                   <th key={m.machineId} style={{
@@ -259,8 +244,7 @@ export function SkillsMatrix({
                     const mId = m.machineId;
                     const cellKey = `${mId}:${name}`;
                     const status = cellStatus.get(cellKey);
-                    const installed = isInstalled(mId, name);
-                    const enabled = isEnabled(mId, name);
+                    const deployed = isDeployed(mId, name);
                     const available = isAvailable(name);
                     const mData = machineData.get(mId);
 
@@ -274,29 +258,53 @@ export function SkillsMatrix({
                           <span style={{ color: "var(--text-muted)", fontSize: 11 }}>...</span>
                         ) : status === "deploying" ? (
                           <span style={{ color: "var(--accent)", fontSize: 11 }}>Deploying...</span>
-                        ) : status === "toggling" ? (
-                          <span style={{ color: "var(--accent)", fontSize: 11 }}>Saving...</span>
+                        ) : status === "removing" ? (
+                          <span style={{ color: "var(--accent)", fontSize: 11 }}>Removing...</span>
                         ) : status === "deployed" ? (
                           <span style={{ color: "var(--green)", fontSize: 11, fontWeight: 600 }}>Deployed</span>
+                        ) : status === "removed" ? (
+                          <span style={{ color: "var(--text-muted)", fontSize: 11 }}>Removed</span>
                         ) : status === "failed" ? (
                           <span style={{ color: "var(--red)", fontSize: 11 }}>Failed</span>
-                        ) : installed ? (
-                          <button
-                            onClick={() => handleToggle(mId, name, enabled)}
-                            title={enabled ? "Click to disable" : "Click to enable"}
-                            style={{
-                              background: "none",
-                              border: "none",
-                              cursor: "pointer",
-                              padding: "2px 8px",
-                              borderRadius: 4,
-                              fontSize: 11,
-                              fontWeight: 600,
-                              color: enabled ? "var(--green)" : "var(--text-muted)",
-                            }}
-                          >
-                            {enabled ? "on" : "off"}
-                          </button>
+                        ) : deployed ? (
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                            {available ? (
+                              <button
+                                onClick={() => handleDeploy(mId, name)}
+                                title="Re-deploy (update)"
+                                style={{
+                                  background: "none",
+                                  border: "none",
+                                  cursor: "pointer",
+                                  color: "var(--green)",
+                                  fontSize: 11,
+                                  fontWeight: 600,
+                                  padding: "2px 4px",
+                                }}
+                              >
+                                ✓
+                              </button>
+                            ) : (
+                              <span style={{ color: "var(--green)", fontSize: 11, fontWeight: 600, padding: "2px 4px" }}>✓</span>
+                            )}
+                            <button
+                              onClick={() => handleRemove(mId, name)}
+                              title="Remove skill"
+                              style={{
+                                background: "none",
+                                border: "none",
+                                cursor: "pointer",
+                                color: "var(--text-muted)",
+                                fontSize: 10,
+                                padding: "2px 4px",
+                                opacity: 0.5,
+                              }}
+                              onMouseEnter={(e) => { (e.currentTarget).style.opacity = "1"; (e.currentTarget).style.color = "var(--red)"; }}
+                              onMouseLeave={(e) => { (e.currentTarget).style.opacity = "0.5"; (e.currentTarget).style.color = "var(--text-muted)"; }}
+                            >
+                              ✕
+                            </button>
+                          </span>
                         ) : available ? (
                           <button
                             onClick={() => handleDeploy(mId, name)}

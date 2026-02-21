@@ -11,6 +11,7 @@ interface AgentConnectionOptions {
   onReloadSession?: (sessionId: string) => void;
   onListDirectory?: (requestId: string, path: string) => void;
   onDeploySkills?: (requestId: string, skills: { name: string; files: { path: string; content: string }[] }[]) => void;
+  onRemoveSkills?: (requestId: string, skillNames: string[]) => void;
   onGetSettings?: (requestId: string, scope: "global" | "project", projectPath?: string) => void;
   onUpdateSettings?: (requestId: string, scope: "global" | "project", settings: Record<string, unknown>, projectPath?: string) => void;
 }
@@ -53,6 +54,8 @@ export class AgentConnection {
           opts.onListDirectory?.(msg.requestId, msg.path);
         } else if (msg.type === "deploy_skills") {
           opts.onDeploySkills?.(msg.requestId, msg.skills);
+        } else if (msg.type === "remove_skills") {
+          opts.onRemoveSkills?.(msg.requestId, msg.skillNames);
         } else if (msg.type === "get_settings") {
           opts.onGetSettings?.(msg.requestId, msg.scope, msg.projectPath);
         } else if (msg.type === "update_settings") {
@@ -128,7 +131,7 @@ export class AgentConnection {
     this.ws.send(JSON.stringify(msg));
   }
 
-  sendSettingsSnapshot(requestId: string, settings: Record<string, unknown>, scope: "global" | "project", installedPlugins?: Record<string, unknown>) {
+  sendSettingsSnapshot(requestId: string, settings: Record<string, unknown>, scope: "global" | "project", deployedSkills?: string[]) {
     const msg: Record<string, any> = {
       type: "settings_snapshot",
       machineId: this.opts.machineId,
@@ -136,7 +139,7 @@ export class AgentConnection {
       settings,
       scope,
     };
-    if (installedPlugins) msg.installedPlugins = installedPlugins;
+    if (deployedSkills) msg.deployedSkills = deployedSkills;
     this.ws.send(JSON.stringify(msg));
   }
 

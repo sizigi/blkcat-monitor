@@ -4,8 +4,10 @@ import {
   writeSettings,
   readInstalledPlugins,
   deploySkills,
+  listDeployedSkills,
+  removeSkills,
 } from "./settings-handler";
-import { mkdtemp, rm } from "fs/promises";
+import { mkdtemp, rm, mkdir } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 
@@ -170,193 +172,95 @@ describe("readInstalledPlugins", () => {
 
 describe("deploySkills", () => {
   let tempDir: string;
-  let cacheDir: string;
-  let pluginsPath: string;
-
-  let settingsPath: string;
+  let skillsDir: string;
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), "blkcat-deploy-test-"));
-    cacheDir = join(tempDir, "cache");
-    pluginsPath = join(tempDir, "installed_plugins.json");
-    settingsPath = join(tempDir, "settings.json");
+    skillsDir = join(tempDir, "skills");
   });
 
   afterEach(async () => {
     await rm(tempDir, { recursive: true });
   });
 
-  it("writes skill files to correct directories", async () => {
+  it("writes skill files to ~/.claude/skills/<name>/", async () => {
     await deploySkills({
-      cacheDir,
-      pluginsPath,
-      settingsPath,
+      skillsDir,
       skills: [
         {
           name: "my-skill",
           files: [
-            { path: "index.js", content: "console.log('hello');" },
+            { path: "SKILL.md", content: "---\nname: my-skill\n---\n# My Skill" },
             { path: "lib/utils.js", content: "export const x = 1;" },
           ],
         },
       ],
     });
 
-    const indexContent = await Bun.file(
-      join(cacheDir, "my-skill", "index.js")
+    const skillMd = await Bun.file(
+      join(skillsDir, "my-skill", "SKILL.md")
     ).text();
-    expect(indexContent).toBe("console.log('hello');");
+    expect(skillMd).toContain("# My Skill");
 
     const utilsContent = await Bun.file(
-      join(cacheDir, "my-skill", "lib", "utils.js")
+      join(skillsDir, "my-skill", "lib", "utils.js")
     ).text();
     expect(utilsContent).toBe("export const x = 1;");
   });
 
-  it("updates installed_plugins.json with skill entries", async () => {
+  it("deploys multiple skills", async () => {
     await deploySkills({
-      cacheDir,
-      pluginsPath,
-      settingsPath,
+      skillsDir,
       skills: [
         {
           name: "skill-a",
-          files: [{ path: "main.ts", content: "// skill a" }],
+          files: [{ path: "SKILL.md", content: "# A" }],
         },
         {
           name: "skill-b",
-          files: [{ path: "main.ts", content: "// skill b" }],
+          files: [{ path: "SKILL.md", content: "# B" }],
         },
       ],
     });
 
-    const plugins = JSON.parse(await Bun.file(pluginsPath).text());
-    expect(plugins.version).toBe(2);
-    // Entries must be arrays (Claude Code format)
-    expect(Array.isArray(plugins.plugins["skill-a"])).toBe(true);
-    expect(plugins.plugins["skill-a"][0].scope).toBe("user");
-    expect(plugins.plugins["skill-a"][0].installPath).toBe(
-      join(cacheDir, "skill-a")
-    );
-    expect(plugins.plugins["skill-a"][0].version).toBe("deployed");
-    expect(plugins.plugins["skill-a"][0].installedAt).toBeDefined();
-    expect(plugins.plugins["skill-a"][0].lastUpdated).toBeDefined();
+    const a = await Bun.file(join(skillsDir, "skill-a", "SKILL.md")).text();
+    expect(a).toBe("# A");
 
-    expect(Array.isArray(plugins.plugins["skill-b"])).toBe(true);
-    expect(plugins.plugins["skill-b"][0].installPath).toBe(
-      join(cacheDir, "skill-b")
-    );
+    const b = await Bun.file(join(skillsDir, "skill-b", "SKILL.md")).text();
+    expect(b).toBe("# B");
   });
 
-  it("handles overwrites by updating existing skills", async () => {
-    // First deploy
+  it("overwrites existing skill files on re-deploy", async () => {
     await deploySkills({
-      cacheDir,
-      pluginsPath,
-      settingsPath,
+      skillsDir,
       skills: [
         {
           name: "my-skill",
-          files: [{ path: "index.js", content: "v1" }],
+          files: [{ path: "SKILL.md", content: "v1" }],
         },
       ],
     });
 
-    const firstPlugins = JSON.parse(await Bun.file(pluginsPath).text());
-    const firstInstalledAt = firstPlugins.plugins["my-skill"][0].installedAt;
-
-    // Small delay to ensure timestamps differ
-    await new Promise((resolve) => setTimeout(resolve, 10));
-
-    // Second deploy — overwrite
     await deploySkills({
-      cacheDir,
-      pluginsPath,
-      settingsPath,
+      skillsDir,
       skills: [
         {
           name: "my-skill",
-          files: [{ path: "index.js", content: "v2" }],
+          files: [{ path: "SKILL.md", content: "v2" }],
         },
       ],
     });
 
     const content = await Bun.file(
-      join(cacheDir, "my-skill", "index.js")
+      join(skillsDir, "my-skill", "SKILL.md")
     ).text();
     expect(content).toBe("v2");
-
-    const plugins = JSON.parse(await Bun.file(pluginsPath).text());
-    // installedAt should be preserved from first deploy
-    expect(plugins.plugins["my-skill"][0].installedAt).toBe(firstInstalledAt);
-    // lastUpdated should be newer
-    expect(plugins.plugins["my-skill"][0].lastUpdated).not.toBe(firstInstalledAt);
-  });
-
-  it("preserves existing plugins in installed_plugins.json", async () => {
-    // Write pre-existing plugins
-    await Bun.write(
-      pluginsPath,
-      JSON.stringify({
-        version: 2,
-        plugins: {
-          "existing-plugin": {
-            scope: "user",
-            installPath: "/some/path",
-            version: "1.0.0",
-            installedAt: "2024-01-01T00:00:00.000Z",
-            lastUpdated: "2024-01-01T00:00:00.000Z",
-          },
-        },
-      })
-    );
-
-    await deploySkills({
-      cacheDir,
-      pluginsPath,
-      settingsPath,
-      skills: [
-        {
-          name: "new-skill",
-          files: [{ path: "index.js", content: "new" }],
-        },
-      ],
-    });
-
-    const plugins = JSON.parse(await Bun.file(pluginsPath).text());
-    expect(plugins.plugins["existing-plugin"]).toBeDefined();
-    expect(plugins.plugins["existing-plugin"].version).toBe("1.0.0");
-    expect(plugins.plugins["new-skill"]).toBeDefined();
-  });
-
-  it("auto-enables deployed skills in settings.json", async () => {
-    // Write existing settings with hooks
-    await Bun.write(settingsPath, JSON.stringify({
-      model: "opus",
-      hooks: { Stop: [] },
-      enabledPlugins: { "existing-plugin": true },
-    }));
-
-    await deploySkills({
-      cacheDir,
-      pluginsPath,
-      settingsPath,
-      skills: [{ name: "new-skill", files: [{ path: "a.md", content: "x" }] }],
-    });
-
-    const settings = JSON.parse(await Bun.file(settingsPath).text());
-    expect(settings.enabledPlugins["new-skill"]).toBe(true);
-    expect(settings.enabledPlugins["existing-plugin"]).toBe(true);
-    // Hooks must be preserved
-    expect(settings.hooks).toEqual({ Stop: [] });
   });
 
   it("rejects path traversal in file paths", async () => {
     await expect(
       deploySkills({
-        cacheDir,
-        pluginsPath,
-        settingsPath,
+        skillsDir,
         skills: [{ name: "evil", files: [{ path: "../../etc/passwd", content: "bad" }] }],
       })
     ).rejects.toThrow("Path traversal");
@@ -365,11 +269,93 @@ describe("deploySkills", () => {
   it("rejects invalid skill names", async () => {
     await expect(
       deploySkills({
-        cacheDir,
-        pluginsPath,
-        settingsPath,
-        skills: [{ name: "../escape", files: [{ path: "a.md", content: "x" }] }],
+        skillsDir,
+        skills: [{ name: "../escape", files: [{ path: "SKILL.md", content: "x" }] }],
       })
+    ).rejects.toThrow("Invalid skill name");
+  });
+});
+
+describe("listDeployedSkills", () => {
+  let tempDir: string;
+  let skillsDir: string;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "blkcat-list-test-"));
+    skillsDir = join(tempDir, "skills");
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true });
+  });
+
+  it("returns empty array when directory does not exist", async () => {
+    const result = await listDeployedSkills(skillsDir);
+    expect(result).toEqual([]);
+  });
+
+  it("returns skill names that have SKILL.md", async () => {
+    // Create valid skills
+    await mkdir(join(skillsDir, "detect-env"), { recursive: true });
+    await Bun.write(join(skillsDir, "detect-env", "SKILL.md"), "# Detect Env");
+
+    await mkdir(join(skillsDir, "install-bwrap"), { recursive: true });
+    await Bun.write(join(skillsDir, "install-bwrap", "SKILL.md"), "# Install");
+
+    // Create directory without SKILL.md (should be excluded)
+    await mkdir(join(skillsDir, "not-a-skill"), { recursive: true });
+    await Bun.write(join(skillsDir, "not-a-skill", "README.md"), "# Not a skill");
+
+    const result = await listDeployedSkills(skillsDir);
+    expect(result).toEqual(["detect-env", "install-bwrap"]);
+  });
+
+  it("returns sorted names", async () => {
+    await mkdir(join(skillsDir, "zzz-skill"), { recursive: true });
+    await Bun.write(join(skillsDir, "zzz-skill", "SKILL.md"), "# Z");
+
+    await mkdir(join(skillsDir, "aaa-skill"), { recursive: true });
+    await Bun.write(join(skillsDir, "aaa-skill", "SKILL.md"), "# A");
+
+    const result = await listDeployedSkills(skillsDir);
+    expect(result).toEqual(["aaa-skill", "zzz-skill"]);
+  });
+});
+
+describe("removeSkills", () => {
+  let tempDir: string;
+  let skillsDir: string;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "blkcat-remove-test-"));
+    skillsDir = join(tempDir, "skills");
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true });
+  });
+
+  it("removes deployed skill directories", async () => {
+    await mkdir(join(skillsDir, "skill-a"), { recursive: true });
+    await Bun.write(join(skillsDir, "skill-a", "SKILL.md"), "# A");
+    await mkdir(join(skillsDir, "skill-b"), { recursive: true });
+    await Bun.write(join(skillsDir, "skill-b", "SKILL.md"), "# B");
+
+    await removeSkills(skillsDir, ["skill-a"]);
+
+    const remaining = await listDeployedSkills(skillsDir);
+    expect(remaining).toEqual(["skill-b"]);
+  });
+
+  it("does not error when skill does not exist", async () => {
+    await mkdir(skillsDir, { recursive: true });
+    await removeSkills(skillsDir, ["nonexistent"]);
+  });
+
+  it("rejects invalid skill names", async () => {
+    await mkdir(skillsDir, { recursive: true });
+    await expect(
+      removeSkills(skillsDir, ["../escape"])
     ).rejects.toThrow("Invalid skill name");
   });
 });

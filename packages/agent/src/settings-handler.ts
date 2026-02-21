@@ -1,4 +1,4 @@
-import { mkdir, rename } from "fs/promises";
+import { mkdir, readdir, rename, rm } from "fs/promises";
 import { dirname, join, resolve } from "path";
 
 /**
@@ -94,81 +94,82 @@ interface Skill {
 }
 
 interface DeploySkillsOptions {
-  cacheDir: string;
-  pluginsPath: string;
-  settingsPath: string;
+  skillsDir: string;
   skills: Skill[];
 }
 
 /**
- * Deploy skill files to disk and update installed_plugins.json.
+ * Deploy skill files to ~/.claude/skills/<name>/.
+ *
+ * Claude Code auto-discovers standalone skills from ~/.claude/skills/ —
+ * no installed_plugins.json, enabledPlugins, or plugin manifests needed.
  *
  * For each skill:
- *   - Creates `cacheDir/<skill.name>/` and writes all files (creating subdirs as needed)
- *   - Updates installed_plugins.json with an entry per skill
+ *   - Creates `skillsDir/<skill.name>/` and writes all files (creating subdirs as needed)
  */
 export async function deploySkills(opts: DeploySkillsOptions): Promise<void> {
-  const { cacheDir, pluginsPath, skills } = opts;
+  const { skillsDir, skills } = opts;
 
-  // Read existing plugins manifest
-  const manifest = (await readInstalledPlugins(pluginsPath)) as {
-    version: number;
-    plugins: Record<string, any>;
-  };
-
-  const now = new Date().toISOString();
-
-  const resolvedCacheDir = resolve(cacheDir);
+  const resolvedSkillsDir = resolve(skillsDir);
 
   for (const skill of skills) {
     // Validate skill name (no path traversal)
     if (skill.name.includes("/") || skill.name.includes("\\") || skill.name === ".." || skill.name === ".") {
       throw new Error(`Invalid skill name: ${skill.name}`);
     }
-    const skillDir = join(cacheDir, skill.name);
+    const skillDir = join(skillsDir, skill.name);
 
     // Write all files for this skill
     for (const file of skill.files) {
       const filePath = join(skillDir, file.path);
       const resolvedPath = resolve(filePath);
-      if (!resolvedPath.startsWith(resolvedCacheDir + "/")) {
-        throw new Error(`Path traversal detected: ${file.path} resolves outside cache directory`);
+      if (!resolvedPath.startsWith(resolvedSkillsDir + "/")) {
+        throw new Error(`Path traversal detected: ${file.path} resolves outside skills directory`);
       }
       await mkdir(dirname(filePath), { recursive: true });
       await Bun.write(filePath, file.content);
     }
-
-    // Update or create plugin entry (Claude Code expects an array)
-    const existingArr = Array.isArray(manifest.plugins[skill.name])
-      ? manifest.plugins[skill.name]
-      : manifest.plugins[skill.name] ? [manifest.plugins[skill.name]] : [];
-    const existingEntry = existingArr[0];
-    manifest.plugins[skill.name] = [{
-      scope: "user",
-      installPath: skillDir,
-      version: "deployed",
-      installedAt: existingEntry?.installedAt ?? now,
-      lastUpdated: now,
-    }];
   }
+}
 
-  // Write updated manifest
-  await mkdir(dirname(pluginsPath), { recursive: true });
-  await Bun.write(pluginsPath, JSON.stringify(manifest, null, 2));
-
-  // Auto-enable deployed skills in settings.json
-  if (opts.settingsPath) {
-    const { settings } = await readSettings(opts.settingsPath);
-    const enabledPlugins = (settings.enabledPlugins as Record<string, boolean>) ?? {};
-    let changed = false;
-    for (const skill of skills) {
-      if (!enabledPlugins[skill.name]) {
-        enabledPlugins[skill.name] = true;
-        changed = true;
+/**
+ * List skill names deployed in the skills directory.
+ * Returns directory names under skillsDir that contain a SKILL.md file.
+ */
+export async function listDeployedSkills(skillsDir: string): Promise<string[]> {
+  try {
+    const entries = await readdir(skillsDir, { withFileTypes: true });
+    const names: string[] = [];
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        const skillMd = Bun.file(join(skillsDir, entry.name, "SKILL.md"));
+        if (await skillMd.exists()) {
+          names.push(entry.name);
+        }
       }
     }
-    if (changed) {
-      await writeSettings(opts.settingsPath, { enabledPlugins });
+    return names.sort();
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Remove deployed skills by deleting their directories from skillsDir.
+ * Validates names to prevent path traversal.
+ */
+export async function removeSkills(skillsDir: string, skillNames: string[]): Promise<void> {
+  const resolvedSkillsDir = resolve(skillsDir);
+
+  for (const name of skillNames) {
+    if (name.includes("/") || name.includes("\\") || name === ".." || name === ".") {
+      throw new Error(`Invalid skill name: ${name}`);
     }
+    const skillDir = join(skillsDir, name);
+    const resolvedPath = resolve(skillDir);
+    if (!resolvedPath.startsWith(resolvedSkillsDir + "/")) {
+      throw new Error(`Path traversal detected: ${name}`);
+    }
+    await rm(skillDir, { recursive: true, force: true });
   }
 }

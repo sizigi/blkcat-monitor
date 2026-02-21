@@ -442,6 +442,15 @@ export function createServer(opts: ServerOptions) {
                 skills: msg.skills,
               }));
             }
+          } else if (msg.type === "remove_skills") {
+            const machine = machines.get(msg.machineId);
+            if (machine) {
+              machine.agent.send(JSON.stringify({
+                type: "remove_skills",
+                requestId: msg.requestId,
+                skillNames: msg.skillNames,
+              }));
+            }
           } else if (msg.type === "get_settings") {
             const machine = machines.get(msg.machineId);
             if (machine) {

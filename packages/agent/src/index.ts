@@ -10,7 +10,7 @@ import type { SessionInfo } from "@blkcat/shared";
 import type { AgentHookEventMessage } from "@blkcat/shared";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
-import { readSettings, writeSettings, deploySkills, readInstalledPlugins } from "./settings-handler";
+import { readSettings, writeSettings, deploySkills, listDeployedSkills, removeSkills } from "./settings-handler";
 
 async function main() {
   const config = await loadConfig();
@@ -132,13 +132,22 @@ async function main() {
     try {
       const home = process.env.HOME ?? "/root";
       await deploySkills({
-        cacheDir: resolve(home, ".claude/plugins/cache"),
-        pluginsPath: resolve(home, ".claude/plugins/installed_plugins.json"),
-        settingsPath: resolve(home, ".claude/settings.json"),
+        skillsDir: resolve(home, ".claude/skills"),
         skills,
       });
       conn.sendDeployResult(requestId, true);
       console.log(`Deployed ${skills.length} skill(s): ${skills.map(s => s.name).join(", ")}`);
+    } catch (err: any) {
+      conn.sendDeployResult(requestId, false, err?.message ?? "Unknown error");
+    }
+  }
+
+  async function handleRemoveSkills(requestId: string, skillNames: string[]) {
+    try {
+      const home = process.env.HOME ?? "/root";
+      await removeSkills(resolve(home, ".claude/skills"), skillNames);
+      conn.sendDeployResult(requestId, true);
+      console.log(`Removed ${skillNames.length} skill(s): ${skillNames.join(", ")}`);
     } catch (err: any) {
       conn.sendDeployResult(requestId, false, err?.message ?? "Unknown error");
     }
@@ -151,8 +160,8 @@ async function main() {
         ? resolve(home, ".claude/settings.json")
         : resolve(projectPath ?? ".", ".claude/settings.json");
       const { settings } = await readSettings(settingsPath);
-      const installedPlugins = await readInstalledPlugins(resolve(home, ".claude/plugins/installed_plugins.json"));
-      conn.sendSettingsSnapshot(requestId, settings, scope, installedPlugins);
+      const deployedSkills = await listDeployedSkills(resolve(home, ".claude/skills"));
+      conn.sendSettingsSnapshot(requestId, settings, scope, deployedSkills);
     } catch (err: any) {
       conn.sendSettingsSnapshot(requestId, {}, scope);
     }
@@ -180,7 +189,7 @@ async function main() {
     sendHookEvent(event: AgentHookEventMessage): void;
     sendDirectoryListing(machineId: string, requestId: string, path: string, entries: { name: string; isDir: boolean }[], error?: string): void;
     sendDeployResult(requestId: string, success: boolean, error?: string): void;
-    sendSettingsSnapshot(requestId: string, settings: Record<string, unknown>, scope: "global" | "project", installedPlugins?: Record<string, unknown>): void;
+    sendSettingsSnapshot(requestId: string, settings: Record<string, unknown>, scope: "global" | "project", deployedSkills?: string[]): void;
     sendSettingsResult(requestId: string, success: boolean, error?: string): void;
     close(): void;
   };
@@ -197,6 +206,7 @@ async function main() {
       onReloadSession: handleReloadSession,
       onListDirectory: handleListDirectory,
       onDeploySkills: handleDeploySkills,
+      onRemoveSkills: handleRemoveSkills,
       onGetSettings: handleGetSettings,
       onUpdateSettings: handleUpdateSettings,
     });
@@ -218,6 +228,7 @@ async function main() {
       onReloadSession: handleReloadSession,
       onListDirectory: handleListDirectory,
       onDeploySkills: handleDeploySkills,
+      onRemoveSkills: handleRemoveSkills,
       onGetSettings: handleGetSettings,
       onUpdateSettings: handleUpdateSettings,
     });

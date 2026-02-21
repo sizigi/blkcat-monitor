@@ -75,6 +75,7 @@ export interface UseSocketReturn {
   listDirectory: (machineId: string, path: string) => Promise<{ path: string; entries: { name: string; isDir: boolean }[]; error?: string }>;
   sendRaw: (msg: object) => void;
   deploySkills: (machineId: string, skills: { name: string; files: { path: string; content: string }[] }[]) => string;
+  removeSkills: (machineId: string, skillNames: string[]) => string;
   getSettings: (machineId: string, scope: "global" | "project", projectPath?: string) => string;
   updateSettings: (machineId: string, scope: "global" | "project", settings: Record<string, unknown>, projectPath?: string) => string;
   subscribeDeployResult: (cb: (msg: any) => void) => () => void;
@@ -418,6 +419,12 @@ export function useSocket(url: string): UseSocketReturn {
     return requestId;
   }, [sendRaw]);
 
+  const removeSkills = useCallback((machineId: string, skillNames: string[]) => {
+    const requestId = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    sendRaw({ type: "remove_skills", machineId, requestId, skillNames });
+    return requestId;
+  }, [sendRaw]);
+
   const getSettings = useCallback((machineId: string, scope: "global" | "project", projectPath?: string) => {
     const requestId = Math.random().toString(36).slice(2) + Date.now().toString(36);
     const msg: Record<string, any> = { type: "get_settings", machineId, requestId, scope };
@@ -434,5 +441,5 @@ export function useSocket(url: string): UseSocketReturn {
     return requestId;
   }, [sendRaw]);
 
-  return { connected, machines, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory, sendRaw, deploySkills, getSettings, updateSettings, subscribeDeployResult, subscribeSettingsSnapshot, subscribeSettingsResult };
+  return { connected, machines, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory, sendRaw, deploySkills, removeSkills, getSettings, updateSettings, subscribeDeployResult, subscribeSettingsSnapshot, subscribeSettingsResult };
 }

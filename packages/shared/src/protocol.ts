@@ -78,7 +78,7 @@ export interface AgentSettingsSnapshotMessage {
   requestId: string;
   settings: Record<string, unknown>;
   scope: "global" | "project";
-  installedPlugins?: Record<string, unknown>;
+  deployedSkills?: string[];
 }
 
 export interface AgentSettingsResultMessage {
@@ -166,7 +166,13 @@ export interface ServerUpdateSettingsMessage {
   settings: Record<string, unknown>;
 }
 
-export type ServerToAgentMessage = ServerInputMessage | ServerStartSessionMessage | ServerCloseSessionMessage | ServerResizeMessage | ServerRequestScrollbackMessage | ServerReloadSessionMessage | ServerListDirectoryMessage | ServerDeploySkillsMessage | ServerGetSettingsMessage | ServerUpdateSettingsMessage;
+export interface ServerRemoveSkillsMessage {
+  type: "remove_skills";
+  requestId: string;
+  skillNames: string[];
+}
+
+export type ServerToAgentMessage = ServerInputMessage | ServerStartSessionMessage | ServerCloseSessionMessage | ServerResizeMessage | ServerRequestScrollbackMessage | ServerReloadSessionMessage | ServerListDirectoryMessage | ServerDeploySkillsMessage | ServerGetSettingsMessage | ServerUpdateSettingsMessage | ServerRemoveSkillsMessage;
 
 // --- Server -> Dashboard messages ---
 
@@ -231,7 +237,7 @@ export interface ServerSettingsSnapshotMessage {
   requestId: string;
   settings: Record<string, unknown>;
   scope: "global" | "project";
-  installedPlugins?: Record<string, unknown>;
+  deployedSkills?: string[];
 }
 
 export interface ServerSettingsResultMessage {
@@ -329,7 +335,14 @@ export interface DashboardUpdateSettingsMessage {
   settings: Record<string, unknown>;
 }
 
-export type DashboardToServerMessage = DashboardInputMessage | DashboardStartSessionMessage | DashboardCloseSessionMessage | DashboardResizeMessage | DashboardRequestScrollbackMessage | DashboardReloadSessionMessage | DashboardListDirectoryMessage | DashboardDeploySkillsMessage | DashboardGetSettingsMessage | DashboardUpdateSettingsMessage;
+export interface DashboardRemoveSkillsMessage {
+  type: "remove_skills";
+  machineId: string;
+  requestId: string;
+  skillNames: string[];
+}
+
+export type DashboardToServerMessage = DashboardInputMessage | DashboardStartSessionMessage | DashboardCloseSessionMessage | DashboardResizeMessage | DashboardRequestScrollbackMessage | DashboardReloadSessionMessage | DashboardListDirectoryMessage | DashboardDeploySkillsMessage | DashboardGetSettingsMessage | DashboardUpdateSettingsMessage | DashboardRemoveSkillsMessage;
 
 // --- Outbound agent info ---
 
@@ -345,7 +358,7 @@ export const NOTIFY_HOOK_EVENTS = new Set(["Stop", "Notification", "PermissionRe
 // --- Parsers ---
 
 const AGENT_TYPES = new Set(["register", "output", "sessions", "scrollback", "hook_event", "directory_listing", "deploy_result", "settings_snapshot", "settings_result"]);
-const DASHBOARD_TYPES = new Set(["input", "start_session", "close_session", "resize", "request_scrollback", "reload_session", "list_directory", "deploy_skills", "get_settings", "update_settings"]);
+const DASHBOARD_TYPES = new Set(["input", "start_session", "close_session", "resize", "request_scrollback", "reload_session", "list_directory", "deploy_skills", "get_settings", "update_settings", "remove_skills"]);
 
 export function parseAgentMessage(raw: string): AgentToServerMessage | null {
   try {

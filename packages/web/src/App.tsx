@@ -6,7 +6,6 @@ import { Sidebar } from "./components/Sidebar";
 import { SessionDetail } from "./components/SessionDetail";
 import { EventFeed } from "./components/EventFeed";
 import { NotificationList } from "./components/NotificationList";
-import { SettingsPanel } from "./components/SettingsPanel";
 import { SkillsMatrix } from "./components/SkillsMatrix";
 import { ProjectSettingsModal } from "./components/ProjectSettingsModal";
 
@@ -50,7 +49,7 @@ function useSessionLines(
 }
 
 export default function App() {
-  const { connected, machines, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory, deploySkills, getSettings, updateSettings, subscribeDeployResult, subscribeSettingsSnapshot, subscribeSettingsResult } = useSocket(WS_URL);
+  const { connected, machines, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory, deploySkills, removeSkills, getSettings, updateSettings, subscribeDeployResult, subscribeSettingsSnapshot, subscribeSettingsResult } = useSocket(WS_URL);
   const { agents, addAgent, removeAgent } = useAgents();
   const { getMachineName, getSessionName, setMachineName, setSessionName } = useDisplayNames();
   const [selectedMachine, setSelectedMachine] = useState<string>();
@@ -224,6 +223,7 @@ export default function App() {
             machines={machines}
             getMachineName={getMachineName}
             deploySkills={deploySkills}
+            removeSkills={removeSkills}
             getSettings={getSettings}
             updateSettings={updateSettings}
             subscribeDeployResult={subscribeDeployResult}

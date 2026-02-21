@@ -118,17 +118,17 @@ describe("parseAgentMessage", () => {
     expect((msg as any).scope).toBe("global");
   });
 
-  it("parses settings_snapshot with installedPlugins", () => {
+  it("parses settings_snapshot with deployedSkills", () => {
     const msg = parseAgentMessage(JSON.stringify({
       type: "settings_snapshot",
       machineId: "m1",
       requestId: "req-2",
       settings: { theme: "dark" },
       scope: "project",
-      installedPlugins: { myPlugin: { version: "1.0" } },
+      deployedSkills: ["detect-env", "install-bwrap"],
     }));
     expect(msg?.type).toBe("settings_snapshot");
-    expect((msg as any).installedPlugins).toEqual({ myPlugin: { version: "1.0" } });
+    expect((msg as any).deployedSkills).toEqual(["detect-env", "install-bwrap"]);
   });
 
   it("parses settings_result message", () => {
