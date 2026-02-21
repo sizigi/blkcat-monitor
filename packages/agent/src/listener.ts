@@ -10,6 +10,9 @@ interface AgentListenerOptions {
   onRequestScrollback?: (sessionId: string) => void;
   onReloadSession?: (sessionId: string) => void;
   onListDirectory?: (requestId: string, path: string) => void;
+  onDeploySkills?: (requestId: string, skills: { name: string; files: { path: string; content: string }[] }[]) => void;
+  onGetSettings?: (requestId: string, scope: "global" | "project", projectPath?: string) => void;
+  onUpdateSettings?: (requestId: string, scope: "global" | "project", settings: Record<string, unknown>, projectPath?: string) => void;
 }
 
 export class AgentListener {
@@ -60,6 +63,12 @@ export class AgentListener {
               this.opts.onReloadSession?.(msg.sessionId);
             } else if (msg.type === "list_directory") {
               this.opts.onListDirectory?.(msg.requestId, msg.path);
+            } else if (msg.type === "deploy_skills") {
+              this.opts.onDeploySkills?.(msg.requestId, msg.skills);
+            } else if (msg.type === "get_settings") {
+              this.opts.onGetSettings?.(msg.requestId, msg.scope, msg.projectPath);
+            } else if (msg.type === "update_settings") {
+              this.opts.onUpdateSettings?.(msg.requestId, msg.scope, msg.settings, msg.projectPath);
             }
           } catch {}
         },
@@ -122,6 +131,40 @@ export class AgentListener {
       requestId,
       path,
       entries,
+    };
+    if (error) msg.error = error;
+    this.broadcast(msg);
+  }
+
+  sendDeployResult(requestId: string, success: boolean, error?: string) {
+    const msg: Record<string, any> = {
+      type: "deploy_result",
+      machineId: this.machineId,
+      requestId,
+      success,
+    };
+    if (error) msg.error = error;
+    this.broadcast(msg);
+  }
+
+  sendSettingsSnapshot(requestId: string, settings: Record<string, unknown>, scope: "global" | "project", installedPlugins?: Record<string, unknown>) {
+    const msg: Record<string, any> = {
+      type: "settings_snapshot",
+      machineId: this.machineId,
+      requestId,
+      settings,
+      scope,
+    };
+    if (installedPlugins) msg.installedPlugins = installedPlugins;
+    this.broadcast(msg);
+  }
+
+  sendSettingsResult(requestId: string, success: boolean, error?: string) {
+    const msg: Record<string, any> = {
+      type: "settings_result",
+      machineId: this.machineId,
+      requestId,
+      success,
     };
     if (error) msg.error = error;
     this.broadcast(msg);

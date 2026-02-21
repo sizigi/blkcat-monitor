@@ -10,6 +10,7 @@ import type { SessionInfo } from "@blkcat/shared";
 import type { AgentHookEventMessage } from "@blkcat/shared";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
+import { readSettings, writeSettings, deploySkills, readInstalledPlugins } from "./settings-handler";
 
 async function main() {
   const config = await loadConfig();
@@ -127,6 +128,49 @@ async function main() {
     }
   }
 
+  async function handleDeploySkills(requestId: string, skills: { name: string; files: { path: string; content: string }[] }[]) {
+    try {
+      const home = process.env.HOME ?? "/root";
+      await deploySkills({
+        cacheDir: resolve(home, ".claude/plugins/cache"),
+        pluginsPath: resolve(home, ".claude/plugins/installed_plugins.json"),
+        skills,
+      });
+      conn.sendDeployResult(requestId, true);
+      console.log(`Deployed ${skills.length} skill(s): ${skills.map(s => s.name).join(", ")}`);
+    } catch (err: any) {
+      conn.sendDeployResult(requestId, false, err?.message ?? "Unknown error");
+    }
+  }
+
+  async function handleGetSettings(requestId: string, scope: "global" | "project", projectPath?: string) {
+    try {
+      const home = process.env.HOME ?? "/root";
+      const settingsPath = scope === "global"
+        ? resolve(home, ".claude/settings.json")
+        : resolve(projectPath ?? ".", ".claude/settings.json");
+      const { settings } = await readSettings(settingsPath);
+      const installedPlugins = await readInstalledPlugins(resolve(home, ".claude/plugins/installed_plugins.json"));
+      conn.sendSettingsSnapshot(requestId, settings, scope, installedPlugins);
+    } catch (err: any) {
+      conn.sendSettingsSnapshot(requestId, {}, scope);
+    }
+  }
+
+  async function handleUpdateSettings(requestId: string, scope: "global" | "project", settings: Record<string, unknown>, projectPath?: string) {
+    try {
+      const home = process.env.HOME ?? "/root";
+      const settingsPath = scope === "global"
+        ? resolve(home, ".claude/settings.json")
+        : resolve(projectPath ?? ".", ".claude/settings.json");
+      await writeSettings(settingsPath, settings);
+      conn.sendSettingsResult(requestId, true);
+      console.log(`Updated ${scope} settings`);
+    } catch (err: any) {
+      conn.sendSettingsResult(requestId, false, err?.message ?? "Unknown error");
+    }
+  }
+
   let conn: {
     register(sessions: SessionInfo[]): void;
     sendOutput(sessionId: string, lines: string[], waitingForInput?: boolean): void;
@@ -134,6 +178,9 @@ async function main() {
     sendScrollback(sessionId: string, lines: string[]): void;
     sendHookEvent(event: AgentHookEventMessage): void;
     sendDirectoryListing(machineId: string, requestId: string, path: string, entries: { name: string; isDir: boolean }[], error?: string): void;
+    sendDeployResult(requestId: string, success: boolean, error?: string): void;
+    sendSettingsSnapshot(requestId: string, settings: Record<string, unknown>, scope: "global" | "project", installedPlugins?: Record<string, unknown>): void;
+    sendSettingsResult(requestId: string, success: boolean, error?: string): void;
     close(): void;
   };
 
@@ -148,6 +195,9 @@ async function main() {
       onRequestScrollback: handleRequestScrollback,
       onReloadSession: handleReloadSession,
       onListDirectory: handleListDirectory,
+      onDeploySkills: handleDeploySkills,
+      onGetSettings: handleGetSettings,
+      onUpdateSettings: handleUpdateSettings,
     });
     // When a new server connects, clear prevLines so the next poll cycle
     // re-sends the current pane content for all sessions.
@@ -166,6 +216,9 @@ async function main() {
       onRequestScrollback: handleRequestScrollback,
       onReloadSession: handleReloadSession,
       onListDirectory: handleListDirectory,
+      onDeploySkills: handleDeploySkills,
+      onGetSettings: handleGetSettings,
+      onUpdateSettings: handleUpdateSettings,
     });
     conn = connection;
     await connection.waitForOpen();
