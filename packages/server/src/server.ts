@@ -132,6 +132,8 @@ export function createServer(opts: ServerOptions) {
           },
         });
       }
+    } else if (msg.type === "directory_listing") {
+      broadcastToDashboards(msg);
     }
   }
 
@@ -371,6 +373,15 @@ export function createServer(opts: ServerOptions) {
               machine.agent.send(JSON.stringify({
                 type: "reload_session",
                 sessionId: msg.sessionId,
+              }));
+            }
+          } else if (msg.type === "list_directory") {
+            const machine = machines.get(msg.machineId);
+            if (machine) {
+              machine.agent.send(JSON.stringify({
+                type: "list_directory",
+                requestId: msg.requestId,
+                path: msg.path,
               }));
             }
           }
