@@ -103,7 +103,7 @@ describe("StartSessionModal", () => {
     // Click Start
     fireEvent.click(screen.getByText("Start"));
 
-    expect(onStart).toHaveBeenCalledWith("m1", "--resume", "~");
+    expect(onStart).toHaveBeenCalledWith("m1", "--resume", "~", undefined);
   });
 
   it("calls onClose when backdrop clicked", () => {

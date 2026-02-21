@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback } from "react";
 interface StartSessionModalProps {
   machineId: string;
   machineName: string;
-  onStart: (machineId: string, args?: string, cwd?: string) => void;
+  onStart: (machineId: string, args?: string, cwd?: string, name?: string) => void;
   onClose: () => void;
   listDirectory: (
     machineId: string,
@@ -27,7 +27,9 @@ export function StartSessionModal({
   onClose,
   listDirectory,
 }: StartSessionModalProps) {
+  const [sessionName, setSessionName] = useState("");
   const [currentPath, setCurrentPath] = useState("~");
+  const [pathInput, setPathInput] = useState("~");
   const [entries, setEntries] = useState<{ name: string; isDir: boolean }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -47,6 +49,7 @@ export function StartSessionModal({
           setEntries(result.entries);
         }
         setCurrentPath(result.path);
+        setPathInput(result.path);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to list directory");
         setEntries([]);
@@ -97,7 +100,8 @@ export function StartSessionModal({
       parts.push(trimmed);
     }
     const combinedArgs = parts.length > 0 ? parts.join(" ") : undefined;
-    onStart(machineId, combinedArgs, currentPath);
+    const finalName = sessionName.trim() || undefined;
+    onStart(machineId, combinedArgs, currentPath, finalName);
     onClose();
   }
 
@@ -160,6 +164,37 @@ export function StartSessionModal({
 
         {/* Body */}
         <div style={{ padding: 20, overflowY: "auto", display: "flex", flexDirection: "column", gap: 16 }}>
+          {/* Session Name */}
+          <div>
+            <label
+              style={{
+                display: "block",
+                fontSize: 13,
+                fontWeight: 600,
+                color: "var(--text)",
+                marginBottom: 8,
+              }}
+            >
+              Session Name
+            </label>
+            <input
+              type="text"
+              value={sessionName}
+              onChange={(e) => setSessionName(e.target.value)}
+              placeholder="e.g. my-project"
+              style={{
+                width: "100%",
+                padding: "8px 12px",
+                fontSize: 13,
+                background: "var(--bg)",
+                color: "var(--text)",
+                border: "1px solid var(--border)",
+                borderRadius: 6,
+                boxSizing: "border-box",
+              }}
+            />
+          </div>
+
           {/* Working Directory */}
           <div>
             <label
@@ -186,24 +221,51 @@ export function StartSessionModal({
                 style={{
                   display: "flex",
                   alignItems: "center",
-                  padding: "8px 12px",
+                  padding: "4px 8px",
                   borderBottom: "1px solid var(--border)",
-                  gap: 8,
+                  gap: 4,
                 }}
               >
-                <span
+                <input
+                  type="text"
+                  value={pathInput}
+                  onChange={(e) => setPathInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      const trimmed = pathInput.trim();
+                      if (trimmed) loadDirectory(trimmed);
+                    }
+                  }}
                   style={{
                     flex: 1,
                     fontSize: 13,
                     fontFamily: "monospace",
                     color: "var(--text)",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
+                    background: "transparent",
+                    border: "none",
+                    outline: "none",
+                    padding: "4px",
+                  }}
+                />
+                <button
+                  onClick={() => {
+                    const trimmed = pathInput.trim();
+                    if (trimmed) loadDirectory(trimmed);
+                  }}
+                  title="Go to path"
+                  style={{
+                    background: "var(--bg-tertiary)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 4,
+                    color: "var(--text-muted)",
+                    cursor: "pointer",
+                    fontSize: 12,
+                    lineHeight: 1,
+                    padding: "2px 8px",
                   }}
                 >
-                  {currentPath}
-                </span>
+                  Go
+                </button>
                 <button
                   onClick={handleGoUp}
                   title="Go to parent directory"

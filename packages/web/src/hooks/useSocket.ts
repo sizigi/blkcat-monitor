@@ -62,7 +62,7 @@ export interface UseSocketReturn {
   subscribeOutput: (cb: (key: string) => void) => () => void;
   subscribeScrollback: (cb: (key: string) => void) => () => void;
   sendInput: (machineId: string, sessionId: string, opts: { text?: string; key?: string; data?: string }) => void;
-  startSession: (machineId: string, args?: string, cwd?: string) => void;
+  startSession: (machineId: string, args?: string, cwd?: string, name?: string) => void;
   closeSession: (machineId: string, sessionId: string) => void;
   reloadSession: (machineId: string, sessionId: string) => void;
   sendResize: (machineId: string, sessionId: string, cols: number, rows: number) => void;
@@ -262,12 +262,13 @@ export function useSocket(url: string): UseSocketReturn {
   );
 
   const startSession = useCallback(
-    (machineId: string, args?: string, cwd?: string) => {
+    (machineId: string, args?: string, cwd?: string, name?: string) => {
       const ws = wsRef.current;
       if (ws && ws.readyState === WebSocket.OPEN) {
         const msg: Record<string, any> = { type: "start_session", machineId };
         if (args) msg.args = args;
         if (cwd) msg.cwd = cwd;
+        if (name) msg.name = name;
         ws.send(JSON.stringify(msg));
       }
     },
@@ -320,7 +321,7 @@ export function useSocket(url: string): UseSocketReturn {
       if (!ws || ws.readyState !== WebSocket.OPEN) {
         return Promise.resolve({ path, entries: [], error: "Not connected" });
       }
-      const requestId = crypto.randomUUID();
+      const requestId = Math.random().toString(36).slice(2) + Date.now().toString(36);
       return new Promise((resolve) => {
         const timeout = setTimeout(() => {
           directoryListingSubsRef.current.delete(requestId);

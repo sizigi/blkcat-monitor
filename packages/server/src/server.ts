@@ -339,6 +339,7 @@ export function createServer(opts: ServerOptions) {
               const fwd: Record<string, any> = { type: "start_session" };
               if (msg.args) fwd.args = msg.args;
               if (msg.cwd) fwd.cwd = msg.cwd;
+              if (msg.name) fwd.name = msg.name;
               machine.agent.send(JSON.stringify(fwd));
             }
           } else if (msg.type === "close_session") {

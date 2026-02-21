@@ -9,7 +9,7 @@ interface SidebarProps {
   selectedMachine?: string;
   selectedSession?: string;
   onSelectSession: (machineId: string, sessionId: string) => void;
-  onStartSession?: (machineId: string, args?: string, cwd?: string) => void;
+  onStartSession?: (machineId: string, args?: string, cwd?: string, name?: string) => void;
   onCloseSession?: (machineId: string, sessionId: string) => void;
   onReloadSession?: (machineId: string, sessionId: string) => void;
   getMachineName?: (machineId: string) => string;
@@ -346,8 +346,8 @@ export function Sidebar({
         <StartSessionModal
           machineId={modalMachineId}
           machineName={getMachineName ? getMachineName(modalMachineId) : modalMachineId}
-          onStart={(mid, args, cwd) => {
-            onStartSession(mid, args, cwd);
+          onStart={(mid, args, cwd, name) => {
+            onStartSession(mid, args, cwd, name);
             setModalMachineId(null);
           }}
           onClose={() => setModalMachineId(null)}

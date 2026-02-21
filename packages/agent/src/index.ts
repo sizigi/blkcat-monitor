@@ -97,7 +97,7 @@ async function main() {
     console.log(`Reloaded session: ${sessionId}`);
   }
 
-  function handleStartSession(args?: string, cwd?: string) {
+  function handleStartSession(args?: string, cwd?: string, name?: string) {
     const localCap = new TmuxCapture(bunExec);
     const paneId = localCap.startSession(args, cwd);
     if (!paneId) {
@@ -105,7 +105,8 @@ async function main() {
       return;
     }
     captures.set(paneId, localCap);
-    const session: SessionInfo = { id: paneId, name: `claude${args ? ` ${args}` : ""}`, target: "local", args: args || undefined };
+    const sessionName = name || `claude${args ? ` ${args}` : ""}`;
+    const session: SessionInfo = { id: paneId, name: sessionName, target: "local", args: args || undefined };
     manualSessions.push(session);
     const all = [...autoSessions, ...manualSessions];
     conn.updateSessions(all);

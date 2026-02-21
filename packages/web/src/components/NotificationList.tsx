@@ -129,6 +129,8 @@ export function NotificationList({
               borderBottom: "1px solid var(--border)",
               cursor: event.sessionId ? "pointer" : "default",
             }}
+            onMouseEnter={(e) => { if (event.sessionId) (e.currentTarget as HTMLElement).style.background = "var(--bg-tertiary)"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = ""; }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <span style={{ color: "var(--text-muted)", fontSize: 10, flexShrink: 0 }}>

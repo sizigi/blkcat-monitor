@@ -4,7 +4,7 @@ interface AgentConnectionOptions {
   serverUrl: string;
   machineId: string;
   onInput: (msg: { sessionId: string; text?: string; key?: string; data?: string }) => void;
-  onStartSession?: (args?: string, cwd?: string) => void;
+  onStartSession?: (args?: string, cwd?: string, name?: string) => void;
   onCloseSession?: (sessionId: string) => void;
   onResize?: (sessionId: string, cols: number, rows: number) => void;
   onRequestScrollback?: (sessionId: string) => void;
@@ -37,7 +37,7 @@ export class AgentConnection {
         if (msg.type === "input") {
           opts.onInput({ sessionId: msg.sessionId, text: msg.text, key: msg.key, data: msg.data });
         } else if (msg.type === "start_session") {
-          opts.onStartSession?.(msg.args, msg.cwd);
+          opts.onStartSession?.(msg.args, msg.cwd, msg.name);
         } else if (msg.type === "close_session") {
           opts.onCloseSession?.(msg.sessionId);
         } else if (msg.type === "resize") {

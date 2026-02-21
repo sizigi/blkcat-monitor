@@ -86,6 +86,7 @@ export interface ServerStartSessionMessage {
   type: "start_session";
   args?: string;
   cwd?: string;
+  name?: string;
 }
 
 export interface ServerCloseSessionMessage {
@@ -191,6 +192,7 @@ export interface DashboardStartSessionMessage {
   machineId: string;
   args?: string;
   cwd?: string;
+  name?: string;
 }
 
 export interface DashboardCloseSessionMessage {
