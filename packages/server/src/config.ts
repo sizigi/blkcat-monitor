@@ -32,7 +32,7 @@ export async function loadServerConfig(): Promise<ServerConfig> {
     agents: env("BLKCAT_AGENTS")
       ? env("BLKCAT_AGENTS")!.split(",").map((s) => s.trim()).filter(Boolean)
       : strArray(file.agents),
-    skillsDir: env("BLKCAT_SKILLS_DIR") ?? str(file.skillsDir),
+    skillsDir: env("BLKCAT_SKILLS_DIR") ?? str(file.skillsDir) ?? new URL("../../../skills", import.meta.url).pathname,
     notifyCommand: env("BLKCAT_NOTIFY_CMD") ?? str(file.notifyCommand),
     notifyEnv: strRecord(file.notifyEnv),
   };
