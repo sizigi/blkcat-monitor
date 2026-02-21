@@ -96,6 +96,7 @@ interface Skill {
 interface DeploySkillsOptions {
   cacheDir: string;
   pluginsPath: string;
+  settingsPath: string;
   skills: Skill[];
 }
 
@@ -137,18 +138,37 @@ export async function deploySkills(opts: DeploySkillsOptions): Promise<void> {
       await Bun.write(filePath, file.content);
     }
 
-    // Update or create plugin entry
-    const existing = manifest.plugins[skill.name];
-    manifest.plugins[skill.name] = {
+    // Update or create plugin entry (Claude Code expects an array)
+    const existingArr = Array.isArray(manifest.plugins[skill.name])
+      ? manifest.plugins[skill.name]
+      : manifest.plugins[skill.name] ? [manifest.plugins[skill.name]] : [];
+    const existingEntry = existingArr[0];
+    manifest.plugins[skill.name] = [{
       scope: "user",
       installPath: skillDir,
       version: "deployed",
-      installedAt: existing?.installedAt ?? now,
+      installedAt: existingEntry?.installedAt ?? now,
       lastUpdated: now,
-    };
+    }];
   }
 
   // Write updated manifest
   await mkdir(dirname(pluginsPath), { recursive: true });
   await Bun.write(pluginsPath, JSON.stringify(manifest, null, 2));
+
+  // Auto-enable deployed skills in settings.json
+  if (opts.settingsPath) {
+    const { settings } = await readSettings(opts.settingsPath);
+    const enabledPlugins = (settings.enabledPlugins as Record<string, boolean>) ?? {};
+    let changed = false;
+    for (const skill of skills) {
+      if (!enabledPlugins[skill.name]) {
+        enabledPlugins[skill.name] = true;
+        changed = true;
+      }
+    }
+    if (changed) {
+      await writeSettings(opts.settingsPath, { enabledPlugins });
+    }
+  }
 }

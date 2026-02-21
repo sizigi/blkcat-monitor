@@ -134,6 +134,7 @@ async function main() {
       await deploySkills({
         cacheDir: resolve(home, ".claude/plugins/cache"),
         pluginsPath: resolve(home, ".claude/plugins/installed_plugins.json"),
+        settingsPath: resolve(home, ".claude/settings.json"),
         skills,
       });
       conn.sendDeployResult(requestId, true);
