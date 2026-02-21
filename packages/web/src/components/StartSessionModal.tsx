@@ -1,0 +1,376 @@
+import React, { useState, useEffect, useCallback } from "react";
+
+interface StartSessionModalProps {
+  machineId: string;
+  machineName: string;
+  onStart: (machineId: string, args?: string, cwd?: string) => void;
+  onClose: () => void;
+  listDirectory: (
+    machineId: string,
+    path: string,
+  ) => Promise<{
+    path: string;
+    entries: { name: string; isDir: boolean }[];
+    error?: string;
+  }>;
+}
+
+const FLAG_OPTIONS = [
+  { flag: "--resume", color: "var(--accent)" },
+  { flag: "--dangerously-skip-permissions", color: "var(--red)" },
+] as const;
+
+export function StartSessionModal({
+  machineId,
+  machineName,
+  onStart,
+  onClose,
+  listDirectory,
+}: StartSessionModalProps) {
+  const [currentPath, setCurrentPath] = useState("~");
+  const [entries, setEntries] = useState<{ name: string; isDir: boolean }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedFlags, setSelectedFlags] = useState<Set<string>>(new Set());
+  const [extraArgs, setExtraArgs] = useState("");
+
+  const loadDirectory = useCallback(
+    async (path: string) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await listDirectory(machineId, path);
+        if (result.error) {
+          setError(result.error);
+          setEntries([]);
+        } else {
+          setEntries(result.entries);
+        }
+        setCurrentPath(result.path);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to list directory");
+        setEntries([]);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [machineId, listDirectory],
+  );
+
+  useEffect(() => {
+    loadDirectory("~");
+  }, [loadDirectory]);
+
+  function handleNavigate(folderName: string) {
+    const newPath =
+      currentPath === "/" ? `/${folderName}` : `${currentPath}/${folderName}`;
+    loadDirectory(newPath);
+  }
+
+  function handleGoUp() {
+    if (currentPath === "/" || currentPath === "~") return;
+    const parent = currentPath.replace(/\/[^/]+$/, "") || "/";
+    loadDirectory(parent);
+  }
+
+  function toggleFlag(flag: string) {
+    setSelectedFlags((prev) => {
+      const next = new Set(prev);
+      if (next.has(flag)) {
+        next.delete(flag);
+      } else {
+        next.add(flag);
+      }
+      return next;
+    });
+  }
+
+  function handleStart() {
+    const parts: string[] = [];
+    for (const { flag } of FLAG_OPTIONS) {
+      if (selectedFlags.has(flag)) {
+        parts.push(flag);
+      }
+    }
+    const trimmed = extraArgs.trim();
+    if (trimmed) {
+      parts.push(trimmed);
+    }
+    const combinedArgs = parts.length > 0 ? parts.join(" ") : undefined;
+    onStart(machineId, combinedArgs, currentPath);
+    onClose();
+  }
+
+  return (
+    <div
+      data-testid="modal-backdrop"
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0, 0, 0, 0.6)",
+        zIndex: 100,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: "var(--bg-secondary)",
+          borderRadius: 8,
+          width: 480,
+          maxHeight: "80vh",
+          display: "flex",
+          flexDirection: "column",
+          zIndex: 101,
+          overflow: "hidden",
+        }}
+      >
+        {/* Header */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "16px 20px",
+            borderBottom: "1px solid var(--border)",
+          }}
+        >
+          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: "var(--text)" }}>
+            Start Session on {machineName}
+          </h2>
+          <button
+            data-testid="modal-close"
+            onClick={onClose}
+            style={{
+              background: "none",
+              border: "none",
+              color: "var(--text-muted)",
+              cursor: "pointer",
+              fontSize: 18,
+              lineHeight: 1,
+              padding: "2px 6px",
+            }}
+          >
+            {"\u00d7"}
+          </button>
+        </div>
+
+        {/* Body */}
+        <div style={{ padding: 20, overflowY: "auto", display: "flex", flexDirection: "column", gap: 16 }}>
+          {/* Working Directory */}
+          <div>
+            <label
+              style={{
+                display: "block",
+                fontSize: 13,
+                fontWeight: 600,
+                color: "var(--text)",
+                marginBottom: 8,
+              }}
+            >
+              Working Directory
+            </label>
+            <div
+              style={{
+                border: "1px solid var(--border)",
+                borderRadius: 6,
+                overflow: "hidden",
+                background: "var(--bg)",
+              }}
+            >
+              {/* Current path bar */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  padding: "8px 12px",
+                  borderBottom: "1px solid var(--border)",
+                  gap: 8,
+                }}
+              >
+                <span
+                  style={{
+                    flex: 1,
+                    fontSize: 13,
+                    fontFamily: "monospace",
+                    color: "var(--text)",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {currentPath}
+                </span>
+                <button
+                  onClick={handleGoUp}
+                  title="Go to parent directory"
+                  style={{
+                    background: "var(--bg-tertiary)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 4,
+                    color: "var(--text-muted)",
+                    cursor: "pointer",
+                    fontSize: 14,
+                    lineHeight: 1,
+                    padding: "2px 8px",
+                  }}
+                >
+                  {"\u2191"}
+                </button>
+              </div>
+
+              {/* Directory listing */}
+              <div style={{ maxHeight: 200, overflowY: "auto" }}>
+                {loading && (
+                  <div style={{ padding: "12px 12px", color: "var(--text-muted)", fontSize: 13 }}>
+                    Loading...
+                  </div>
+                )}
+                {error && (
+                  <div style={{ padding: "12px 12px", color: "var(--red)", fontSize: 13 }}>
+                    {error}
+                  </div>
+                )}
+                {!loading && !error && entries.length === 0 && (
+                  <div style={{ padding: "12px 12px", color: "var(--text-muted)", fontSize: 13 }}>
+                    Empty directory
+                  </div>
+                )}
+                {!loading &&
+                  !error &&
+                  entries.map((entry) => (
+                    <div
+                      key={entry.name}
+                      onClick={entry.isDir ? () => handleNavigate(entry.name) : undefined}
+                      style={{
+                        padding: "6px 12px",
+                        fontSize: 13,
+                        cursor: entry.isDir ? "pointer" : "default",
+                        color: entry.isDir ? "var(--text)" : "var(--text-muted)",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                      onMouseEnter={(e) => {
+                        if (entry.isDir) {
+                          (e.currentTarget as HTMLElement).style.background = "var(--bg-tertiary)";
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        (e.currentTarget as HTMLElement).style.background = "transparent";
+                      }}
+                    >
+                      <span style={{ fontSize: 14 }}>{entry.isDir ? "\uD83D\uDCC1" : "\uD83D\uDCC4"}</span>
+                      <span>{entry.name}</span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Flags */}
+          <div>
+            <label
+              style={{
+                display: "block",
+                fontSize: 13,
+                fontWeight: 600,
+                color: "var(--text)",
+                marginBottom: 8,
+              }}
+            >
+              Flags
+            </label>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {FLAG_OPTIONS.map(({ flag, color }) => {
+                const isSelected = selectedFlags.has(flag);
+                return (
+                  <button
+                    key={flag}
+                    type="button"
+                    onClick={() => toggleFlag(flag)}
+                    style={{
+                      background: isSelected ? color : "transparent",
+                      color: isSelected ? "#fff" : "var(--text-muted)",
+                      border: isSelected ? `1px solid ${color}` : "1px solid var(--border)",
+                      borderRadius: 16,
+                      padding: "4px 12px",
+                      fontSize: 12,
+                      fontFamily: "monospace",
+                      cursor: "pointer",
+                      lineHeight: 1.4,
+                    }}
+                  >
+                    {flag}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Additional args */}
+          <div>
+            <label
+              style={{
+                display: "block",
+                fontSize: 13,
+                fontWeight: 600,
+                color: "var(--text)",
+                marginBottom: 8,
+              }}
+            >
+              Additional args
+            </label>
+            <input
+              type="text"
+              value={extraArgs}
+              onChange={(e) => setExtraArgs(e.target.value)}
+              placeholder="e.g. --model sonnet"
+              style={{
+                width: "100%",
+                padding: "8px 12px",
+                fontSize: 13,
+                fontFamily: "monospace",
+                background: "var(--bg)",
+                color: "var(--text)",
+                border: "1px solid var(--border)",
+                borderRadius: 6,
+                boxSizing: "border-box",
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div
+          style={{
+            padding: "12px 20px",
+            borderTop: "1px solid var(--border)",
+            display: "flex",
+            justifyContent: "flex-end",
+          }}
+        >
+          <button
+            type="button"
+            onClick={handleStart}
+            style={{
+              background: "var(--accent)",
+              color: "#fff",
+              border: "none",
+              borderRadius: 6,
+              padding: "8px 24px",
+              fontSize: 14,
+              cursor: "pointer",
+              fontWeight: 600,
+            }}
+          >
+            Start
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

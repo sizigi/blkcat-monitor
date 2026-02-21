@@ -1,0 +1,138 @@
+import { describe, it, expect, vi } from "vitest";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { StartSessionModal } from "./StartSessionModal";
+
+const mockListDir = vi.fn().mockResolvedValue({
+  path: "/home/user",
+  entries: [
+    { name: "projects", isDir: true },
+    { name: "docs", isDir: true },
+    { name: ".bashrc", isDir: false },
+  ],
+});
+
+describe("StartSessionModal", () => {
+  it("renders modal with machine name", () => {
+    render(
+      <StartSessionModal
+        machineId="m1"
+        machineName="My Machine"
+        onStart={vi.fn()}
+        onClose={vi.fn()}
+        listDirectory={mockListDir}
+      />,
+    );
+    expect(screen.getByText(/My Machine/)).toBeInTheDocument();
+  });
+
+  it("loads directory listing on mount", async () => {
+    render(
+      <StartSessionModal
+        machineId="m1"
+        machineName="My Machine"
+        onStart={vi.fn()}
+        onClose={vi.fn()}
+        listDirectory={mockListDir}
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getByText("projects")).toBeInTheDocument();
+    });
+  });
+
+  it("navigates into a folder on click", async () => {
+    const listDir = vi.fn()
+      .mockResolvedValueOnce({
+        path: "~",
+        entries: [{ name: "projects", isDir: true }],
+      })
+      .mockResolvedValueOnce({
+        path: "/home/user/projects",
+        entries: [{ name: "myapp", isDir: true }],
+      });
+
+    render(
+      <StartSessionModal
+        machineId="m1"
+        machineName="m1"
+        onStart={vi.fn()}
+        onClose={vi.fn()}
+        listDirectory={listDir}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("projects")).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByText("projects"));
+    await waitFor(() => {
+      expect(screen.getByText("myapp")).toBeInTheDocument();
+    });
+  });
+
+  it("toggles flag chips", async () => {
+    render(
+      <StartSessionModal
+        machineId="m1"
+        machineName="m1"
+        onStart={vi.fn()}
+        onClose={vi.fn()}
+        listDirectory={mockListDir}
+      />,
+    );
+    const chip = screen.getByText("--resume");
+    fireEvent.click(chip);
+    // After clicking, the chip should have accent background (selected state)
+    expect(chip.style.background).toContain("var(--accent)");
+  });
+
+  it("calls onStart with combined args", async () => {
+    const onStart = vi.fn();
+    render(
+      <StartSessionModal
+        machineId="m1"
+        machineName="m1"
+        onStart={onStart}
+        onClose={vi.fn()}
+        listDirectory={mockListDir}
+      />,
+    );
+
+    // Toggle --resume
+    fireEvent.click(screen.getByText("--resume"));
+    // Click Start
+    fireEvent.click(screen.getByText("Start"));
+
+    expect(onStart).toHaveBeenCalledWith("m1", "--resume", "~");
+  });
+
+  it("calls onClose when backdrop clicked", () => {
+    const onClose = vi.fn();
+    render(
+      <StartSessionModal
+        machineId="m1"
+        machineName="m1"
+        onStart={vi.fn()}
+        onClose={onClose}
+        listDirectory={mockListDir}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("modal-backdrop"));
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("calls onClose when X button clicked", () => {
+    const onClose = vi.fn();
+    render(
+      <StartSessionModal
+        machineId="m1"
+        machineName="m1"
+        onStart={vi.fn()}
+        onClose={onClose}
+        listDirectory={mockListDir}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("modal-close"));
+    expect(onClose).toHaveBeenCalled();
+  });
+});
