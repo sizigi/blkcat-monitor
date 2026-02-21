@@ -73,6 +73,13 @@ export interface UseSocketReturn {
   notificationCounts: Map<string, number>;
   clearNotifications: (sessionKey: string) => void;
   listDirectory: (machineId: string, path: string) => Promise<{ path: string; entries: { name: string; isDir: boolean }[]; error?: string }>;
+  sendRaw: (msg: object) => void;
+  deploySkills: (machineId: string, skills: { name: string; files: { path: string; content: string }[] }[]) => string;
+  getSettings: (machineId: string, scope: "global" | "project", projectPath?: string) => string;
+  updateSettings: (machineId: string, scope: "global" | "project", settings: Record<string, unknown>, projectPath?: string) => string;
+  subscribeDeployResult: (cb: (msg: any) => void) => () => void;
+  subscribeSettingsSnapshot: (cb: (msg: any) => void) => () => void;
+  subscribeSettingsResult: (cb: (msg: any) => void) => () => void;
 }
 
 export function useSocket(url: string): UseSocketReturn {
@@ -102,6 +109,10 @@ export function useSocket(url: string): UseSocketReturn {
 
   const directoryListingSubsRef = useRef(new Map<string, (msg: { path: string; entries: { name: string; isDir: boolean }[]; error?: string }) => void>());
 
+  const deployResultSubsRef = useRef(new Set<(msg: any) => void>());
+  const settingsSnapshotSubsRef = useRef(new Set<(msg: any) => void>());
+  const settingsResultSubsRef = useRef(new Set<(msg: any) => void>());
+
   const [notificationCounts, setNotificationCounts] = useState<Map<string, number>>(new Map());
 
   const clearNotifications = useCallback((sessionKey: string) => {
@@ -126,6 +137,21 @@ export function useSocket(url: string): UseSocketReturn {
   const subscribeScrollback = useCallback((cb: (key: string) => void) => {
     scrollbackSubsRef.current.add(cb);
     return () => { scrollbackSubsRef.current.delete(cb); };
+  }, []);
+
+  const subscribeDeployResult = useCallback((cb: (msg: any) => void) => {
+    deployResultSubsRef.current.add(cb);
+    return () => { deployResultSubsRef.current.delete(cb); };
+  }, []);
+
+  const subscribeSettingsSnapshot = useCallback((cb: (msg: any) => void) => {
+    settingsSnapshotSubsRef.current.add(cb);
+    return () => { settingsSnapshotSubsRef.current.delete(cb); };
+  }, []);
+
+  const subscribeSettingsResult = useCallback((cb: (msg: any) => void) => {
+    settingsResultSubsRef.current.add(cb);
+    return () => { settingsResultSubsRef.current.delete(cb); };
   }, []);
 
   useEffect(() => {
@@ -268,6 +294,12 @@ export function useSocket(url: string): UseSocketReturn {
             directoryListingSubsRef.current.delete(msg.requestId);
             cb({ path: msg.path, entries: (msg as any).entries ?? [], error: (msg as any).error });
           }
+        } else if (msg.type === "deploy_result") {
+          for (const sub of deployResultSubsRef.current) sub(msg);
+        } else if (msg.type === "settings_snapshot") {
+          for (const sub of settingsSnapshotSubsRef.current) sub(msg);
+        } else if (msg.type === "settings_result") {
+          for (const sub of settingsResultSubsRef.current) sub(msg);
         }
       } catch {}
     });
@@ -373,5 +405,34 @@ export function useSocket(url: string): UseSocketReturn {
     [],
   );
 
-  return { connected, machines, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory };
+  const sendRaw = useCallback((msg: object) => {
+    const ws = wsRef.current;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(msg));
+    }
+  }, []);
+
+  const deploySkills = useCallback((machineId: string, skills: { name: string; files: { path: string; content: string }[] }[]) => {
+    const requestId = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    sendRaw({ type: "deploy_skills", machineId, requestId, skills });
+    return requestId;
+  }, [sendRaw]);
+
+  const getSettings = useCallback((machineId: string, scope: "global" | "project", projectPath?: string) => {
+    const requestId = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    const msg: Record<string, any> = { type: "get_settings", machineId, requestId, scope };
+    if (projectPath) msg.projectPath = projectPath;
+    sendRaw(msg);
+    return requestId;
+  }, [sendRaw]);
+
+  const updateSettings = useCallback((machineId: string, scope: "global" | "project", settings: Record<string, unknown>, projectPath?: string) => {
+    const requestId = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    const msg: Record<string, any> = { type: "update_settings", machineId, requestId, scope, settings };
+    if (projectPath) msg.projectPath = projectPath;
+    sendRaw(msg);
+    return requestId;
+  }, [sendRaw]);
+
+  return { connected, machines, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory, sendRaw, deploySkills, getSettings, updateSettings, subscribeDeployResult, subscribeSettingsSnapshot, subscribeSettingsResult };
 }

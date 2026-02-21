@@ -9,6 +9,7 @@ const server = createServer({
   port: config.port,
   hostname: config.hostname,
   staticDir: config.staticDir,
+  skillsDir: config.skillsDir,
   agents: config.agents,
   onAgentsSaved: (addresses) => { saveAgents(addresses); },
   notifyCommand: config.notifyCommand,

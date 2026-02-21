@@ -83,6 +83,77 @@ describe("parseAgentMessage", () => {
     expect(msg?.type).toBe("directory_listing");
   });
 
+  it("parses deploy_result message", () => {
+    const msg = parseAgentMessage(JSON.stringify({
+      type: "deploy_result",
+      machineId: "m1",
+      requestId: "req-1",
+      success: true,
+    }));
+    expect(msg?.type).toBe("deploy_result");
+  });
+
+  it("parses deploy_result with error", () => {
+    const msg = parseAgentMessage(JSON.stringify({
+      type: "deploy_result",
+      machineId: "m1",
+      requestId: "req-1",
+      success: false,
+      error: "permission denied",
+    }));
+    expect(msg?.type).toBe("deploy_result");
+    expect((msg as any).success).toBe(false);
+    expect((msg as any).error).toBe("permission denied");
+  });
+
+  it("parses settings_snapshot message", () => {
+    const msg = parseAgentMessage(JSON.stringify({
+      type: "settings_snapshot",
+      machineId: "m1",
+      requestId: "req-2",
+      settings: { theme: "dark" },
+      scope: "global",
+    }));
+    expect(msg?.type).toBe("settings_snapshot");
+    expect((msg as any).scope).toBe("global");
+  });
+
+  it("parses settings_snapshot with installedPlugins", () => {
+    const msg = parseAgentMessage(JSON.stringify({
+      type: "settings_snapshot",
+      machineId: "m1",
+      requestId: "req-2",
+      settings: { theme: "dark" },
+      scope: "project",
+      installedPlugins: { myPlugin: { version: "1.0" } },
+    }));
+    expect(msg?.type).toBe("settings_snapshot");
+    expect((msg as any).installedPlugins).toEqual({ myPlugin: { version: "1.0" } });
+  });
+
+  it("parses settings_result message", () => {
+    const msg = parseAgentMessage(JSON.stringify({
+      type: "settings_result",
+      machineId: "m1",
+      requestId: "req-3",
+      success: true,
+    }));
+    expect(msg?.type).toBe("settings_result");
+  });
+
+  it("parses settings_result with error", () => {
+    const msg = parseAgentMessage(JSON.stringify({
+      type: "settings_result",
+      machineId: "m1",
+      requestId: "req-3",
+      success: false,
+      error: "invalid settings",
+    }));
+    expect(msg?.type).toBe("settings_result");
+    expect((msg as any).success).toBe(false);
+    expect((msg as any).error).toBe("invalid settings");
+  });
+
   it("returns null for unknown type", () => {
     expect(parseAgentMessage(JSON.stringify({ type: "unknown" }))).toBeNull();
   });
@@ -133,5 +204,83 @@ describe("parseDashboardMessage", () => {
       path: "/home/user",
     }));
     expect(msg?.type).toBe("list_directory");
+  });
+
+  it("parses deploy_skills message", () => {
+    const msg = parseDashboardMessage(JSON.stringify({
+      type: "deploy_skills",
+      machineId: "m1",
+      requestId: "req-1",
+      skills: [
+        { name: "my-skill", files: [{ path: "/tmp/skill.ts", content: "console.log('hi')" }] },
+      ],
+    }));
+    expect(msg?.type).toBe("deploy_skills");
+    expect((msg as any).skills).toHaveLength(1);
+    expect((msg as any).skills[0].name).toBe("my-skill");
+  });
+
+  it("parses deploy_skills with multiple skills", () => {
+    const msg = parseDashboardMessage(JSON.stringify({
+      type: "deploy_skills",
+      machineId: "m1",
+      requestId: "req-1",
+      skills: [
+        { name: "skill-a", files: [{ path: "a.ts", content: "a" }] },
+        { name: "skill-b", files: [{ path: "b.ts", content: "b" }, { path: "c.ts", content: "c" }] },
+      ],
+    }));
+    expect(msg?.type).toBe("deploy_skills");
+    expect((msg as any).skills).toHaveLength(2);
+  });
+
+  it("parses get_settings message with global scope", () => {
+    const msg = parseDashboardMessage(JSON.stringify({
+      type: "get_settings",
+      machineId: "m1",
+      requestId: "req-2",
+      scope: "global",
+    }));
+    expect(msg?.type).toBe("get_settings");
+    expect((msg as any).scope).toBe("global");
+  });
+
+  it("parses get_settings message with project scope", () => {
+    const msg = parseDashboardMessage(JSON.stringify({
+      type: "get_settings",
+      machineId: "m1",
+      requestId: "req-2",
+      scope: "project",
+      projectPath: "/home/user/my-project",
+    }));
+    expect(msg?.type).toBe("get_settings");
+    expect((msg as any).scope).toBe("project");
+    expect((msg as any).projectPath).toBe("/home/user/my-project");
+  });
+
+  it("parses update_settings message", () => {
+    const msg = parseDashboardMessage(JSON.stringify({
+      type: "update_settings",
+      machineId: "m1",
+      requestId: "req-3",
+      scope: "global",
+      settings: { theme: "light" },
+    }));
+    expect(msg?.type).toBe("update_settings");
+    expect((msg as any).settings).toEqual({ theme: "light" });
+  });
+
+  it("parses update_settings with project scope and projectPath", () => {
+    const msg = parseDashboardMessage(JSON.stringify({
+      type: "update_settings",
+      machineId: "m1",
+      requestId: "req-3",
+      scope: "project",
+      projectPath: "/home/user/my-project",
+      settings: { allowedTools: ["Bash"] },
+    }));
+    expect(msg?.type).toBe("update_settings");
+    expect((msg as any).scope).toBe("project");
+    expect((msg as any).projectPath).toBe("/home/user/my-project");
   });
 });

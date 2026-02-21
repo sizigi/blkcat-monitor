@@ -6,6 +6,7 @@ import { Sidebar } from "./components/Sidebar";
 import { SessionDetail } from "./components/SessionDetail";
 import { EventFeed } from "./components/EventFeed";
 import { NotificationList } from "./components/NotificationList";
+import { SettingsPanel } from "./components/SettingsPanel";
 
 const WS_URL =
   (import.meta as any).env?.VITE_WS_URL ??
@@ -47,14 +48,14 @@ function useSessionLines(
 }
 
 export default function App() {
-  const { connected, machines, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory } = useSocket(WS_URL);
+  const { connected, machines, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory, deploySkills, getSettings, updateSettings, subscribeDeployResult, subscribeSettingsSnapshot, subscribeSettingsResult } = useSocket(WS_URL);
   const { agents, addAgent, removeAgent } = useAgents();
   const { getMachineName, getSessionName, setMachineName, setSessionName } = useDisplayNames();
   const [selectedMachine, setSelectedMachine] = useState<string>();
   const [selectedSession, setSelectedSession] = useState<string>();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
-  const [panelTab, setPanelTab] = useState<"events" | "notifications" | null>(null);
+  const [panelTab, setPanelTab] = useState<"events" | "notifications" | "settings" | null>(null);
   const resizing = useRef(false);
 
   const sessionLines = useSessionLines(outputMapRef, subscribeOutput, selectedMachine, selectedSession);
@@ -224,7 +225,7 @@ export default function App() {
           justifyContent: "flex-end",
           pointerEvents: "auto",
         }}>
-          {(["events", "notifications"] as const).map((tab) => (
+          {(["events", "notifications", "settings"] as const).map((tab, i, arr) => (
             <button
               key={tab}
               onClick={() => setPanelTab((v) => v === tab ? null : tab)}
@@ -236,10 +237,10 @@ export default function App() {
                 cursor: "pointer",
                 fontSize: 12,
                 padding: "4px 10px",
-                borderRadius: tab === "events" ? "4px 0 0 0" : "0 4px 0 0",
+                borderRadius: i === 0 ? "4px 0 0 0" : i === arr.length - 1 ? "0 4px 0 0" : "0",
               }}
             >
-              {tab === "events" ? "Events" : "Notifications"}
+              {tab === "events" ? "Events" : tab === "notifications" ? "Notifications" : "Settings"}
               {tab === "notifications" && (() => {
                 let total = 0;
                 for (const c of notificationCounts.values()) total += c;
@@ -251,7 +252,7 @@ export default function App() {
         {/* Panel content */}
         {panelTab && (
           <div style={{
-            width: 320,
+            width: panelTab === "settings" ? 450 : 320,
             flex: 1,
             pointerEvents: "auto",
             alignSelf: "flex-end",
@@ -262,7 +263,7 @@ export default function App() {
                 hookEventsRef={hookEventsRef}
                 subscribeHookEvents={subscribeHookEvents}
               />
-            ) : (
+            ) : panelTab === "notifications" ? (
               <NotificationList
                 hookEventsRef={hookEventsRef}
                 subscribeHookEvents={subscribeHookEvents}
@@ -275,6 +276,17 @@ export default function App() {
                 }}
                 getMachineName={getMachineName}
                 getSessionName={getSessionName}
+              />
+            ) : (
+              <SettingsPanel
+                machines={machines}
+                getMachineName={getMachineName}
+                deploySkills={deploySkills}
+                getSettings={getSettings}
+                updateSettings={updateSettings}
+                subscribeDeployResult={subscribeDeployResult}
+                subscribeSettingsSnapshot={subscribeSettingsSnapshot}
+                subscribeSettingsResult={subscribeSettingsResult}
               />
             )}
           </div>

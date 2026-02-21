@@ -64,13 +64,41 @@ export interface AgentDirectoryListingMessage {
   error?: string;
 }
 
+export interface AgentDeployResultMessage {
+  type: "deploy_result";
+  machineId: string;
+  requestId: string;
+  success: boolean;
+  error?: string;
+}
+
+export interface AgentSettingsSnapshotMessage {
+  type: "settings_snapshot";
+  machineId: string;
+  requestId: string;
+  settings: Record<string, unknown>;
+  scope: "global" | "project";
+  installedPlugins?: Record<string, unknown>;
+}
+
+export interface AgentSettingsResultMessage {
+  type: "settings_result";
+  machineId: string;
+  requestId: string;
+  success: boolean;
+  error?: string;
+}
+
 export type AgentToServerMessage =
   | AgentRegisterMessage
   | AgentOutputMessage
   | AgentSessionsMessage
   | AgentScrollbackMessage
   | AgentHookEventMessage
-  | AgentDirectoryListingMessage;
+  | AgentDirectoryListingMessage
+  | AgentDeployResultMessage
+  | AgentSettingsSnapshotMessage
+  | AgentSettingsResultMessage;
 
 // --- Server -> Agent messages ---
 
@@ -117,7 +145,28 @@ export interface ServerListDirectoryMessage {
   path: string;
 }
 
-export type ServerToAgentMessage = ServerInputMessage | ServerStartSessionMessage | ServerCloseSessionMessage | ServerResizeMessage | ServerRequestScrollbackMessage | ServerReloadSessionMessage | ServerListDirectoryMessage;
+export interface ServerDeploySkillsMessage {
+  type: "deploy_skills";
+  requestId: string;
+  skills: { name: string; files: { path: string; content: string }[] }[];
+}
+
+export interface ServerGetSettingsMessage {
+  type: "get_settings";
+  requestId: string;
+  scope: "global" | "project";
+  projectPath?: string;
+}
+
+export interface ServerUpdateSettingsMessage {
+  type: "update_settings";
+  requestId: string;
+  scope: "global" | "project";
+  projectPath?: string;
+  settings: Record<string, unknown>;
+}
+
+export type ServerToAgentMessage = ServerInputMessage | ServerStartSessionMessage | ServerCloseSessionMessage | ServerResizeMessage | ServerRequestScrollbackMessage | ServerReloadSessionMessage | ServerListDirectoryMessage | ServerDeploySkillsMessage | ServerGetSettingsMessage | ServerUpdateSettingsMessage;
 
 // --- Server -> Dashboard messages ---
 
@@ -168,13 +217,41 @@ export interface ServerDirectoryListingMessage {
   error?: string;
 }
 
+export interface ServerDeployResultMessage {
+  type: "deploy_result";
+  machineId: string;
+  requestId: string;
+  success: boolean;
+  error?: string;
+}
+
+export interface ServerSettingsSnapshotMessage {
+  type: "settings_snapshot";
+  machineId: string;
+  requestId: string;
+  settings: Record<string, unknown>;
+  scope: "global" | "project";
+  installedPlugins?: Record<string, unknown>;
+}
+
+export interface ServerSettingsResultMessage {
+  type: "settings_result";
+  machineId: string;
+  requestId: string;
+  success: boolean;
+  error?: string;
+}
+
 export type ServerToDashboardMessage =
   | ServerSnapshotMessage
   | ServerMachineUpdateMessage
   | ServerOutputMessage
   | ServerScrollbackMessage
   | ServerHookEventMessage
-  | ServerDirectoryListingMessage;
+  | ServerDirectoryListingMessage
+  | ServerDeployResultMessage
+  | ServerSettingsSnapshotMessage
+  | ServerSettingsResultMessage;
 
 // --- Dashboard -> Server messages ---
 
@@ -228,7 +305,31 @@ export interface DashboardListDirectoryMessage {
   path: string;
 }
 
-export type DashboardToServerMessage = DashboardInputMessage | DashboardStartSessionMessage | DashboardCloseSessionMessage | DashboardResizeMessage | DashboardRequestScrollbackMessage | DashboardReloadSessionMessage | DashboardListDirectoryMessage;
+export interface DashboardDeploySkillsMessage {
+  type: "deploy_skills";
+  machineId: string;
+  requestId: string;
+  skills: { name: string; files: { path: string; content: string }[] }[];
+}
+
+export interface DashboardGetSettingsMessage {
+  type: "get_settings";
+  machineId: string;
+  requestId: string;
+  scope: "global" | "project";
+  projectPath?: string;
+}
+
+export interface DashboardUpdateSettingsMessage {
+  type: "update_settings";
+  machineId: string;
+  requestId: string;
+  scope: "global" | "project";
+  projectPath?: string;
+  settings: Record<string, unknown>;
+}
+
+export type DashboardToServerMessage = DashboardInputMessage | DashboardStartSessionMessage | DashboardCloseSessionMessage | DashboardResizeMessage | DashboardRequestScrollbackMessage | DashboardReloadSessionMessage | DashboardListDirectoryMessage | DashboardDeploySkillsMessage | DashboardGetSettingsMessage | DashboardUpdateSettingsMessage;
 
 // --- Outbound agent info ---
 
@@ -243,8 +344,8 @@ export const NOTIFY_HOOK_EVENTS = new Set(["Stop", "Notification", "PermissionRe
 
 // --- Parsers ---
 
-const AGENT_TYPES = new Set(["register", "output", "sessions", "scrollback", "hook_event", "directory_listing"]);
-const DASHBOARD_TYPES = new Set(["input", "start_session", "close_session", "resize", "request_scrollback", "reload_session", "list_directory"]);
+const AGENT_TYPES = new Set(["register", "output", "sessions", "scrollback", "hook_event", "directory_listing", "deploy_result", "settings_snapshot", "settings_result"]);
+const DASHBOARD_TYPES = new Set(["input", "start_session", "close_session", "resize", "request_scrollback", "reload_session", "list_directory", "deploy_skills", "get_settings", "update_settings"]);
 
 export function parseAgentMessage(raw: string): AgentToServerMessage | null {
   try {
