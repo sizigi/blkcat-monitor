@@ -71,6 +71,7 @@ export interface UseSocketReturn {
   subscribeHookEvents: (cb: (event: AgentHookEventMessage) => void) => () => void;
   notificationCounts: Map<string, number>;
   clearNotifications: (sessionKey: string) => void;
+  listDirectory: (machineId: string, path: string) => Promise<{ path: string; entries: { name: string; isDir: boolean }[]; error?: string }>;
 }
 
 export function useSocket(url: string): UseSocketReturn {
@@ -95,6 +96,8 @@ export function useSocket(url: string): UseSocketReturn {
 
   const hookEventsRef = useRef<AgentHookEventMessage[]>([]);
   const hookEventSubsRef = useRef(new Set<(event: AgentHookEventMessage) => void>());
+
+  const directoryListingSubsRef = useRef(new Map<string, (msg: { path: string; entries: { name: string; isDir: boolean }[]; error?: string }) => void>());
 
   const [notificationCounts, setNotificationCounts] = useState<Map<string, number>>(new Map());
 
@@ -231,6 +234,12 @@ export function useSocket(url: string): UseSocketReturn {
               return next;
             });
           }
+        } else if (msg.type === "directory_listing") {
+          const cb = directoryListingSubsRef.current.get(msg.requestId);
+          if (cb) {
+            directoryListingSubsRef.current.delete(msg.requestId);
+            cb({ path: msg.path, entries: (msg as any).entries ?? [], error: (msg as any).error });
+          }
         }
       } catch {}
     });
@@ -305,5 +314,27 @@ export function useSocket(url: string): UseSocketReturn {
     [],
   );
 
-  return { connected, machines, waitingSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications };
+  const listDirectory = useCallback(
+    (machineId: string, path: string): Promise<{ path: string; entries: { name: string; isDir: boolean }[]; error?: string }> => {
+      const ws = wsRef.current;
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        return Promise.resolve({ path, entries: [], error: "Not connected" });
+      }
+      const requestId = crypto.randomUUID();
+      return new Promise((resolve) => {
+        const timeout = setTimeout(() => {
+          directoryListingSubsRef.current.delete(requestId);
+          resolve({ path, entries: [], error: "Timeout" });
+        }, 5000);
+        directoryListingSubsRef.current.set(requestId, (result) => {
+          clearTimeout(timeout);
+          resolve(result);
+        });
+        ws.send(JSON.stringify({ type: "list_directory", machineId, requestId, path }));
+      });
+    },
+    [],
+  );
+
+  return { connected, machines, waitingSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory };
 }
