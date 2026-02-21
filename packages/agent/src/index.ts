@@ -247,7 +247,9 @@ async function main() {
       if (newSessions.length > 0 || goneSessions.length > 0) {
         for (const s of newSessions) captures.set(s.id, new TmuxCapture(bunExec));
         for (const s of goneSessions) { captures.delete(s.id); prevLines.delete(s.id); }
-        autoSessions = fresh;
+        // Exclude manually started sessions so auto-discovery doesn't overwrite their names
+        const manualIds = new Set(manualSessions.map((s) => s.id));
+        autoSessions = fresh.filter((s) => !manualIds.has(s.id));
         const all = [...autoSessions, ...manualSessions];
         conn.updateSessions(all);
         console.log(`Sessions updated: ${all.length} total`);
