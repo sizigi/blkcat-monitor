@@ -7,6 +7,7 @@ import { SessionDetail } from "./components/SessionDetail";
 import { EventFeed } from "./components/EventFeed";
 import { NotificationList } from "./components/NotificationList";
 import { SettingsPanel } from "./components/SettingsPanel";
+import { SkillsMatrix } from "./components/SkillsMatrix";
 
 const WS_URL =
   (import.meta as any).env?.VITE_WS_URL ??
@@ -206,6 +207,29 @@ export default function App() {
           </div>
         )}
       </main>
+      {/* Full-width skills matrix overlay */}
+      {panelTab === "settings" && (
+        <div style={{
+          position: "absolute",
+          top: 0,
+          left: sidebarCollapsed ? 0 : sidebarWidth + 4,
+          right: 0,
+          bottom: 0,
+          zIndex: 15,
+        }}>
+          <SkillsMatrix
+            machines={machines}
+            getMachineName={getMachineName}
+            deploySkills={deploySkills}
+            getSettings={getSettings}
+            updateSettings={updateSettings}
+            subscribeDeployResult={subscribeDeployResult}
+            subscribeSettingsSnapshot={subscribeSettingsSnapshot}
+            subscribeSettingsResult={subscribeSettingsResult}
+            onClose={() => setPanelTab(null)}
+          />
+        </div>
+      )}
       {/* Right overlay panel */}
       <div style={{
         position: "absolute",
@@ -250,9 +274,9 @@ export default function App() {
           ))}
         </div>
         {/* Panel content */}
-        {panelTab && (
+        {panelTab && panelTab !== "settings" && (
           <div style={{
-            width: panelTab === "settings" ? 450 : 320,
+            width: 320,
             flex: 1,
             pointerEvents: "auto",
             alignSelf: "flex-end",
@@ -263,7 +287,7 @@ export default function App() {
                 hookEventsRef={hookEventsRef}
                 subscribeHookEvents={subscribeHookEvents}
               />
-            ) : panelTab === "notifications" ? (
+            ) : (
               <NotificationList
                 hookEventsRef={hookEventsRef}
                 subscribeHookEvents={subscribeHookEvents}
@@ -276,17 +300,6 @@ export default function App() {
                 }}
                 getMachineName={getMachineName}
                 getSessionName={getSessionName}
-              />
-            ) : (
-              <SettingsPanel
-                machines={machines}
-                getMachineName={getMachineName}
-                deploySkills={deploySkills}
-                getSettings={getSettings}
-                updateSettings={updateSettings}
-                subscribeDeployResult={subscribeDeployResult}
-                subscribeSettingsSnapshot={subscribeSettingsSnapshot}
-                subscribeSettingsResult={subscribeSettingsResult}
               />
             )}
           </div>
