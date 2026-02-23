@@ -97,6 +97,8 @@ export function createServer(opts: ServerOptions) {
   // Track which dashboard most recently sent input per session (machineId:sessionId)
   const activeResizeOwner = new Map<string, { dashboardId: string; lastInputAt: number }>();
   const RESIZE_OWNER_STALE_MS = 10_000;
+  // Track last resize dimensions per session so we can reject shrinking when no owner
+  const lastResizeDims = new Map<string, { cols: number; rows: number }>();
   const displayNames: DisplayNames = opts.displayNames
     ? { machines: { ...opts.displayNames.machines }, sessions: { ...opts.displayNames.sessions } }
     : { machines: {}, sessions: {} };
@@ -425,12 +427,23 @@ export function createServer(opts: ServerOptions) {
               const dashId = (ws.data as WsData).dashboardId;
               const ownerKey = `${msg.machineId}:${msg.sessionId}`;
               const owner = activeResizeOwner.get(ownerKey);
-              // Only forward resize if: force flag, no owner yet, this dashboard is owner, or owner is stale
-              const allowed = msg.force === true
-                || !owner
-                || owner.dashboardId === dashId
-                || (Date.now() - owner.lastInputAt > RESIZE_OWNER_STALE_MS);
+              let allowed: boolean;
+              if (msg.force === true) {
+                // Force fit always goes through
+                allowed = true;
+              } else if (owner && owner.dashboardId === dashId) {
+                // Active owner can always resize
+                allowed = true;
+              } else if (owner && (Date.now() - owner.lastInputAt <= RESIZE_OWNER_STALE_MS)) {
+                // Non-owner blocked while owner is fresh
+                allowed = false;
+              } else {
+                // No owner or stale owner: only allow if not shrinking
+                const prev = lastResizeDims.get(ownerKey);
+                allowed = !prev || (msg.cols >= prev.cols && msg.rows >= prev.rows);
+              }
               if (allowed) {
+                lastResizeDims.set(ownerKey, { cols: msg.cols, rows: msg.rows });
                 machine.agent.send(JSON.stringify({
                   type: "resize",
                   sessionId: msg.sessionId,

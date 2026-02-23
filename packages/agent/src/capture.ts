@@ -78,8 +78,15 @@ export class TmuxCapture {
   resizePane(target: string, cols: number, rows: number): boolean {
     // Extract window target from pane target (e.g., "sess:0.0" → "sess:0")
     const window = target.replace(/\.\d+$/, "");
-    const cmd = [...this.sshPrefix, "tmux", "resize-window", "-x", String(cols), "-y", String(rows), "-t", window];
-    return this.exec(cmd).success;
+    const ok = this.exec([...this.sshPrefix, "tmux", "resize-window", "-x", String(cols), "-y", String(rows), "-t", window]).success;
+    if (ok) {
+      // Force tmux to deliver SIGWINCH to processes in background windows
+      // by briefly selecting the target window then switching back.
+      // Without this, pty dimensions stay stale for non-active windows.
+      this.exec([...this.sshPrefix, "tmux", "select-window", "-t", window]);
+      this.exec([...this.sshPrefix, "tmux", "last-window", "-t", window.replace(/:.*$/, "")]);
+    }
+    return ok;
   }
 
   killPane(target: string): boolean {
