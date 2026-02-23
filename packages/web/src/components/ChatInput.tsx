@@ -57,7 +57,7 @@ export function ChatInput({ onSendText, onSendKey }: ChatInputProps) {
           </button>
         ))}
       </div>
-      <div style={{ display: "flex", gap: 8 }}>
+      <div className="chat-buttons" style={{ display: "flex", gap: 8 }}>
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}

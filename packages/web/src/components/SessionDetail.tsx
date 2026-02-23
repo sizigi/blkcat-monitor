@@ -41,10 +41,11 @@ export function SessionDetail({
           display: "flex",
           alignItems: "center",
           gap: 8,
+          overflow: "hidden",
         }}
       >
-        <span style={{ fontWeight: 600 }}>{sessionName}</span>
-        <span style={{ color: "var(--text-muted)", fontSize: 12 }}>
+        <span style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{sessionName}</span>
+        <span style={{ color: "var(--text-muted)", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {machineId} / {sessionId}
         </span>
       </div>

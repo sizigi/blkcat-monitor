@@ -172,9 +172,14 @@ export function SkillsMatrix({
             border: "none",
             color: "var(--text-muted)",
             cursor: "pointer",
-            fontSize: 16,
-            padding: "2px 6px",
+            fontSize: 18,
+            padding: "8px 12px",
             lineHeight: 1,
+            minWidth: 44,
+            minHeight: 44,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
           }}
         >
           ✕

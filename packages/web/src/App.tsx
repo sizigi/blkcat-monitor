@@ -220,39 +220,34 @@ export default function App() {
         ))}
       </div>
       <main style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
-        {!isMobile && (sidebarCollapsed || !connected) && (
-          <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
-            {sidebarCollapsed && (
-              <button
-                onClick={() => setSidebarCollapsed(false)}
-                title="Show sidebar"
-                style={{
-                  background: "var(--bg-secondary)",
-                  border: "none",
-                  borderRight: "1px solid var(--border)",
-                  color: "var(--text-muted)",
-                  cursor: "pointer",
-                  fontSize: 16,
-                  padding: "8px 12px",
-                  lineHeight: 1,
-                }}
-              >
-                &#9776;
-              </button>
-            )}
-            {!connected && (
-              <div
-                style={{
-                  flex: 1,
-                  padding: 16,
-                  background: "var(--red)",
-                  color: "#fff",
-                  textAlign: "center",
-                }}
-              >
-                Disconnected from server
-              </div>
-            )}
+        {(!isMobile && sidebarCollapsed) && (
+          <button
+            onClick={() => setSidebarCollapsed(false)}
+            title="Show sidebar"
+            style={{
+              background: "var(--bg-secondary)",
+              border: "none",
+              borderRight: "1px solid var(--border)",
+              color: "var(--text-muted)",
+              cursor: "pointer",
+              fontSize: 16,
+              padding: "8px 12px",
+              lineHeight: 1,
+            }}
+          >
+            &#9776;
+          </button>
+        )}
+        {!connected && (
+          <div
+            style={{
+              padding: 16,
+              background: "var(--red)",
+              color: "#fff",
+              textAlign: "center",
+            }}
+          >
+            Disconnected from server
           </div>
         )}
         {selectedMachine && selectedSession ? (
