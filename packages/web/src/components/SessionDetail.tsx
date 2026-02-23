@@ -14,7 +14,7 @@ interface SessionDetailProps {
   onSendText: (text: string) => void;
   onSendKey: (key: string) => void;
   onSendData: (data: string) => void;
-  onResize?: (cols: number, rows: number) => void;
+  onResize?: (cols: number, rows: number, force?: boolean) => void;
 }
 
 export function SessionDetail({

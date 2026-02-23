@@ -28,6 +28,7 @@ interface ServerOptions {
 interface WsData {
   role: "agent" | "dashboard";
   machineId?: string;
+  dashboardId?: string;
 }
 
 interface AgentSocket {
@@ -92,6 +93,10 @@ export function createServer(opts: ServerOptions) {
   const dashboards = new Set<any>();
   const outboundAgents = new Map<string, OutboundAgent>();
   const inboundAgents = new WeakMap<object, AgentSocket>();
+  let dashboardCounter = 0;
+  // Track which dashboard most recently sent input per session (machineId:sessionId)
+  const activeResizeOwner = new Map<string, { dashboardId: string; lastInputAt: number }>();
+  const RESIZE_OWNER_STALE_MS = 10_000;
   const displayNames: DisplayNames = opts.displayNames
     ? { machines: { ...opts.displayNames.machines }, sessions: { ...opts.displayNames.sessions } }
     : { machines: {}, sessions: {} };
@@ -287,7 +292,7 @@ export function createServer(opts: ServerOptions) {
 
       if (url.pathname === "/ws/dashboard") {
         const ok = server.upgrade(req, {
-          data: { role: "dashboard" } as WsData,
+          data: { role: "dashboard", dashboardId: `dash-${dashboardCounter++}` } as WsData,
         });
         return ok ? undefined : new Response("Upgrade failed", { status: 500 });
       }
@@ -382,6 +387,12 @@ export function createServer(opts: ServerOptions) {
           if (msg.type === "input") {
             const machine = machines.get(msg.machineId);
             if (machine) {
+              // Track this dashboard as the active resize owner for this session
+              const dashId = (ws.data as WsData).dashboardId;
+              if (dashId) {
+                const ownerKey = `${msg.machineId}:${msg.sessionId}`;
+                activeResizeOwner.set(ownerKey, { dashboardId: dashId, lastInputAt: Date.now() });
+              }
               const fwd: Record<string, any> = {
                 type: "input",
                 sessionId: msg.sessionId,
@@ -411,12 +422,22 @@ export function createServer(opts: ServerOptions) {
           } else if (msg.type === "resize") {
             const machine = machines.get(msg.machineId);
             if (machine) {
-              machine.agent.send(JSON.stringify({
-                type: "resize",
-                sessionId: msg.sessionId,
-                cols: msg.cols,
-                rows: msg.rows,
-              }));
+              const dashId = (ws.data as WsData).dashboardId;
+              const ownerKey = `${msg.machineId}:${msg.sessionId}`;
+              const owner = activeResizeOwner.get(ownerKey);
+              // Only forward resize if: force flag, no owner yet, this dashboard is owner, or owner is stale
+              const allowed = msg.force === true
+                || !owner
+                || owner.dashboardId === dashId
+                || (Date.now() - owner.lastInputAt > RESIZE_OWNER_STALE_MS);
+              if (allowed) {
+                machine.agent.send(JSON.stringify({
+                  type: "resize",
+                  sessionId: msg.sessionId,
+                  cols: msg.cols,
+                  rows: msg.rows,
+                }));
+              }
             }
           } else if (msg.type === "request_scrollback") {
             const machine = machines.get(msg.machineId);
@@ -516,6 +537,14 @@ export function createServer(opts: ServerOptions) {
         const data = ws.data as WsData;
         if (data.role === "dashboard") {
           dashboards.delete(ws);
+          // Clean up resize ownership for this dashboard
+          if (data.dashboardId) {
+            for (const [key, owner] of activeResizeOwner) {
+              if (owner.dashboardId === data.dashboardId) {
+                activeResizeOwner.delete(key);
+              }
+            }
+          }
         } else if (data.role === "agent") {
           const agent = inboundAgents.get(ws);
           if (agent) handleAgentClose(agent);

@@ -11,7 +11,7 @@ interface TerminalOutputProps {
   subscribeScrollback?: (cb: (key: string) => void) => () => void;
   onRequestScrollback?: () => void;
   onData?: (data: string) => void;
-  onResize?: (cols: number, rows: number) => void;
+  onResize?: (cols: number, rows: number, force?: boolean) => void;
 }
 
 export function TerminalOutput({ sessionKey, lines, logMapRef, scrollbackMapRef, subscribeScrollback, onRequestScrollback, onData, onResize }: TerminalOutputProps) {
@@ -350,12 +350,11 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, scrollbackMapRef,
     const term = termRef.current;
     if (!fit || !term) return;
     fit.fit();
-    // Force redraw current content at the new dimensions
-    const lines = prevLinesRef.current;
-    if (lines.length > 0) {
-      term.write("\x1b[H\x1b[2J" + lines.join("\r\n"));
-    }
-    onResizeRef.current?.(term.cols, term.rows);
+    // Clear the terminal and discard stale lines so the next agent capture
+    // fills in content formatted for the correct dimensions.
+    term.write("\x1b[H\x1b[2J");
+    prevLinesRef.current = [];
+    onResizeRef.current?.(term.cols, term.rows, true);
   }, []);
 
   const hasLog = logMapRef?.current?.has(sessionKey ?? "") ?? false;

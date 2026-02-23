@@ -71,7 +71,7 @@ export interface UseSocketReturn {
   startSession: (machineId: string, args?: string, cwd?: string, name?: string) => void;
   closeSession: (machineId: string, sessionId: string) => void;
   reloadSession: (machineId: string, sessionId: string) => void;
-  sendResize: (machineId: string, sessionId: string, cols: number, rows: number) => void;
+  sendResize: (machineId: string, sessionId: string, cols: number, rows: number, force?: boolean) => void;
   requestScrollback: (machineId: string, sessionId: string) => void;
   hookEventsRef: React.RefObject<AgentHookEventMessage[]>;
   subscribeHookEvents: (cb: (event: AgentHookEventMessage) => void) => () => void;
@@ -445,10 +445,12 @@ export function useSocket(url: string): UseSocketReturn {
   );
 
   const sendResize = useCallback(
-    (machineId: string, sessionId: string, cols: number, rows: number) => {
+    (machineId: string, sessionId: string, cols: number, rows: number, force?: boolean) => {
       const ws = wsRef.current;
       if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: "resize", machineId, sessionId, cols, rows }));
+        const msg: Record<string, any> = { type: "resize", machineId, sessionId, cols, rows };
+        if (force) msg.force = true;
+        ws.send(JSON.stringify(msg));
       }
     },
     [],

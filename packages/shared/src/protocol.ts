@@ -300,6 +300,7 @@ export interface DashboardResizeMessage {
   sessionId: string;
   cols: number;
   rows: number;
+  force?: boolean;
 }
 
 export interface DashboardRequestScrollbackMessage {

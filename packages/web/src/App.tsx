@@ -334,7 +334,7 @@ export default function App() {
             onSendText={(text) => sendInput(selectedMachine, selectedSession, { text })}
             onSendKey={(key) => sendInput(selectedMachine, selectedSession, { key })}
             onSendData={(data) => sendInput(selectedMachine, selectedSession, { data })}
-            onResize={(cols, rows) => sendResize(selectedMachine, selectedSession, cols, rows)}
+            onResize={(cols, rows, force) => sendResize(selectedMachine, selectedSession, cols, rows, force)}
           />
         ) : (
           <div
