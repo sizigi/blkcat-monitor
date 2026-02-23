@@ -57,6 +57,14 @@ html, body, #root {
   animation: pulse-active 0.8s ease-in-out infinite;
 }
 
+/* Desktop defaults (overridden by mobile media query below) */
+.sidebar-backdrop {
+  display: none;
+}
+.mobile-topbar {
+  display: none;
+}
+
 /* ── Mobile responsive (≤768px) ── */
 @media (max-width: 768px) {
   /* Sidebar as slide-out drawer */
@@ -119,12 +127,4 @@ html, body, #root {
     padding: 8px 14px !important;
     font-size: 14px !important;
   }
-}
-
-/* Hidden by default (for desktop) */
-.sidebar-backdrop {
-  display: none;
-}
-.mobile-topbar {
-  display: none !important;
 }
