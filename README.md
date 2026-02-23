@@ -92,6 +92,7 @@ Open http://localhost:5173 — select a session from the sidebar to view termina
 - **Outbound agent management** — add or remove reverse-connection agents from the dashboard UI.
 - **Skills matrix** — a "Skills" tab in the right panel shows a matrix of available skills vs. connected machines. Deploy or remove standalone skills (`~/.claude/skills/<name>/`) on any agent with one click. Skills are auto-discovered by Claude Code — no plugin configuration needed.
 - **Project settings** — click the gear icon on a session to edit `~/.claude/settings.json` on the remote agent (global or project-level). The `hooks` section is protected as read-only to prevent accidental removal of blkcat-monitor's hook integration.
+- **Mobile responsive** — on screens ≤768px, the sidebar becomes a slide-out drawer (hamburger menu), panels open as full-screen overlays, and key buttons are touch-sized (44px). The terminal reflows to fit the narrower screen width.
 
 ## Packages
 
