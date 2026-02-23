@@ -2,6 +2,7 @@ import React, { useState, useMemo, useCallback, useRef, useEffect } from "react"
 import { useSocket, type OutputLine } from "./hooks/useSocket";
 import { useAgents } from "./hooks/useAgents";
 import { useDisplayNames } from "./hooks/useDisplayNames";
+import { useIsMobile } from "./hooks/useIsMobile";
 import { Sidebar } from "./components/Sidebar";
 import { SessionDetail } from "./components/SessionDetail";
 import { EventFeed } from "./components/EventFeed";
@@ -52,6 +53,8 @@ export default function App() {
   const { connected, machines, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory, deploySkills, removeSkills, getSettings, updateSettings, subscribeDeployResult, subscribeSettingsSnapshot, subscribeSettingsResult } = useSocket(WS_URL);
   const { agents, addAgent, removeAgent } = useAgents();
   const { getMachineName, getSessionName, setMachineName, setSessionName } = useDisplayNames();
+  const isMobile = useIsMobile();
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedMachine, setSelectedMachine] = useState<string>();
   const [selectedSession, setSelectedSession] = useState<string>();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -93,59 +96,137 @@ export default function App() {
     document.body.style.userSelect = "none";
   }, [sidebarWidth]);
 
+  const sidebarBaseProps = {
+    machines,
+    selectedMachine,
+    selectedSession,
+    notificationCounts,
+    onStartSession: startSession,
+    listDirectory,
+    onCloseSession: (machineId: string, sessionId: string) => {
+      closeSession(machineId, sessionId);
+      if (selectedMachine === machineId && selectedSession === sessionId) {
+        setSelectedMachine(undefined);
+        setSelectedSession(undefined);
+      }
+    },
+    onReloadSession: reloadSession,
+    getMachineName,
+    getSessionName,
+    onRenameMachine: setMachineName,
+    onRenameSession: setSessionName,
+    waitingSessions,
+    activeSessions,
+    agents,
+    onAddAgent: addAgent,
+    onRemoveAgent: removeAgent,
+    onSessionSettings: (m: string, s: string) => setSettingsSession({ machineId: m, sessionId: s }),
+  };
+
   return (
     <div style={{ display: "flex", height: "100vh", position: "relative" }}>
-      {!sidebarCollapsed && (
-        <Sidebar
-          width={sidebarWidth}
-          machines={machines}
-          selectedMachine={selectedMachine}
-          selectedSession={selectedSession}
-          notificationCounts={notificationCounts}
-          onSelectSession={(m, s) => {
-            setSelectedMachine(m);
-            setSelectedSession(s);
-            clearNotifications(`${m}:${s}`);
-          }}
-          onStartSession={startSession}
-          listDirectory={listDirectory}
-          onCloseSession={(machineId, sessionId) => {
-            closeSession(machineId, sessionId);
-            if (selectedMachine === machineId && selectedSession === sessionId) {
-              setSelectedMachine(undefined);
-              setSelectedSession(undefined);
-            }
-          }}
-          onReloadSession={reloadSession}
-          getMachineName={getMachineName}
-          getSessionName={getSessionName}
-          onRenameMachine={setMachineName}
-          onRenameSession={setSessionName}
-          waitingSessions={waitingSessions}
-          activeSessions={activeSessions}
-          agents={agents}
-          onAddAgent={addAgent}
-          onRemoveAgent={removeAgent}
-          onCollapse={() => setSidebarCollapsed(true)}
-          onSessionSettings={(m, s) => setSettingsSession({ machineId: m, sessionId: s })}
-        />
+      {isMobile ? (
+        <>
+          {drawerOpen && (
+            <div className="sidebar-backdrop" onClick={() => setDrawerOpen(false)} />
+          )}
+          <div className={`sidebar ${drawerOpen ? "open" : ""}`} style={{
+            display: "flex",
+            flexDirection: "column",
+            background: "var(--bg-secondary)",
+            borderRight: "1px solid var(--border)",
+          }}>
+            <Sidebar
+              width={280}
+              {...sidebarBaseProps}
+              onSelectSession={(m, s) => {
+                setSelectedMachine(m);
+                setSelectedSession(s);
+                clearNotifications(`${m}:${s}`);
+                setDrawerOpen(false);
+              }}
+              onCollapse={() => setDrawerOpen(false)}
+            />
+          </div>
+        </>
+      ) : (
+        <>
+          {!sidebarCollapsed && (
+            <Sidebar
+              width={sidebarWidth}
+              {...sidebarBaseProps}
+              onSelectSession={(m, s) => {
+                setSelectedMachine(m);
+                setSelectedSession(s);
+                clearNotifications(`${m}:${s}`);
+              }}
+              onCollapse={() => setSidebarCollapsed(true)}
+            />
+          )}
+          {!sidebarCollapsed && (
+            <div
+              className="sidebar-resize-handle"
+              onMouseDown={handleResizeStart}
+              style={{
+                width: 4,
+                cursor: "col-resize",
+                background: "transparent",
+                flexShrink: 0,
+                position: "relative",
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--accent)"; }}
+              onMouseLeave={(e) => { if (!resizing.current) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+            />
+          )}
+        </>
       )}
-      {!sidebarCollapsed && (
-        <div
-          onMouseDown={handleResizeStart}
+      {/* Mobile top bar — hidden on desktop via CSS */}
+      <div className="mobile-topbar" style={{
+        alignItems: "center",
+        padding: "8px 12px",
+        gap: 8,
+        background: "var(--bg-secondary)",
+        borderBottom: "1px solid var(--border)",
+      }}>
+        <button
+          onClick={() => setDrawerOpen(true)}
           style={{
-            width: 4,
-            cursor: "col-resize",
-            background: "transparent",
-            flexShrink: 0,
-            position: "relative",
+            background: "none",
+            border: "none",
+            color: "var(--text)",
+            cursor: "pointer",
+            fontSize: 20,
+            padding: "4px 8px",
+            lineHeight: 1,
           }}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--accent)"; }}
-          onMouseLeave={(e) => { if (!resizing.current) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
-        />
-      )}
+        >&#9776;</button>
+        <span style={{ flex: 1, fontSize: 14, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {selectedSessionName || "blkcat-monitor"}
+        </span>
+        {(["events", "notifications", "skills"] as const).map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setPanelTab((v) => v === tab ? null : tab)}
+            style={{
+              background: panelTab === tab ? "var(--accent)" : "none",
+              border: "none",
+              color: panelTab === tab ? "#fff" : "var(--text-muted)",
+              cursor: "pointer",
+              fontSize: 12,
+              padding: "4px 8px",
+              borderRadius: 4,
+            }}
+          >
+            {tab === "events" ? "Ev" : tab === "notifications" ? (() => {
+              let total = 0;
+              for (const c of notificationCounts.values()) total += c;
+              return total > 0 ? `\u{1F514}${total}` : "\u{1F514}";
+            })() : "Sk"}
+          </button>
+        ))}
+      </div>
       <main style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
-        {(sidebarCollapsed || !connected) && (
+        {!isMobile && (sidebarCollapsed || !connected) && (
           <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
             {sidebarCollapsed && (
               <button
@@ -211,10 +292,10 @@ export default function App() {
       </main>
       {/* Full-width skills matrix overlay */}
       {panelTab === "skills" && (
-        <div style={{
+        <div className="panel-overlay" style={{
           position: "absolute",
           top: 0,
-          left: sidebarCollapsed ? 0 : sidebarWidth + 4,
+          left: isMobile ? 0 : (sidebarCollapsed ? 0 : sidebarWidth + 4),
           right: 0,
           bottom: 0,
           zIndex: 15,
@@ -245,7 +326,7 @@ export default function App() {
         pointerEvents: "none",
       }}>
         {/* Tab buttons */}
-        <div style={{
+        <div className="panel-tabs-desktop" style={{
           display: "flex",
           gap: 0,
           padding: "8px 8px 0",
@@ -278,7 +359,7 @@ export default function App() {
         </div>
         {/* Panel content */}
         {panelTab && panelTab !== "skills" && (
-          <div style={{
+          <div className="panel-overlay" style={{
             width: 320,
             flex: 1,
             pointerEvents: "auto",
