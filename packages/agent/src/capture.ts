@@ -88,7 +88,9 @@ export class TmuxCapture {
   }
 
   respawnPane(target: string, shellCommand: string): boolean {
-    const cmd = [...this.sshPrefix, "tmux", "respawn-pane", "-k", "-t", target, shellCommand];
+    // Wrap in an interactive shell so ~/.bashrc / ~/.zshrc are sourced
+    const shell = process.env.SHELL || "/bin/bash";
+    const cmd = [...this.sshPrefix, "tmux", "respawn-pane", "-k", "-t", target, shell, "-ic", shellCommand];
     return this.exec(cmd).success;
   }
 
