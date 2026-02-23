@@ -124,7 +124,7 @@ export default function App() {
   };
 
   return (
-    <div style={{ display: "flex", height: "100vh", position: "relative" }}>
+    <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", height: "100vh", position: "relative" }}>
       {isMobile ? (
         <>
           {drawerOpen && (
