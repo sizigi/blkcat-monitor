@@ -381,7 +381,7 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, scrollbackMapRef,
     <div style={{ position: "relative", flex: 1, minHeight: 0 }}>
       <div
         ref={containerRef}
-        style={{ height: "100%", background: "#0d1117" }}
+        style={{ width: "100%", height: "100%", overflow: "hidden", background: "#0d1117" }}
       />
       {scrollMode ? (
         <div

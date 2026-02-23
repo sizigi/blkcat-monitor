@@ -327,7 +327,9 @@ export function Sidebar({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      onReloadSession(machine.machineId, session.id);
+                      if (confirm("Reload this session?")) {
+                        onReloadSession(machine.machineId, session.id);
+                      }
                     }}
                     title="Reload session (claude --resume)"
                     style={{

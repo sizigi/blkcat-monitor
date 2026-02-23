@@ -63,11 +63,15 @@ export default function App() {
   useEffect(() => {
     if (!isMobile) setDrawerOpen(false);
     // After layout settles, dispatch resize to trigger terminal refit.
-    // Use setTimeout to ensure browser has completed layout recalculation.
-    const timer = setTimeout(() => {
+    // Fire twice: once after initial layout and again after animations complete,
+    // to catch cases where the container dimensions haven't fully settled.
+    const timer1 = setTimeout(() => {
       window.dispatchEvent(new Event("resize"));
     }, 150);
-    return () => clearTimeout(timer);
+    const timer2 = setTimeout(() => {
+      window.dispatchEvent(new Event("resize"));
+    }, 500);
+    return () => { clearTimeout(timer1); clearTimeout(timer2); };
   }, [isMobile]);
   const [selectedMachine, setSelectedMachine] = useState<string>();
   const [selectedSession, setSelectedSession] = useState<string>();
