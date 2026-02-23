@@ -156,6 +156,8 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, scrollbackMapRef,
     term.loadAddon(fit);
     term.open(containerRef.current);
     fit.fit();
+    // Send initial dimensions immediately (don't wait for debounced ResizeObserver)
+    onResizeRef.current?.(term.cols, term.rows);
 
     termRef.current = term;
     fitRef.current = fit;
@@ -203,19 +205,82 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, scrollbackMapRef,
       return true;
     });
 
+    // Mouse wheel: scroll in scroll mode, or enter scroll mode on wheel up
+    const container = containerRef.current;
+    const onWheel = (e: WheelEvent) => {
+      if (!scrollModeRef.current) {
+        // Enter scroll mode on scroll up
+        if (e.deltaY < 0) {
+          enterScrollMode();
+          scrollNav("lineUp");
+          scrollNav("lineUp");
+          scrollNav("lineUp");
+        }
+        return;
+      }
+      e.preventDefault();
+      const lines = Math.max(1, Math.round(Math.abs(e.deltaY) / 20));
+      for (let i = 0; i < lines; i++) {
+        scrollNav(e.deltaY < 0 ? "lineUp" : "lineDown");
+      }
+    };
+    container.addEventListener("wheel", onWheel, { passive: false });
+
+    // Touch: swipe to scroll in scroll mode, or enter on swipe down (finger moves down = scroll up)
+    let touchStartY = 0;
+    let touchAccum = 0;
+    const LINE_PX = 20; // pixels per line of scroll
+    const onTouchStart = (e: TouchEvent) => {
+      touchStartY = e.touches[0].clientY;
+      touchAccum = 0;
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      const dy = e.touches[0].clientY - touchStartY;
+      touchStartY = e.touches[0].clientY;
+
+      if (!scrollModeRef.current) {
+        // Swipe down (finger moves down) = scroll up into history
+        if (dy > 30) {
+          enterScrollMode();
+          scrollNav("pageUp");
+        }
+        return;
+      }
+      e.preventDefault();
+      touchAccum += dy;
+      const lines = Math.floor(Math.abs(touchAccum) / LINE_PX);
+      if (lines > 0) {
+        for (let i = 0; i < lines; i++) {
+          scrollNav(touchAccum > 0 ? "lineUp" : "lineDown");
+        }
+        touchAccum = touchAccum % LINE_PX;
+      }
+    };
+    container.addEventListener("touchstart", onTouchStart, { passive: true });
+    container.addEventListener("touchmove", onTouchMove, { passive: false });
+
     let resizeTimer: ReturnType<typeof setTimeout> | undefined;
-    const resizeObserver = new ResizeObserver(() => {
+    const doFit = () => {
       fit.fit();
       clearTimeout(resizeTimer);
       resizeTimer = setTimeout(() => {
         onResizeRef.current?.(term.cols, term.rows);
       }, 300);
-    });
+    };
+    const resizeObserver = new ResizeObserver(doFit);
     resizeObserver.observe(containerRef.current);
+
+    // Safety net: also listen for window resize events (covers layout transitions
+    // where ResizeObserver may not re-fire if element dimensions didn't change)
+    window.addEventListener("resize", doFit);
 
     return () => {
       clearTimeout(resizeTimer);
       resizeObserver.disconnect();
+      window.removeEventListener("resize", doFit);
+      container.removeEventListener("wheel", onWheel);
+      container.removeEventListener("touchstart", onTouchStart);
+      container.removeEventListener("touchmove", onTouchMove);
       dataDisposable.dispose();
       selDisposable.dispose();
       term.dispose();
@@ -256,6 +321,8 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, scrollbackMapRef,
     setScrollbackLoading(false);
     term.clear();
     term.write("\x1b[H\x1b[2J");
+    // Send current dimensions so the agent resizes the tmux pane for this session
+    onResizeRef.current?.(term.cols, term.rows);
   }, [sessionKey]);
 
   useEffect(() => {
@@ -283,6 +350,11 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, scrollbackMapRef,
     const term = termRef.current;
     if (!fit || !term) return;
     fit.fit();
+    // Force redraw current content at the new dimensions
+    const lines = prevLinesRef.current;
+    if (lines.length > 0) {
+      term.write("\x1b[H\x1b[2J" + lines.join("\r\n"));
+    }
     onResizeRef.current?.(term.cols, term.rows);
   }, []);
 
@@ -294,14 +366,15 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, scrollbackMapRef,
     border: "1px solid rgba(0,0,0,0.3)",
     color: "#000",
     cursor: "pointer",
-    borderRadius: 3,
-    padding: "2px 6px",
-    fontSize: 13,
+    borderRadius: 4,
+    padding: "4px 8px",
+    fontSize: 16,
     lineHeight: 1,
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    minWidth: 26,
+    minWidth: 36,
+    minHeight: 36,
   };
 
   return (
@@ -338,25 +411,30 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, scrollbackMapRef,
           <button onMouseDown={pd} onClick={exitScrollMode} style={{ ...btnBase, fontWeight: 700, fontSize: 12 }} title="Exit (Esc)">&#10005;</button>
         </div>
       ) : (
-        <div style={{ position: "absolute", top: 4, right: 4, display: "flex", gap: 4, zIndex: 10 }}>
+        <div style={{ position: "absolute", top: 6, right: 6, display: "flex", gap: 6, zIndex: 10 }}>
           <button
             onMouseDown={pd}
             onClick={forceFit}
             title="Force resize terminal"
             style={{
-              background: "rgba(255,255,255,0.08)",
-              border: "1px solid rgba(255,255,255,0.2)",
+              background: "rgba(255,255,255,0.12)",
+              border: "1px solid rgba(255,255,255,0.25)",
               color: "#fff",
               cursor: "pointer",
-              borderRadius: 3,
-              padding: "3px 7px",
-              fontSize: 14,
+              borderRadius: 6,
+              padding: "8px 12px",
+              fontSize: 18,
               lineHeight: 1,
-              opacity: 0.4,
+              opacity: 0.6,
               transition: "opacity 0.15s",
+              minWidth: 40,
+              minHeight: 40,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
             }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.9"; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.4"; }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = "1"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.6"; }}
           >
             &#8862;
           </button>
@@ -366,19 +444,24 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, scrollbackMapRef,
               onClick={enterScrollMode}
               title="Scroll history (Ctrl+Shift+S)"
               style={{
-                background: "rgba(255,255,255,0.08)",
-                border: "1px solid rgba(255,255,255,0.2)",
+                background: "rgba(255,255,255,0.12)",
+                border: "1px solid rgba(255,255,255,0.25)",
                 color: "#fff",
                 cursor: "pointer",
-                borderRadius: 3,
-                padding: "3px 7px",
-                fontSize: 14,
+                borderRadius: 6,
+                padding: "8px 12px",
+                fontSize: 18,
                 lineHeight: 1,
-                opacity: 0.4,
+                opacity: 0.6,
                 transition: "opacity 0.15s",
+                minWidth: 40,
+                minHeight: 40,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
               }}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.9"; }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.4"; }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = "1"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.6"; }}
             >
               &#8597;
             </button>

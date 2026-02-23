@@ -81,6 +81,8 @@ async function main() {
     const cap = captures.get(sessionId);
     if (!cap) return;
     cap.resizePane(sessionId, cols, rows);
+    // Clear cache so the next poll cycle re-sends content at new dimensions
+    prevLines.delete(sessionId);
   }
 
   function handleRequestScrollback(sessionId: string) {

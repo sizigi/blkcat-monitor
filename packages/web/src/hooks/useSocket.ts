@@ -156,156 +156,198 @@ export function useSocket(url: string): UseSocketReturn {
   }, []);
 
   useEffect(() => {
-    const ws = new WebSocket(url);
-    wsRef.current = ws;
+    let disposed = false;
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+    let backoff = 500;
+    const MAX_BACKOFF = 10000;
 
-    ws.addEventListener("open", () => setConnected(true));
-    ws.addEventListener("close", () => setConnected(false));
+    function connect() {
+      if (disposed) return;
+      const ws = new WebSocket(url);
+      wsRef.current = ws;
 
-    ws.addEventListener("message", (ev) => {
-      try {
-        const msg: ServerToDashboardMessage = JSON.parse(ev.data as string);
+      ws.addEventListener("open", () => {
+        setConnected(true);
+        backoff = 500; // reset backoff on successful connection
+      });
 
-        if (msg.type === "snapshot") {
-          setMachines(msg.machines);
-          // Seed hook events from snapshot
-          for (const machine of msg.machines) {
-            if (machine.recentEvents) {
-              hookEventsRef.current.push(...machine.recentEvents);
+      ws.addEventListener("close", () => {
+        setConnected(false);
+        wsRef.current = null;
+        // Auto-reconnect unless intentionally disposed
+        if (!disposed) {
+          reconnectTimer = setTimeout(() => {
+            backoff = Math.min(backoff * 2, MAX_BACKOFF);
+            connect();
+          }, backoff);
+        }
+      });
+
+      ws.addEventListener("message", (ev) => {
+        try {
+          const msg: ServerToDashboardMessage = JSON.parse(ev.data as string);
+
+          if (msg.type === "snapshot") {
+            setMachines(msg.machines);
+            // Seed hook events from snapshot
+            for (const machine of msg.machines) {
+              if (machine.recentEvents) {
+                hookEventsRef.current.push(...machine.recentEvents);
+              }
             }
-          }
-          const counts = new Map<string, number>();
-          for (const machine of msg.machines) {
-            if (machine.recentEvents) {
-              for (const ev of machine.recentEvents) {
-                if (NOTIFY_HOOK_EVENTS.has(ev.hookEventName) && ev.sessionId) {
-                  const key = `${machine.machineId}:${ev.sessionId}`;
-                  counts.set(key, (counts.get(key) ?? 0) + 1);
+            const counts = new Map<string, number>();
+            for (const machine of msg.machines) {
+              if (machine.recentEvents) {
+                for (const ev of machine.recentEvents) {
+                  if (NOTIFY_HOOK_EVENTS.has(ev.hookEventName) && ev.sessionId) {
+                    const key = `${machine.machineId}:${ev.sessionId}`;
+                    counts.set(key, (counts.get(key) ?? 0) + 1);
+                  }
                 }
               }
             }
-          }
-          if (counts.size > 0) setNotificationCounts(counts);
-        } else if (msg.type === "machine_update") {
-          setMachines((prev) => {
-            if (msg.online === false) {
-              return prev.filter((m) => m.machineId !== msg.machineId);
-            }
-            const idx = prev.findIndex((m) => m.machineId === msg.machineId);
-            const updated: MachineSnapshot = {
+            if (counts.size > 0) setNotificationCounts(counts);
+          } else if (msg.type === "machine_update") {
+            setMachines((prev) => {
+              if (msg.online === false) {
+                return prev.filter((m) => m.machineId !== msg.machineId);
+              }
+              const idx = prev.findIndex((m) => m.machineId === msg.machineId);
+              const updated: MachineSnapshot = {
+                machineId: msg.machineId,
+                sessions: msg.sessions,
+                lastSeen: Date.now(),
+              };
+              if (idx >= 0) {
+                const next = [...prev];
+                next[idx] = updated;
+                return next;
+              }
+              return [...prev, updated];
+            });
+          } else if (msg.type === "scrollback") {
+            const key = `${msg.machineId}:${msg.sessionId}`;
+            scrollbackMapRef.current.set(key, msg.lines);
+            for (const sub of scrollbackSubsRef.current) sub(key);
+          } else if (msg.type === "output") {
+            const key = `${msg.machineId}:${msg.sessionId}`;
+            const entry: OutputLine = {
               machineId: msg.machineId,
-              sessions: msg.sessions,
-              lastSeen: Date.now(),
+              sessionId: msg.sessionId,
+              lines: msg.lines,
+              timestamp: msg.timestamp,
+              waitingForInput: (msg as any).waitingForInput,
             };
-            if (idx >= 0) {
-              const next = [...prev];
-              next[idx] = updated;
-              return next;
-            }
-            return [...prev, updated];
-          });
-        } else if (msg.type === "scrollback") {
-          const key = `${msg.machineId}:${msg.sessionId}`;
-          scrollbackMapRef.current.set(key, msg.lines);
-          for (const sub of scrollbackSubsRef.current) sub(key);
-        } else if (msg.type === "output") {
-          const key = `${msg.machineId}:${msg.sessionId}`;
-          const entry: OutputLine = {
-            machineId: msg.machineId,
-            sessionId: msg.sessionId,
-            lines: msg.lines,
-            timestamp: msg.timestamp,
-            waitingForInput: (msg as any).waitingForInput,
-          };
-          outputMapRef.current.set(key, entry);
+            outputMapRef.current.set(key, entry);
 
-          // Accumulate scrolled-off lines into per-session log
-          const prev = prevLinesMapRef.current.get(key) || [];
-          const scrolled = detectScrolled(prev, msg.lines);
-          if (scrolled > 0) {
-            let log = logMapRef.current.get(key);
-            if (!log) { log = []; logMapRef.current.set(key, log); }
-            log.push(...prev.slice(0, scrolled));
-            if (log.length > MAX_LOG_LINES) {
-              logMapRef.current.set(key, log.slice(-MAX_LOG_LINES));
+            // Accumulate scrolled-off lines into per-session log
+            const prev = prevLinesMapRef.current.get(key) || [];
+            const scrolled = detectScrolled(prev, msg.lines);
+            if (scrolled > 0) {
+              let log = logMapRef.current.get(key);
+              if (!log) { log = []; logMapRef.current.set(key, log); }
+              log.push(...prev.slice(0, scrolled));
+              if (log.length > MAX_LOG_LINES) {
+                logMapRef.current.set(key, log.slice(-MAX_LOG_LINES));
+              }
             }
-          }
-          prevLinesMapRef.current.set(key, msg.lines);
+            prevLinesMapRef.current.set(key, msg.lines);
 
-          // Notify subscribers (only the selected session's hook re-renders)
-          for (const sub of outputSubsRef.current) sub(key);
+            // Notify subscribers (only the selected session's hook re-renders)
+            for (const sub of outputSubsRef.current) sub(key);
 
-          // Track active sessions (recently received output)
-          setActiveSessions((prev) => {
-            if (!prev.has(key)) {
-              const next = new Set(prev);
-              next.add(key);
-              return next;
-            }
-            return prev;
-          });
-          // Reset inactivity timer
-          const prevTimer = activeTimersRef.current.get(key);
-          if (prevTimer) clearTimeout(prevTimer);
-          activeTimersRef.current.set(key, setTimeout(() => {
-            activeTimersRef.current.delete(key);
+            // Track active sessions (recently received output)
             setActiveSessions((prev) => {
+              if (!prev.has(key)) {
+                const next = new Set(prev);
+                next.add(key);
+                return next;
+              }
+              return prev;
+            });
+            // Reset inactivity timer
+            const prevTimer = activeTimersRef.current.get(key);
+            if (prevTimer) clearTimeout(prevTimer);
+            activeTimersRef.current.set(key, setTimeout(() => {
+              activeTimersRef.current.delete(key);
+              setActiveSessions((prev) => {
+                if (!prev.has(key)) return prev;
+                const next = new Set(prev);
+                next.delete(key);
+                return next;
+              });
+            }, 3000));
+
+            // Clear waiting state when output flows (Claude is generating)
+            setWaitingSessions((prev) => {
               if (!prev.has(key)) return prev;
               const next = new Set(prev);
               next.delete(key);
               return next;
             });
-          }, 3000));
+          } else if (msg.type === "hook_event") {
+            const hookEvent = msg as unknown as AgentHookEventMessage;
+            hookEventsRef.current.push(hookEvent);
+            if (hookEventsRef.current.length > 1000) {
+              hookEventsRef.current = hookEventsRef.current.slice(-1000);
+            }
+            for (const sub of hookEventSubsRef.current) sub(hookEvent);
+            // Mark session as waiting on Stop / PermissionRequest
+            if ((hookEvent.hookEventName === "Stop" || hookEvent.hookEventName === "PermissionRequest") && hookEvent.sessionId) {
+              const key = `${hookEvent.machineId}:${hookEvent.sessionId}`;
+              setWaitingSessions((prev) => {
+                if (prev.has(key)) return prev;
+                const next = new Set(prev);
+                next.add(key);
+                return next;
+              });
+            }
+            if (NOTIFY_HOOK_EVENTS.has(hookEvent.hookEventName) && hookEvent.sessionId) {
+              const key = `${hookEvent.machineId}:${hookEvent.sessionId}`;
+              setNotificationCounts((prev) => {
+                const next = new Map(prev);
+                next.set(key, (next.get(key) ?? 0) + 1);
+                return next;
+              });
+            }
+          } else if (msg.type === "directory_listing") {
+            const cb = directoryListingSubsRef.current.get(msg.requestId);
+            if (cb) {
+              directoryListingSubsRef.current.delete(msg.requestId);
+              cb({ path: msg.path, entries: (msg as any).entries ?? [], error: (msg as any).error });
+            }
+          } else if (msg.type === "deploy_result") {
+            for (const sub of deployResultSubsRef.current) sub(msg);
+          } else if (msg.type === "settings_snapshot") {
+            for (const sub of settingsSnapshotSubsRef.current) sub(msg);
+          } else if (msg.type === "settings_result") {
+            for (const sub of settingsResultSubsRef.current) sub(msg);
+          }
+        } catch {}
+      });
+    }
 
-          // Clear waiting state when output flows (Claude is generating)
-          setWaitingSessions((prev) => {
-            if (!prev.has(key)) return prev;
-            const next = new Set(prev);
-            next.delete(key);
-            return next;
-          });
-        } else if (msg.type === "hook_event") {
-          const hookEvent = msg as unknown as AgentHookEventMessage;
-          hookEventsRef.current.push(hookEvent);
-          if (hookEventsRef.current.length > 1000) {
-            hookEventsRef.current = hookEventsRef.current.slice(-1000);
-          }
-          for (const sub of hookEventSubsRef.current) sub(hookEvent);
-          // Mark session as waiting on Stop / PermissionRequest
-          if ((hookEvent.hookEventName === "Stop" || hookEvent.hookEventName === "PermissionRequest") && hookEvent.sessionId) {
-            const key = `${hookEvent.machineId}:${hookEvent.sessionId}`;
-            setWaitingSessions((prev) => {
-              if (prev.has(key)) return prev;
-              const next = new Set(prev);
-              next.add(key);
-              return next;
-            });
-          }
-          if (NOTIFY_HOOK_EVENTS.has(hookEvent.hookEventName) && hookEvent.sessionId) {
-            const key = `${hookEvent.machineId}:${hookEvent.sessionId}`;
-            setNotificationCounts((prev) => {
-              const next = new Map(prev);
-              next.set(key, (next.get(key) ?? 0) + 1);
-              return next;
-            });
-          }
-        } else if (msg.type === "directory_listing") {
-          const cb = directoryListingSubsRef.current.get(msg.requestId);
-          if (cb) {
-            directoryListingSubsRef.current.delete(msg.requestId);
-            cb({ path: msg.path, entries: (msg as any).entries ?? [], error: (msg as any).error });
-          }
-        } else if (msg.type === "deploy_result") {
-          for (const sub of deployResultSubsRef.current) sub(msg);
-        } else if (msg.type === "settings_snapshot") {
-          for (const sub of settingsSnapshotSubsRef.current) sub(msg);
-        } else if (msg.type === "settings_result") {
-          for (const sub of settingsResultSubsRef.current) sub(msg);
+    connect();
+
+    // Reconnect immediately when the page becomes visible again (mobile app switch)
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        const ws = wsRef.current;
+        if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+          clearTimeout(reconnectTimer);
+          backoff = 500;
+          connect();
         }
-      } catch {}
-    });
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
 
-    return () => { ws.close(); };
+    return () => {
+      disposed = true;
+      clearTimeout(reconnectTimer);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      wsRef.current?.close();
+    };
   }, [url]);
 
   const sendInput = useCallback(
