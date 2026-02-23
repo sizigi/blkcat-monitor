@@ -9,6 +9,7 @@ interface NotificationListProps {
   onSelectSession?: (machineId: string, sessionId: string) => void;
   getMachineName?: (machineId: string) => string;
   getSessionName?: (machineId: string, sessionId: string, defaultName: string) => string;
+  onClose?: () => void;
 }
 
 const EVENT_COLORS: Record<string, string> = {
@@ -66,6 +67,7 @@ export function NotificationList({
   onSelectSession,
   getMachineName,
   getSessionName,
+  onClose,
 }: NotificationListProps) {
   const [events, setEvents] = useState<AgentHookEventMessage[]>([]);
   const listRef = useRef<HTMLDivElement>(null);
@@ -106,6 +108,12 @@ export function NotificationList({
         display: "flex",
         alignItems: "center",
       }}>
+        {onClose && (
+          <button onClick={onClose} style={{
+            background: "none", border: "none", color: "var(--text-muted)",
+            cursor: "pointer", fontSize: 18, lineHeight: 1, padding: "2px 6px",
+          }}>&#x2715;</button>
+        )}
         <span style={{ fontWeight: 600, fontSize: 13 }}>Notifications</span>
         <span style={{ fontSize: 11, color: "var(--text-muted)", marginLeft: "auto" }}>
           {events.length}

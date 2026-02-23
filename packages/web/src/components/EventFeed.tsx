@@ -4,6 +4,7 @@ import type { AgentHookEventMessage } from "@blkcat/shared";
 interface EventFeedProps {
   hookEventsRef: React.RefObject<AgentHookEventMessage[]>;
   subscribeHookEvents: (cb: (event: AgentHookEventMessage) => void) => () => void;
+  onClose?: () => void;
 }
 
 const EVENT_COLORS: Record<string, string> = {
@@ -63,7 +64,7 @@ function formatTime(ts: number): string {
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
-export function EventFeed({ hookEventsRef, subscribeHookEvents }: EventFeedProps) {
+export function EventFeed({ hookEventsRef, subscribeHookEvents, onClose }: EventFeedProps) {
   const [events, setEvents] = useState<AgentHookEventMessage[]>([]);
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
   const [filter, setFilter] = useState<string>("");
@@ -113,6 +114,12 @@ export function EventFeed({ hookEventsRef, subscribeHookEvents }: EventFeedProps
         alignItems: "center",
         gap: 8,
       }}>
+        {onClose && (
+          <button onClick={onClose} style={{
+            background: "none", border: "none", color: "var(--text-muted)",
+            cursor: "pointer", fontSize: 18, lineHeight: 1, padding: "2px 6px",
+          }}>&#x2715;</button>
+        )}
         <span style={{ fontWeight: 600, fontSize: 13 }}>Events</span>
         <select
           value={filter}

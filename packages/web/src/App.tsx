@@ -370,6 +370,7 @@ export default function App() {
               <EventFeed
                 hookEventsRef={hookEventsRef}
                 subscribeHookEvents={subscribeHookEvents}
+                onClose={() => setPanelTab(null)}
               />
             ) : (
               <NotificationList
@@ -384,6 +385,7 @@ export default function App() {
                 }}
                 getMachineName={getMachineName}
                 getSessionName={getSessionName}
+                onClose={() => setPanelTab(null)}
               />
             )}
           </div>
