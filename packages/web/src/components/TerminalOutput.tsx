@@ -181,14 +181,22 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, scrollbackMapRef,
         return false;
       }
 
+      // Ctrl+Shift+S: enter scroll mode (for keyboards without PageUp)
+      if (!scrollModeRef.current && event.ctrlKey && event.shiftKey && event.key === "S") {
+        enterScrollMode();
+        return false;
+      }
+
       if (scrollModeRef.current) {
         if (event.key === "Escape" || event.key === "q") { exitScrollMode(); return false; }
         if (event.key === "PageUp") { scrollNav("pageUp"); return false; }
         if (event.key === "PageDown") { scrollNav("pageDown"); return false; }
-        if (event.key === "ArrowUp") { scrollNav("lineUp"); return false; }
-        if (event.key === "ArrowDown") { scrollNav("lineDown"); return false; }
-        if (event.key === "Home") { scrollNav("top"); return false; }
-        if (event.key === "End") { scrollNav("bottom"); return false; }
+        if (event.key === "ArrowUp" || event.key === "k") { scrollNav("lineUp"); return false; }
+        if (event.key === "ArrowDown" || event.key === "j") { scrollNav("lineDown"); return false; }
+        if (event.key === "Home" || event.key === "g") { scrollNav("top"); return false; }
+        if (event.key === "End" || event.key === "G") { scrollNav("bottom"); return false; }
+        if (event.key === "b" || event.key === "u") { scrollNav("pageUp"); return false; }
+        if (event.key === "f" || event.key === "d") { scrollNav("pageDown"); return false; }
         return false;
       }
 
@@ -356,7 +364,7 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, scrollbackMapRef,
             <button
               onMouseDown={pd}
               onClick={enterScrollMode}
-              title="Scroll history (Shift+PageUp)"
+              title="Scroll history (Ctrl+Shift+S)"
               style={{
                 background: "rgba(255,255,255,0.08)",
                 border: "1px solid rgba(255,255,255,0.2)",

@@ -56,7 +56,7 @@ export default function App() {
   const [selectedSession, setSelectedSession] = useState<string>();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
-  const [panelTab, setPanelTab] = useState<"events" | "notifications" | "settings" | null>(null);
+  const [panelTab, setPanelTab] = useState<"events" | "notifications" | "skills" | null>(null);
   const [settingsSession, setSettingsSession] = useState<{ machineId: string; sessionId: string } | null>(null);
   const resizing = useRef(false);
 
@@ -210,7 +210,7 @@ export default function App() {
         )}
       </main>
       {/* Full-width skills matrix overlay */}
-      {panelTab === "settings" && (
+      {panelTab === "skills" && (
         <div style={{
           position: "absolute",
           top: 0,
@@ -252,7 +252,7 @@ export default function App() {
           justifyContent: "flex-end",
           pointerEvents: "auto",
         }}>
-          {(["events", "notifications", "settings"] as const).map((tab, i, arr) => (
+          {(["events", "notifications", "skills"] as const).map((tab, i, arr) => (
             <button
               key={tab}
               onClick={() => setPanelTab((v) => v === tab ? null : tab)}
@@ -267,7 +267,7 @@ export default function App() {
                 borderRadius: i === 0 ? "4px 0 0 0" : i === arr.length - 1 ? "0 4px 0 0" : "0",
               }}
             >
-              {tab === "events" ? "Events" : tab === "notifications" ? "Notifications" : "Settings"}
+              {tab === "events" ? "Events" : tab === "notifications" ? "Notifications" : "Skills"}
               {tab === "notifications" && (() => {
                 let total = 0;
                 for (const c of notificationCounts.values()) total += c;
@@ -277,7 +277,7 @@ export default function App() {
           ))}
         </div>
         {/* Panel content */}
-        {panelTab && panelTab !== "settings" && (
+        {panelTab && panelTab !== "skills" && (
           <div style={{
             width: 320,
             flex: 1,
