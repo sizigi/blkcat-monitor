@@ -45,7 +45,7 @@ export function ChatInput({ onSendText, onSendKey }: ChatInputProps) {
 
   return (
     <div style={{ padding: 8, display: "flex", flexDirection: "column", gap: 6 }}>
-      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+      <div className="chat-buttons" style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
         {KEY_BUTTONS.map((btn) => (
           <button
             key={btn.label}

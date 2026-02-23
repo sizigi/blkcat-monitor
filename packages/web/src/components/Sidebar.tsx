@@ -55,6 +55,7 @@ export function Sidebar({
   const [editValue, setEditValue] = useState("");
   return (
     <aside
+      className="sidebar"
       style={{
         width,
         borderRight: "1px solid var(--border)",

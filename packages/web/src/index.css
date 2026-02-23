@@ -56,3 +56,75 @@ html, body, #root {
 .active-indicator {
   animation: pulse-active 0.8s ease-in-out infinite;
 }
+
+/* ── Mobile responsive (≤768px) ── */
+@media (max-width: 768px) {
+  /* Sidebar as slide-out drawer */
+  .sidebar {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 100;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    width: 280px !important;
+  }
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  /* Backdrop behind drawer */
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 99;
+  }
+
+  /* Mobile top bar */
+  .mobile-topbar {
+    display: flex !important;
+  }
+
+  /* Hide desktop resize handle */
+  .sidebar-resize-handle {
+    display: none !important;
+  }
+
+  /* Full-screen panel overlay */
+  .panel-overlay {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100% !important;
+    z-index: 50 !important;
+  }
+
+  /* Panel tab bar: hide desktop tab strip */
+  .panel-tabs-desktop {
+    display: none !important;
+  }
+
+  /* Touch-friendly chat buttons */
+  .chat-buttons button {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 8px 14px !important;
+    font-size: 14px !important;
+  }
+}
+
+/* Hidden by default (for desktop) */
+.sidebar-backdrop {
+  display: none;
+}
+.mobile-topbar {
+  display: none !important;
+}
