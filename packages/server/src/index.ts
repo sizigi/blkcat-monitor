@@ -1,9 +1,11 @@
 import { createServer } from "./server";
 import { loadSavedAgents, saveAgents } from "./agents-store";
+import { loadDisplayNames, saveDisplayNames } from "./display-names-store";
 import { loadServerConfig } from "./config";
 
 const config = await loadServerConfig();
 const savedAgents = await loadSavedAgents();
+const displayNames = await loadDisplayNames();
 
 const server = createServer({
   port: config.port,
@@ -14,6 +16,8 @@ const server = createServer({
   onAgentsSaved: (addresses) => { saveAgents(addresses); },
   notifyCommand: config.notifyCommand,
   notifyEnv: config.notifyEnv,
+  displayNames,
+  onDisplayNamesSaved: (names) => { saveDisplayNames(names); },
 });
 
 // Connect saved agents (as "api" source so they continue to be persisted)

@@ -351,7 +351,9 @@ export function Sidebar({
                     data-testid={`close-session-${session.id}`}
                     onClick={(e) => {
                       e.stopPropagation();
-                      onCloseSession(machine.machineId, session.id);
+                      if (confirm("Close this session?")) {
+                        onCloseSession(machine.machineId, session.id);
+                      }
                     }}
                     title="Close session"
                     style={{

@@ -5,6 +5,8 @@ interface HooksServerOptions {
   machineId: string;
   onHookEvent: (event: AgentHookEventMessage) => void;
   resolvePaneId: (tmuxPane: string) => string | null;
+  /** Called when a hook event includes a Claude session_id, mapping tmux pane → Claude session. */
+  onClaudeSessionId?: (paneId: string, claudeSessionId: string) => void;
 }
 
 export class HooksServer {
@@ -38,6 +40,11 @@ export class HooksServer {
             typeof body.tmux_pane === "string" && body.tmux_pane
               ? opts.resolvePaneId(body.tmux_pane)
               : null;
+
+          // Track Claude session ID when available
+          if (sessionId && typeof body.session_id === "string" && body.session_id && opts.onClaudeSessionId) {
+            opts.onClaudeSessionId(sessionId, body.session_id);
+          }
 
           // Extract matcher: tool_name for tool events, source for SessionStart, etc.
           const matcher =

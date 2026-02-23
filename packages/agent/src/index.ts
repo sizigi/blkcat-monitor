@@ -16,6 +16,7 @@ async function main() {
   const config = await loadConfig();
 
   const captures = new Map<string, TmuxCapture>();
+  const claudeSessionIds = new Map<string, string>();
   const manualSessions: SessionInfo[] = [];
 
   for (const target of config.targets) {
@@ -67,6 +68,7 @@ async function main() {
     cap.killPane(sessionId);
     captures.delete(sessionId);
     prevLines.delete(sessionId);
+    claudeSessionIds.delete(sessionId);
     // Remove from manual sessions
     const manualIdx = manualSessions.findIndex((s) => s.id === sessionId);
     if (manualIdx >= 0) manualSessions.splice(manualIdx, 1);
@@ -95,9 +97,11 @@ async function main() {
   function handleReloadSession(sessionId: string) {
     const cap = captures.get(sessionId);
     if (!cap) return;
-    cap.respawnPane(sessionId, "claude --resume");
+    const claudeId = claudeSessionIds.get(sessionId);
+    const cmd = claudeId ? `claude --resume ${claudeId}` : "claude --resume";
+    cap.respawnPane(sessionId, cmd);
     prevLines.delete(sessionId);
-    console.log(`Reloaded session: ${sessionId}`);
+    console.log(`Reloaded session: ${sessionId}${claudeId ? ` (claude session: ${claudeId})` : ""}`);
   }
 
   function handleStartSession(args?: string, cwd?: string, name?: string) {
@@ -246,6 +250,9 @@ async function main() {
     machineId: config.machineId,
     onHookEvent: (event) => {
       conn.sendHookEvent(event);
+    },
+    onClaudeSessionId: (paneId, claudeId) => {
+      claudeSessionIds.set(paneId, claudeId);
     },
     resolvePaneId: (tmuxPane) => {
       // Direct match (session:window.pane format)

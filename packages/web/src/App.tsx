@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useSocket, type OutputLine } from "./hooks/useSocket";
 import { useAgents } from "./hooks/useAgents";
 import { useDisplayNames } from "./hooks/useDisplayNames";
@@ -50,9 +50,12 @@ function useSessionLines(
 }
 
 export default function App() {
-  const { connected, machines, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory, deploySkills, removeSkills, getSettings, updateSettings, subscribeDeployResult, subscribeSettingsSnapshot, subscribeSettingsResult } = useSocket(WS_URL);
+  const { connected, machines, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory, deploySkills, removeSkills, getSettings, updateSettings, subscribeDeployResult, subscribeSettingsSnapshot, subscribeSettingsResult, setDisplayName, subscribeDisplayNames } = useSocket(WS_URL);
   const { agents, addAgent, removeAgent } = useAgents();
-  const { getMachineName, getSessionName, setMachineName, setSessionName } = useDisplayNames();
+  const { getMachineName, getSessionName, setMachineName, setSessionName } = useDisplayNames({
+    sendDisplayName: setDisplayName,
+    subscribeDisplayNames,
+  });
   const isMobile = useIsMobile();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -72,6 +75,8 @@ export default function App() {
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
   const [panelTab, setPanelTab] = useState<"events" | "notifications" | "skills" | null>(null);
   const [settingsSession, setSettingsSession] = useState<{ machineId: string; sessionId: string } | null>(null);
+  const [editingTopbarName, setEditingTopbarName] = useState(false);
+  const [topbarEditValue, setTopbarEditValue] = useState("");
   const resizing = useRef(false);
 
   const sessionLines = useSessionLines(outputMapRef, subscribeOutput, selectedMachine, selectedSession);
@@ -205,9 +210,60 @@ export default function App() {
             lineHeight: 1,
           }}
         >&#9776;</button>
-        <span style={{ flex: 1, fontSize: 14, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {selectedSessionName || "blkcat-monitor"}
-        </span>
+        {editingTopbarName && selectedMachine && selectedSession ? (
+          <input
+            autoFocus
+            value={topbarEditValue}
+            onChange={(e) => setTopbarEditValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                setSessionName(selectedMachine, selectedSession, topbarEditValue);
+                setEditingTopbarName(false);
+              } else if (e.key === "Escape") {
+                setEditingTopbarName(false);
+              }
+            }}
+            onBlur={() => {
+              setSessionName(selectedMachine, selectedSession, topbarEditValue);
+              setEditingTopbarName(false);
+            }}
+            style={{
+              flex: 1,
+              fontSize: 14,
+              fontWeight: 600,
+              background: "var(--bg-primary)",
+              color: "var(--text)",
+              border: "1px solid var(--accent)",
+              borderRadius: 4,
+              padding: "2px 6px",
+              outline: "none",
+              minWidth: 0,
+            }}
+          />
+        ) : (
+          <span style={{ flex: 1, fontSize: 14, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {selectedSessionName || "blkcat-monitor"}
+          </span>
+        )}
+        {selectedMachine && selectedSession && !editingTopbarName && (
+          <button
+            onClick={() => {
+              setTopbarEditValue(selectedSessionName);
+              setEditingTopbarName(true);
+            }}
+            style={{
+              background: "none",
+              border: "none",
+              color: "var(--text-muted)",
+              cursor: "pointer",
+              fontSize: 14,
+              padding: "4px 6px",
+              lineHeight: 1,
+              flexShrink: 0,
+            }}
+            title="Rename session"
+          >&#9998;</button>
+        )}
         {(["events", "notifications", "skills"] as const).map((tab) => (
           <button
             key={tab}

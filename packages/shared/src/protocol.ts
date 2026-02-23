@@ -179,6 +179,15 @@ export type ServerToAgentMessage = ServerInputMessage | ServerStartSessionMessag
 export interface ServerSnapshotMessage {
   type: "snapshot";
   machines: MachineSnapshot[];
+  displayNames?: { machines: Record<string, string>; sessions: Record<string, string> };
+}
+
+export interface ServerDisplayNameUpdateMessage {
+  type: "display_name_update";
+  target: "machine" | "session";
+  machineId: string;
+  sessionId?: string;
+  name: string;
 }
 
 export interface ServerMachineUpdateMessage {
@@ -257,7 +266,8 @@ export type ServerToDashboardMessage =
   | ServerDirectoryListingMessage
   | ServerDeployResultMessage
   | ServerSettingsSnapshotMessage
-  | ServerSettingsResultMessage;
+  | ServerSettingsResultMessage
+  | ServerDisplayNameUpdateMessage;
 
 // --- Dashboard -> Server messages ---
 
@@ -342,7 +352,15 @@ export interface DashboardRemoveSkillsMessage {
   skillNames: string[];
 }
 
-export type DashboardToServerMessage = DashboardInputMessage | DashboardStartSessionMessage | DashboardCloseSessionMessage | DashboardResizeMessage | DashboardRequestScrollbackMessage | DashboardReloadSessionMessage | DashboardListDirectoryMessage | DashboardDeploySkillsMessage | DashboardGetSettingsMessage | DashboardUpdateSettingsMessage | DashboardRemoveSkillsMessage;
+export interface DashboardSetDisplayNameMessage {
+  type: "set_display_name";
+  target: "machine" | "session";
+  machineId: string;
+  sessionId?: string;
+  name: string;
+}
+
+export type DashboardToServerMessage = DashboardInputMessage | DashboardStartSessionMessage | DashboardCloseSessionMessage | DashboardResizeMessage | DashboardRequestScrollbackMessage | DashboardReloadSessionMessage | DashboardListDirectoryMessage | DashboardDeploySkillsMessage | DashboardGetSettingsMessage | DashboardUpdateSettingsMessage | DashboardRemoveSkillsMessage | DashboardSetDisplayNameMessage;
 
 // --- Outbound agent info ---
 
@@ -358,7 +376,7 @@ export const NOTIFY_HOOK_EVENTS = new Set(["Stop", "Notification", "PermissionRe
 // --- Parsers ---
 
 const AGENT_TYPES = new Set(["register", "output", "sessions", "scrollback", "hook_event", "directory_listing", "deploy_result", "settings_snapshot", "settings_result"]);
-const DASHBOARD_TYPES = new Set(["input", "start_session", "close_session", "resize", "request_scrollback", "reload_session", "list_directory", "deploy_skills", "get_settings", "update_settings", "remove_skills"]);
+const DASHBOARD_TYPES = new Set(["input", "start_session", "close_session", "resize", "request_scrollback", "reload_session", "list_directory", "deploy_skills", "get_settings", "update_settings", "remove_skills", "set_display_name"]);
 
 export function parseAgentMessage(raw: string): AgentToServerMessage | null {
   try {

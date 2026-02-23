@@ -52,6 +52,11 @@ function detectScrolled(prev: string[], curr: string[]): number {
   return scrollOverlap > inPlaceMatch ? prev.length - scrollOverlap : 0;
 }
 
+export interface DisplayNamesData {
+  machines: Record<string, string>;
+  sessions: Record<string, string>;
+}
+
 export interface UseSocketReturn {
   connected: boolean;
   machines: MachineSnapshot[];
@@ -81,6 +86,8 @@ export interface UseSocketReturn {
   subscribeDeployResult: (cb: (msg: any) => void) => () => void;
   subscribeSettingsSnapshot: (cb: (msg: any) => void) => () => void;
   subscribeSettingsResult: (cb: (msg: any) => void) => () => void;
+  setDisplayName: (target: "machine" | "session", machineId: string, sessionId: string | undefined, name: string) => void;
+  subscribeDisplayNames: (cb: (names: DisplayNamesData) => void) => () => void;
 }
 
 export function useSocket(url: string): UseSocketReturn {
@@ -113,6 +120,9 @@ export function useSocket(url: string): UseSocketReturn {
   const deployResultSubsRef = useRef(new Set<(msg: any) => void>());
   const settingsSnapshotSubsRef = useRef(new Set<(msg: any) => void>());
   const settingsResultSubsRef = useRef(new Set<(msg: any) => void>());
+
+  const displayNamesRef = useRef<DisplayNamesData>({ machines: {}, sessions: {} });
+  const displayNamesSubsRef = useRef(new Set<(names: DisplayNamesData) => void>());
 
   const [notificationCounts, setNotificationCounts] = useState<Map<string, number>>(new Map());
 
@@ -153,6 +163,11 @@ export function useSocket(url: string): UseSocketReturn {
   const subscribeSettingsResult = useCallback((cb: (msg: any) => void) => {
     settingsResultSubsRef.current.add(cb);
     return () => { settingsResultSubsRef.current.delete(cb); };
+  }, []);
+
+  const subscribeDisplayNames = useCallback((cb: (names: DisplayNamesData) => void) => {
+    displayNamesSubsRef.current.add(cb);
+    return () => { displayNamesSubsRef.current.delete(cb); };
   }, []);
 
   useEffect(() => {
@@ -207,6 +222,10 @@ export function useSocket(url: string): UseSocketReturn {
               }
             }
             if (counts.size > 0) setNotificationCounts(counts);
+            if ((msg as any).displayNames) {
+              displayNamesRef.current = (msg as any).displayNames;
+              for (const sub of displayNamesSubsRef.current) sub(displayNamesRef.current);
+            }
           } else if (msg.type === "machine_update") {
             setMachines((prev) => {
               if (msg.online === false) {
@@ -322,6 +341,25 @@ export function useSocket(url: string): UseSocketReturn {
             for (const sub of settingsSnapshotSubsRef.current) sub(msg);
           } else if (msg.type === "settings_result") {
             for (const sub of settingsResultSubsRef.current) sub(msg);
+          } else if (msg.type === "display_name_update") {
+            const u = msg as any;
+            if (u.target === "machine") {
+              if (u.name) {
+                displayNamesRef.current.machines[u.machineId] = u.name;
+              } else {
+                delete displayNamesRef.current.machines[u.machineId];
+              }
+            } else if (u.target === "session" && u.sessionId) {
+              const key = `${u.machineId}:${u.sessionId}`;
+              if (u.name) {
+                displayNamesRef.current.sessions[key] = u.name;
+              } else {
+                delete displayNamesRef.current.sessions[key];
+              }
+            }
+            // Create a new object reference so subscribers can detect changes
+            displayNamesRef.current = { ...displayNamesRef.current };
+            for (const sub of displayNamesSubsRef.current) sub(displayNamesRef.current);
           }
         } catch {}
       });
@@ -483,5 +521,11 @@ export function useSocket(url: string): UseSocketReturn {
     return requestId;
   }, [sendRaw]);
 
-  return { connected, machines, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory, sendRaw, deploySkills, removeSkills, getSettings, updateSettings, subscribeDeployResult, subscribeSettingsSnapshot, subscribeSettingsResult };
+  const setDisplayName = useCallback((target: "machine" | "session", machineId: string, sessionId: string | undefined, name: string) => {
+    const msg: Record<string, any> = { type: "set_display_name", target, machineId, name };
+    if (sessionId) msg.sessionId = sessionId;
+    sendRaw(msg);
+  }, [sendRaw]);
+
+  return { connected, machines, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory, sendRaw, deploySkills, removeSkills, getSettings, updateSettings, subscribeDeployResult, subscribeSettingsSnapshot, subscribeSettingsResult, setDisplayName, subscribeDisplayNames };
 }

@@ -8,6 +8,7 @@ import {
   parseDashboardMessage,
   NOTIFY_HOOK_EVENTS,
 } from "@blkcat/shared";
+import type { DisplayNames } from "./display-names-store";
 
 interface ServerOptions {
   port: number;
@@ -20,6 +21,8 @@ interface ServerOptions {
    *  Triggered by Stop, Notification, and PermissionRequest hook events. */
   notifyCommand?: string;
   notifyEnv?: Record<string, string>;
+  displayNames?: DisplayNames;
+  onDisplayNamesSaved?: (names: DisplayNames) => void;
 }
 
 interface WsData {
@@ -89,6 +92,9 @@ export function createServer(opts: ServerOptions) {
   const dashboards = new Set<any>();
   const outboundAgents = new Map<string, OutboundAgent>();
   const inboundAgents = new WeakMap<object, AgentSocket>();
+  const displayNames: DisplayNames = opts.displayNames
+    ? { machines: { ...opts.displayNames.machines }, sessions: { ...opts.displayNames.sessions } }
+    : { machines: {}, sessions: {} };
 
   function broadcastToDashboards(msg: object) {
     const data = JSON.stringify(msg);
@@ -347,7 +353,11 @@ export function createServer(opts: ServerOptions) {
         const data = ws.data as WsData;
         if (data.role === "dashboard") {
           dashboards.add(ws);
-          ws.send(JSON.stringify({ type: "snapshot", machines: getSnapshot() }));
+          const snapshotMsg: Record<string, any> = { type: "snapshot", machines: getSnapshot() };
+          if (Object.keys(displayNames.machines).length > 0 || Object.keys(displayNames.sessions).length > 0) {
+            snapshotMsg.displayNames = displayNames;
+          }
+          ws.send(JSON.stringify(snapshotMsg));
           for (const machine of machines.values()) {
             for (const output of machine.lastOutputs.values()) {
               ws.send(JSON.stringify(output));
@@ -473,6 +483,31 @@ export function createServer(opts: ServerOptions) {
               };
               if (msg.projectPath) fwd.projectPath = msg.projectPath;
               machine.agent.send(JSON.stringify(fwd));
+            }
+          } else if (msg.type === "set_display_name") {
+            if (msg.target === "machine") {
+              if (msg.name) {
+                displayNames.machines[msg.machineId] = msg.name;
+              } else {
+                delete displayNames.machines[msg.machineId];
+              }
+            } else if (msg.target === "session" && msg.sessionId) {
+              const key = `${msg.machineId}:${msg.sessionId}`;
+              if (msg.name) {
+                displayNames.sessions[key] = msg.name;
+              } else {
+                delete displayNames.sessions[key];
+              }
+            }
+            broadcastToDashboards({
+              type: "display_name_update",
+              target: msg.target,
+              machineId: msg.machineId,
+              sessionId: msg.sessionId,
+              name: msg.name,
+            });
+            if (opts.onDisplayNamesSaved) {
+              opts.onDisplayNamesSaved(displayNames);
             }
           }
         }
