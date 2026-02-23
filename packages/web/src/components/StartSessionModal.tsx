@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 
 interface StartSessionModalProps {
   machineId: string;
@@ -29,13 +29,17 @@ export function StartSessionModal({
 }: StartSessionModalProps) {
   const [sessionName, setSessionName] = useState("");
   const [currentPath, setCurrentPath] = useState("~");
-  const [pathInput, setPathInput] = useState("~");
+  const [pathInput, setPathInput] = useState("~/");
   const [entries, setEntries] = useState<{ name: string; isDir: boolean }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedFlags, setSelectedFlags] = useState<Set<string>>(new Set());
   const [extraArgs, setExtraArgs] = useState("");
 
+  // Track the last fetched parent directory (resolved path) to avoid redundant fetches
+  const lastFetchedParentRef = useRef<string>("");
+
+  // Full navigation: fetch directory and update pathInput with trailing slash
   const loadDirectory = useCallback(
     async (path: string) => {
       setLoading(true);
@@ -49,7 +53,9 @@ export function StartSessionModal({
           setEntries(result.entries);
         }
         setCurrentPath(result.path);
-        setPathInput(result.path);
+        const display = result.path.endsWith("/") ? result.path : result.path + "/";
+        setPathInput(display);
+        lastFetchedParentRef.current = result.path;
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to list directory");
         setEntries([]);
@@ -63,6 +69,60 @@ export function StartSessionModal({
   useEffect(() => {
     loadDirectory("~");
   }, [loadDirectory]);
+
+  // Parse pathInput into parent directory and partial segment for filtering
+  const { parentDir, partial } = useMemo(() => {
+    const trimmed = pathInput.trim();
+    if (!trimmed || trimmed === "/" || trimmed === "~") {
+      return { parentDir: trimmed || "~", partial: "" };
+    }
+    if (trimmed.endsWith("/")) {
+      return { parentDir: trimmed.replace(/\/+$/, "") || "/", partial: "" };
+    }
+    const lastSlash = trimmed.lastIndexOf("/");
+    if (lastSlash === -1) {
+      return { parentDir: "~", partial: trimmed };
+    }
+    return {
+      parentDir: trimmed.substring(0, lastSlash) || "/",
+      partial: trimmed.substring(lastSlash + 1),
+    };
+  }, [pathInput]);
+
+  // Debounced fetch when parent directory changes from typing
+  useEffect(() => {
+    if (!parentDir || parentDir === lastFetchedParentRef.current) return;
+
+    const timer = setTimeout(() => {
+      setLoading(true);
+      setError(null);
+      listDirectory(machineId, parentDir)
+        .then((result) => {
+          lastFetchedParentRef.current = result.path;
+          if (result.error) {
+            setError(result.error);
+            setEntries([]);
+          } else {
+            setEntries(result.entries);
+          }
+          setCurrentPath(result.path);
+          setLoading(false);
+        })
+        .catch((err) => {
+          setError(err instanceof Error ? err.message : "Failed to list directory");
+          setEntries([]);
+          setLoading(false);
+        });
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [parentDir, machineId, listDirectory]);
+
+  // Filter entries by partial prefix
+  const filteredEntries = useMemo(() => {
+    if (!partial) return entries;
+    return entries.filter((entry) => entry.name.startsWith(partial));
+  }, [entries, partial]);
 
   function handleNavigate(folderName: string) {
     const newPath =
@@ -301,9 +361,14 @@ export function StartSessionModal({
                     Empty directory
                   </div>
                 )}
+                {!loading && !error && entries.length > 0 && filteredEntries.length === 0 && (
+                  <div style={{ padding: "12px 12px", color: "var(--text-muted)", fontSize: 13 }}>
+                    No matching entries
+                  </div>
+                )}
                 {!loading &&
                   !error &&
-                  entries.map((entry) => (
+                  filteredEntries.map((entry) => (
                     <div
                       key={entry.name}
                       onClick={entry.isDir ? () => handleNavigate(entry.name) : undefined}
