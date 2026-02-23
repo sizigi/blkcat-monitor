@@ -25,6 +25,7 @@ interface SidebarProps {
   onCollapse?: () => void;
   listDirectory?: (machineId: string, path: string) => Promise<{ path: string; entries: { name: string; isDir: boolean }[]; error?: string }>;
   onSessionSettings?: (machineId: string, sessionId: string) => void;
+  className?: string;
 }
 
 export function Sidebar({
@@ -49,13 +50,14 @@ export function Sidebar({
   onCollapse,
   listDirectory,
   onSessionSettings,
+  className,
 }: SidebarProps) {
   const [modalMachineId, setModalMachineId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   return (
     <aside
-      className="sidebar"
+      className={`sidebar${className ? ` ${className}` : ""}`}
       style={{
         width,
         borderRight: "1px solid var(--border)",

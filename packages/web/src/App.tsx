@@ -130,24 +130,18 @@ export default function App() {
           {drawerOpen && (
             <div className="sidebar-backdrop" onClick={() => setDrawerOpen(false)} />
           )}
-          <div className={`sidebar ${drawerOpen ? "open" : ""}`} style={{
-            display: "flex",
-            flexDirection: "column",
-            background: "var(--bg-secondary)",
-            borderRight: "1px solid var(--border)",
-          }}>
-            <Sidebar
-              width={280}
-              {...sidebarBaseProps}
-              onSelectSession={(m, s) => {
-                setSelectedMachine(m);
-                setSelectedSession(s);
-                clearNotifications(`${m}:${s}`);
-                setDrawerOpen(false);
-              }}
-              onCollapse={() => setDrawerOpen(false)}
-            />
-          </div>
+          <Sidebar
+            width={280}
+            className={drawerOpen ? "open" : ""}
+            {...sidebarBaseProps}
+            onSelectSession={(m, s) => {
+              setSelectedMachine(m);
+              setSelectedSession(s);
+              clearNotifications(`${m}:${s}`);
+              setDrawerOpen(false);
+            }}
+            onCollapse={() => setDrawerOpen(false)}
+          />
         </>
       ) : (
         <>
