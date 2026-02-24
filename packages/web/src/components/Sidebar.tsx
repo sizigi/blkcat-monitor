@@ -71,6 +71,7 @@ export function Sidebar({
   const [modalMachineId, setModalMachineId] = useState<string | null>(null);
   const [reloadTarget, setReloadTarget] = useState<{ machineId: string; session: SessionInfo } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [themeOpen, setThemeOpen] = useState(false);
   const [editValue, setEditValue] = useState("");
   // Drag-to-reorder state (refs to avoid re-renders during drag)
   const dragMachineRef = useRef<{ index: number } | null>(null);
@@ -542,34 +543,79 @@ export function Sidebar({
         </div>
       ))}
       </div>
-      {themes && onThemeChange && (
-        <div style={{
-          padding: "8px 16px",
-          borderTop: "1px solid var(--border)",
-          display: "flex",
-          gap: 6,
-          alignItems: "center",
-          justifyContent: "center",
-        }}>
-          {themes.map((t) => (
+      {themes && onThemeChange && (() => {
+        const [open, setOpen] = [themeOpen, setThemeOpen];
+        const current = themes.find((t) => t.id === currentTheme);
+        return (
+          <div style={{ padding: "4px 16px", borderTop: "1px solid var(--border)", position: "relative" }}>
             <button
-              key={t.id}
-              onClick={() => onThemeChange(t.id)}
-              title={t.label}
+              onClick={() => setOpen(!open)}
               style={{
-                width: 20,
-                height: 20,
-                borderRadius: "50%",
-                border: currentTheme === t.id ? `2px solid ${t.accent}` : "2px solid transparent",
-                background: `radial-gradient(circle at 30% 30%, ${t.accent}, ${t.bg})`,
+                background: "none",
+                border: "none",
+                color: "var(--text-muted)",
                 cursor: "pointer",
-                padding: 0,
-                transition: "border-color 0.2s",
+                fontSize: 11,
+                padding: "4px 0",
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+                width: "100%",
               }}
-            />
-          ))}
-        </div>
-      )}
+            >
+              <span style={{
+                width: 8, height: 8, borderRadius: "50%",
+                background: current?.accent ?? "var(--accent)",
+                display: "inline-block", flexShrink: 0,
+              }} />
+              <span>{current?.label ?? "Theme"}</span>
+              <span style={{ marginLeft: "auto", fontSize: 9 }}>{open ? "\u25B2" : "\u25BC"}</span>
+            </button>
+            {open && (
+              <div style={{
+                position: "absolute",
+                bottom: "100%",
+                left: 8,
+                right: 8,
+                background: "var(--bg-secondary)",
+                border: "1px solid var(--border)",
+                borderRadius: 6,
+                padding: 4,
+                zIndex: 50,
+                boxShadow: "0 -4px 12px rgba(0,0,0,0.3)",
+              }}>
+                {themes.map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => { onThemeChange(t.id); setOpen(false); }}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      width: "100%",
+                      padding: "6px 8px",
+                      background: currentTheme === t.id ? "var(--bg-tertiary)" : "transparent",
+                      border: "none",
+                      borderRadius: 4,
+                      color: currentTheme === t.id ? "var(--text)" : "var(--text-muted)",
+                      cursor: "pointer",
+                      fontSize: 12,
+                    }}
+                  >
+                    <span style={{
+                      width: 10, height: 10, borderRadius: "50%",
+                      background: `radial-gradient(circle at 30% 30%, ${t.accent}, ${t.bg})`,
+                      border: currentTheme === t.id ? `1.5px solid ${t.accent}` : "1.5px solid transparent",
+                      flexShrink: 0,
+                    }} />
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
       {agents && onAddAgent && onRemoveAgent && (
         <AgentManager agents={agents} onAdd={onAddAgent} onRemove={onRemoveAgent} />
       )}
