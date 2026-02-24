@@ -4,11 +4,11 @@ interface AgentListenerOptions {
   port: number;
   machineId: string;
   onInput: (msg: { sessionId: string; text?: string; key?: string; data?: string }) => void;
-  onStartSession?: (args?: string, cwd?: string, name?: string) => void;
+  onStartSession?: (args?: string, cwd?: string, name?: string, cliTool?: "claude" | "codex") => void;
   onCloseSession?: (sessionId: string) => void;
   onResize?: (sessionId: string, cols: number, rows: number) => void;
   onRequestScrollback?: (sessionId: string) => void;
-  onReloadSession?: (sessionId: string) => void;
+  onReloadSession?: (sessionId: string, args?: string, resume?: boolean) => void;
   onListDirectory?: (requestId: string, path: string) => void;
   onDeploySkills?: (requestId: string, skills: { name: string; files: { path: string; content: string }[] }[]) => void;
   onRemoveSkills?: (requestId: string, skillNames: string[]) => void;
@@ -53,7 +53,7 @@ export class AgentListener {
             if (msg.type === "input") {
               this.opts.onInput({ sessionId: msg.sessionId, text: msg.text, key: msg.key, data: msg.data });
             } else if (msg.type === "start_session") {
-              this.opts.onStartSession?.(msg.args, msg.cwd, msg.name);
+              this.opts.onStartSession?.(msg.args, msg.cwd, msg.name, msg.cliTool);
             } else if (msg.type === "close_session") {
               this.opts.onCloseSession?.(msg.sessionId);
             } else if (msg.type === "resize") {
@@ -61,7 +61,7 @@ export class AgentListener {
             } else if (msg.type === "request_scrollback") {
               this.opts.onRequestScrollback?.(msg.sessionId);
             } else if (msg.type === "reload_session") {
-              this.opts.onReloadSession?.(msg.sessionId);
+              this.opts.onReloadSession?.(msg.sessionId, msg.args, msg.resume);
             } else if (msg.type === "list_directory") {
               this.opts.onListDirectory?.(msg.requestId, msg.path);
             } else if (msg.type === "deploy_skills") {
