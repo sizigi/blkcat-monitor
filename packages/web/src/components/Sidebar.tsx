@@ -32,6 +32,9 @@ interface SidebarProps {
   onReorderMachine?: (fromIndex: number, toIndex: number) => void;
   onReorderSession?: (machineId: string, fromIndex: number, toIndex: number) => void;
   className?: string;
+  currentTheme?: string;
+  onThemeChange?: (id: string) => void;
+  themes?: { id: string; label: string; accent: string; bg: string }[];
 }
 
 export function Sidebar({
@@ -61,6 +64,9 @@ export function Sidebar({
   onReorderMachine,
   onReorderSession,
   className,
+  currentTheme,
+  onThemeChange,
+  themes,
 }: SidebarProps) {
   const [modalMachineId, setModalMachineId] = useState<string | null>(null);
   const [reloadTarget, setReloadTarget] = useState<{ machineId: string; session: SessionInfo } | null>(null);
@@ -536,6 +542,34 @@ export function Sidebar({
         </div>
       ))}
       </div>
+      {themes && onThemeChange && (
+        <div style={{
+          padding: "8px 16px",
+          borderTop: "1px solid var(--border)",
+          display: "flex",
+          gap: 6,
+          alignItems: "center",
+          justifyContent: "center",
+        }}>
+          {themes.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => onThemeChange(t.id)}
+              title={t.label}
+              style={{
+                width: 20,
+                height: 20,
+                borderRadius: "50%",
+                border: currentTheme === t.id ? `2px solid ${t.accent}` : "2px solid transparent",
+                background: `radial-gradient(circle at 30% 30%, ${t.accent}, ${t.bg})`,
+                cursor: "pointer",
+                padding: 0,
+                transition: "border-color 0.2s",
+              }}
+            />
+          ))}
+        </div>
+      )}
       {agents && onAddAgent && onRemoveAgent && (
         <AgentManager agents={agents} onAdd={onAddAgent} onRemove={onRemoveAgent} />
       )}

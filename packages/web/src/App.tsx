@@ -4,6 +4,7 @@ import { useAgents } from "./hooks/useAgents";
 import { useDisplayNames } from "./hooks/useDisplayNames";
 import { useIsMobile } from "./hooks/useIsMobile";
 import { useSidebarOrder } from "./hooks/useSidebarOrder";
+import { useTheme } from "./hooks/useTheme";
 import { Sidebar } from "./components/Sidebar";
 import { SessionDetail } from "./components/SessionDetail";
 import { EventFeed } from "./components/EventFeed";
@@ -57,6 +58,7 @@ export default function App() {
     subscribeDisplayNames,
   });
   const { applyOrder, reorderMachine, reorderSession, syncOrder } = useSidebarOrder();
+  const { theme, setTheme, themes } = useTheme();
   const isMobile = useIsMobile();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -256,6 +258,9 @@ export default function App() {
     subscribeReloadResult,
     onReorderMachine: reorderMachine,
     onReorderSession: reorderSession,
+    currentTheme: theme,
+    onThemeChange: setTheme,
+    themes,
   };
 
   return (
