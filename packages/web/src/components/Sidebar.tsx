@@ -124,8 +124,8 @@ export function Sidebar({
     >
       <div style={{ flex: 1, overflowY: "auto" }}>
       <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <h2 style={{ fontSize: 16, fontWeight: 600 }}>Machines</h2>
-        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <h2 style={{ fontSize: 16, fontWeight: 400 }}>Machines</h2>
           {themes && onThemeChange && (
             <span style={{ position: "relative" }}>
               <button
@@ -136,7 +136,7 @@ export function Sidebar({
                   color: "var(--text-muted)",
                   cursor: "pointer",
                   fontSize: 16,
-                  padding: "2px 6px",
+                  padding: "2px 4px",
                   lineHeight: 1,
                   display: "flex",
                   alignItems: "center",
@@ -147,7 +147,7 @@ export function Sidebar({
                 <div style={{
                   position: "absolute",
                   top: "100%",
-                  right: 0,
+                  left: 0,
                   marginTop: 4,
                   background: "var(--bg-secondary)",
                   border: "1px solid var(--border)",
@@ -182,6 +182,7 @@ export function Sidebar({
               )}
             </span>
           )}
+        </div>
         {onCollapse && (
           <button
             onClick={onCollapse}
@@ -198,7 +199,6 @@ export function Sidebar({
             <ChevronsLeft size={14} />
           </button>
         )}
-        </div>
       </div>
       {machines.length === 0 && (
         <p style={{ padding: 16, color: "var(--text-muted)" }}>No machines connected</p>
@@ -241,7 +241,7 @@ export function Sidebar({
               padding: "8px 12px",
               fontSize: 13,
               fontWeight: 600,
-              color: "var(--text-muted)",
+              color: "var(--text)",
               display: "flex",
               alignItems: "center",
               gap: 6,
@@ -414,7 +414,7 @@ export function Sidebar({
                     gap: 6,
                     background: "transparent",
                     border: "none",
-                    color: isDangerous ? "var(--red)" : isSelected ? "var(--accent)" : "var(--text)",
+                    color: isDangerous ? "var(--red)" : isSelected ? "var(--accent)" : "var(--text-muted)",
                     cursor: "pointer",
                     fontSize: 13,
                     overflow: "hidden",
