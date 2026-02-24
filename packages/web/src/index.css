@@ -46,12 +46,98 @@
   --bg: #272822;
   --bg-secondary: #1e1f1a;
   --bg-tertiary: #3e3d32;
-  --border: #75715e;
+  --border: #90897a;
   --text: #f8f8f2;
-  --text-muted: #75715e;
+  --text-muted: #a6a18b;
   --accent: #66d9ef;
   --green: #a6e22e;
   --red: #f92672;
+}
+
+[data-theme="kiwi"] {
+  --bg: #202121;
+  --bg-secondary: #191a19;
+  --bg-tertiary: #292a2a;
+  --border: #3a3b3a;
+  --text: #ecffff;
+  --text-muted: #8c8d8d;
+  --accent: #81cd64;
+  --green: #81cd64;
+  --red: #e06c75;
+}
+
+[data-theme="catppuccin"] {
+  --bg: #1e1e2e;
+  --bg-secondary: #181825;
+  --bg-tertiary: #313244;
+  --border: #45475a;
+  --text: #cdd6f4;
+  --text-muted: #a6adc8;
+  --accent: #cba6f7;
+  --green: #a6e3a1;
+  --red: #f38ba8;
+}
+
+[data-theme="solarized"] {
+  --bg: #002b36;
+  --bg-secondary: #073642;
+  --bg-tertiary: #0a4050;
+  --border: #586e75;
+  --text: #93a1a1;
+  --text-muted: #657b83;
+  --accent: #268bd2;
+  --green: #859900;
+  --red: #dc322f;
+}
+
+/* ── Light themes ── */
+
+[data-theme="github-light"] {
+  --bg: #ffffff;
+  --bg-secondary: #f6f8fa;
+  --bg-tertiary: #e8ecf0;
+  --border: #d0d7de;
+  --text: #1f2328;
+  --text-muted: #656d76;
+  --accent: #0969da;
+  --green: #1a7f37;
+  --red: #cf222e;
+}
+
+[data-theme="solarized-light"] {
+  --bg: #fdf6e3;
+  --bg-secondary: #eee8d5;
+  --bg-tertiary: #e4dcc8;
+  --border: #c9bda1;
+  --text: #586e75;
+  --text-muted: #93a1a1;
+  --accent: #268bd2;
+  --green: #859900;
+  --red: #dc322f;
+}
+
+[data-theme="catppuccin-latte"] {
+  --bg: #eff1f5;
+  --bg-secondary: #e6e9ef;
+  --bg-tertiary: #ccd0da;
+  --border: #bcc0cc;
+  --text: #4c4f69;
+  --text-muted: #7c7f93;
+  --accent: #8839ef;
+  --green: #40a02b;
+  --red: #d20f39;
+}
+
+[data-theme="nord-light"] {
+  --bg: #eceff4;
+  --bg-secondary: #e5e9f0;
+  --bg-tertiary: #d8dee9;
+  --border: #c4cad6;
+  --text: #2e3440;
+  --text-muted: #4c566a;
+  --accent: #5e81ac;
+  --green: #a3be8c;
+  --red: #bf616a;
 }
 
 html, body, #root {
@@ -117,6 +203,17 @@ html, body, #root {
   background: transparent;
   color: var(--text-muted);
   opacity: 0.6;
+}
+
+/* Sidebar fonts: monospace for all content, thin serif for title */
+.sidebar, .sidebar button, .sidebar input, .sidebar select {
+  font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+}
+.sidebar h2 {
+  font-family: "Cormorant Garamond", "EB Garamond", "Garamond", "Baskerville", "Libre Baskerville", "Palatino", serif;
+  font-weight: 400;
+  letter-spacing: 1px;
+  font-style: italic;
 }
 
 /* Drag-to-reorder handles */
