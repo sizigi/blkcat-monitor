@@ -273,6 +273,116 @@ The dashboard communicates with the server over WebSocket (`/ws/dashboard`). Key
 | Server → Dashboard | `settings_snapshot` | Agent's current settings and deployed skills list |
 | Server → Dashboard | `settings_result` | Result of a settings update (success/error) |
 
+## Deploying Agents to Remote Machines
+
+This section covers deploying agents via SSH to remote machines and connecting them to a central server in listener (reverse) mode.
+
+### Prerequisites on the remote machine
+
+- Git with GitHub SSH access configured (`ssh -T git@github.com` should succeed)
+- Bun (installed automatically below if missing)
+- tmux
+
+### Step-by-step deployment
+
+**1. Install Bun (if not present)**
+
+```bash
+ssh user@remote-host 'tmux new-session -d -s claude 2>/dev/null; \
+  tmux send-keys -t claude "curl -fsSL https://bun.sh/install | bash" Enter'
+sleep 20
+ssh user@remote-host 'tmux capture-pane -t claude -p -S -5'
+```
+
+**2. Clone the repo and install dependencies**
+
+```bash
+ssh user@remote-host 'tmux send-keys -t claude \
+  "git clone git@github.com:sizigi/blkcat-monitor.git ~/blkcat-monitor && \
+   cd ~/blkcat-monitor && ~/.bun/bin/bun install" Enter'
+sleep 30
+ssh user@remote-host 'tmux capture-pane -t claude -p -S -10'
+```
+
+**3. Start the agent in listener mode**
+
+```bash
+ssh user@remote-host 'tmux send-keys -t claude \
+  "BLKCAT_LISTEN_PORT=4000 BLKCAT_HOOKS_PORT=4001 ~/.bun/bin/bun packages/agent/src/index.ts" Enter'
+sleep 5
+ssh user@remote-host 'tmux capture-pane -t claude -p -S -5'
+# Should show: "Listening on port 4000 as <hostname>"
+```
+
+**4. Register the agent with the server**
+
+```bash
+curl -s -X POST http://localhost:3000/api/agents \
+  -H 'Content-Type: application/json' \
+  -d '{"address":"remote-host:4000"}'
+```
+
+### Port conflicts
+
+The default ports `BLKCAT_LISTEN_PORT=4000` and `BLKCAT_HOOKS_PORT=3001` may already be in use on busy machines. Check with `ss -tlnp` and pick free ports:
+
+```bash
+BLKCAT_LISTEN_PORT=9500 BLKCAT_HOOKS_PORT=9501 ~/.bun/bin/bun packages/agent/src/index.ts
+```
+
+### Machines behind a firewall (SSH tunnel)
+
+Some machines (e.g. HPC cluster login nodes, CoreWeave Slurm nodes) only expose port 22 — inbound connections to arbitrary ports are blocked by the firewall. Use an SSH tunnel to forward the agent port through SSH:
+
+```bash
+# On the server machine — forward local port 14000 to agent's port 4000 via SSH
+tmux new-session -d -s <name>-tunnel \
+  "ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
+       -o ExitOnForwardFailure=yes -N \
+       -L 14000:localhost:4000 user@remote-host"
+
+# Register using the tunneled local port
+curl -s -X POST http://localhost:3000/api/agents \
+  -H 'Content-Type: application/json' \
+  -d '{"address":"localhost:14000"}'
+```
+
+Running the tunnel inside a tmux session keeps it alive after you disconnect. If the remote end drops, kill and restart the tmux session.
+
+To remove a registered agent:
+
+```bash
+curl -s -X DELETE http://localhost:3000/api/agents/localhost:14000
+```
+
+### Nodes on a shared Tailscale network
+
+Machines joined to the same Tailscale network can connect directly by Tailscale hostname or IP — no SSH tunnel needed, as Tailscale handles NAT traversal:
+
+```bash
+# Agent machine (already on Tailscale)
+BLKCAT_LISTEN_PORT=4000 BLKCAT_HOOKS_PORT=4001 ~/.bun/bin/bun packages/agent/src/index.ts
+
+# Server machine
+curl -s -X POST http://localhost:3000/api/agents \
+  -H 'Content-Type: application/json' \
+  -d '{"address":"machine.tailnet-name.ts.net:4000"}'
+```
+
+### SSH from within a Claude Code session
+
+If you deploy agents from a terminal that is itself running inside Claude Code, SSH will forward the `CLAUDECODE` environment variable to the remote shell. Trying to run `claude` on the remote will fail with:
+
+```
+Error: Claude Code cannot be launched inside another Claude Code session.
+```
+
+Fix: unset the variable before launching:
+
+```bash
+unset CLAUDECODE && claude
+```
+
 ## Troubleshooting
 
 ### "Claude Code cannot be launched inside another Claude Code session"
