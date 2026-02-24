@@ -6,7 +6,34 @@ export interface SessionInfo {
   target: "local" | "ssh";
   host?: string;
   args?: string;
+  cliTool?: "claude" | "codex";
 }
+
+export type CliTool = "claude" | "codex";
+
+export const CLI_TOOLS: Record<CliTool, {
+  command: string;
+  resumeFlag: (id?: string) => string;
+  flags: readonly { flag: string; color: string }[];
+  configDir: string;
+}> = {
+  claude: {
+    command: "claude",
+    resumeFlag: (id?: string) => id ? `--resume ${id}` : "--resume",
+    flags: [
+      { flag: "--dangerously-skip-permissions", color: "var(--red)" },
+    ],
+    configDir: "~/.claude",
+  },
+  codex: {
+    command: "codex",
+    resumeFlag: (id?: string) => id ? `resume ${id}` : "resume --last",
+    flags: [
+      { flag: "--full-auto", color: "var(--red)" },
+    ],
+    configDir: "~/.codex",
+  },
+};
 
 export interface MachineSnapshot {
   machineId: string;
@@ -115,6 +142,7 @@ export interface ServerStartSessionMessage {
   args?: string;
   cwd?: string;
   name?: string;
+  cliTool?: "claude" | "codex";
 }
 
 export interface ServerCloseSessionMessage {
@@ -137,6 +165,8 @@ export interface ServerRequestScrollbackMessage {
 export interface ServerReloadSessionMessage {
   type: "reload_session";
   sessionId: string;
+  args?: string;
+  resume?: boolean;
 }
 
 export interface ServerListDirectoryMessage {
@@ -286,6 +316,7 @@ export interface DashboardStartSessionMessage {
   args?: string;
   cwd?: string;
   name?: string;
+  cliTool?: "claude" | "codex";
 }
 
 export interface DashboardCloseSessionMessage {
@@ -313,6 +344,8 @@ export interface DashboardReloadSessionMessage {
   type: "reload_session";
   machineId: string;
   sessionId: string;
+  args?: string;
+  resume?: boolean;
 }
 
 export interface DashboardListDirectoryMessage {

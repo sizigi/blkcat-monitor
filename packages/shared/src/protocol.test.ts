@@ -9,6 +9,7 @@ import {
   type SessionInfo,
   parseAgentMessage,
   parseDashboardMessage,
+  CLI_TOOLS,
 } from "./protocol";
 
 describe("parseAgentMessage", () => {
@@ -282,5 +283,16 @@ describe("parseDashboardMessage", () => {
     expect(msg?.type).toBe("update_settings");
     expect((msg as any).scope).toBe("project");
     expect((msg as any).projectPath).toBe("/home/user/my-project");
+  });
+});
+
+describe("CLI_TOOLS", () => {
+  it("CLI_TOOLS has configs for claude and codex", () => {
+    expect(CLI_TOOLS.claude.command).toBe("claude");
+    expect(CLI_TOOLS.codex.command).toBe("codex");
+    expect(CLI_TOOLS.claude.resumeFlag("abc")).toBe("--resume abc");
+    expect(CLI_TOOLS.claude.resumeFlag()).toBe("--resume");
+    expect(CLI_TOOLS.codex.resumeFlag("abc")).toBe("resume abc");
+    expect(CLI_TOOLS.codex.resumeFlag()).toBe("resume --last");
   });
 });
