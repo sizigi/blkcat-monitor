@@ -199,7 +199,14 @@ export function TerminalOutput({ sessionKey, lines, cursor, logMapRef, scrollbac
       convertEol: true,
       cursorBlink: !!onData,
       scrollback: 0,
-      theme: { background: "#0d1117", foreground: "#c9d1d9", cursor: "#c9d1d9" },
+      theme: (() => {
+        const s = getComputedStyle(document.documentElement);
+        return {
+          background: s.getPropertyValue("--bg").trim() || "#0d1117",
+          foreground: s.getPropertyValue("--text").trim() || "#c9d1d9",
+          cursor: s.getPropertyValue("--text").trim() || "#c9d1d9",
+        };
+      })(),
       fontSize: 13,
       fontFamily: "'Cascadia Code', 'Fira Code', monospace",
     });
@@ -209,6 +216,17 @@ export function TerminalOutput({ sessionKey, lines, cursor, logMapRef, scrollbac
     term.open(containerRef.current);
     fit.fit();
     onResizeRef.current?.(term.cols, term.rows);
+
+    const themeObserver = new MutationObserver(() => {
+      const s = getComputedStyle(document.documentElement);
+      term.options.theme = {
+        background: s.getPropertyValue("--bg").trim() || "#0d1117",
+        foreground: s.getPropertyValue("--text").trim() || "#c9d1d9",
+        cursor: s.getPropertyValue("--text").trim() || "#c9d1d9",
+      };
+    });
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
 
     termRef.current = term;
     fitRef.current = fit;
@@ -379,6 +397,7 @@ export function TerminalOutput({ sessionKey, lines, cursor, logMapRef, scrollbac
       if (scrollRafRef.current) cancelAnimationFrame(scrollRafRef.current);
       dataDisposable.dispose();
       selDisposable.dispose();
+      themeObserver.disconnect();
       term.dispose();
     };
   }, []);
@@ -420,6 +439,7 @@ export function TerminalOutput({ sessionKey, lines, cursor, logMapRef, scrollbac
     setScrollbackLoading(false);
     term.clear();
     term.write("\x1b[H\x1b[2J");
+    term.focus();
     onResizeRef.current?.(term.cols, term.rows);
   }, [sessionKey]);
 
@@ -527,7 +547,7 @@ export function TerminalOutput({ sessionKey, lines, cursor, logMapRef, scrollbac
     <div style={{ position: "relative", flex: 1, minHeight: 0 }}>
       <div
         ref={containerRef}
-        style={{ width: "100%", height: "100%", overflow: "hidden", background: "#0d1117", touchAction: "none" }}
+        style={{ width: "100%", height: "100%", overflow: "hidden", background: "var(--bg)", touchAction: "none" }}
       />
       {scrollMode ? (
         <div
