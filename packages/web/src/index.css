@@ -104,6 +104,103 @@ html, body, #root {
   cursor: grabbing;
 }
 
+/* Live mode: animated rainbow border around textarea */
+@property --live-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+@keyframes live-rotate {
+  to { --live-angle: 360deg; }
+}
+.live-border-wrap {
+  position: relative;
+  border-radius: 6px;
+  padding: 2px;
+  flex: 1;
+  background: conic-gradient(
+    from var(--live-angle),
+    #f85149, #ff6a33, #f0c040, #3fb950, #58a6ff, #bc8cff, #f778ba, #f85149
+  );
+  animation: live-rotate 2.5s linear infinite;
+}
+.live-border-wrap > textarea {
+  position: relative;
+  z-index: 1;
+  display: block;
+}
+
+/* LIVE toggle: mobile full-width version (hidden on desktop) */
+.live-toggle-mobile {
+  position: relative;
+  width: 100%;
+  padding: 10px 16px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: inherit;
+  display: none; /* shown via media query */
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.3s;
+  overflow: hidden;
+  min-height: 44px;
+}
+/* LIVE toggle: desktop compact version */
+.live-toggle-desktop {
+  transition: all 0.3s;
+}
+.live-toggle-desktop.live-toggle-on {
+  background: linear-gradient(270deg, #f85149, #58a6ff, #3fb950, #f85149) !important;
+  background-size: 300% 100% !important;
+  animation: live-bg-shift 3s ease infinite !important;
+  border-color: transparent !important;
+  color: #fff !important;
+}
+.live-toggle-label {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 2px;
+}
+.live-toggle-hint {
+  font-size: 11px;
+  font-weight: 400;
+  opacity: 0.6;
+}
+
+/* Active state: rainbow explosion */
+@keyframes live-bg-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+@keyframes live-btn-glow {
+  0%, 100% { box-shadow: 0 0 8px rgba(248,81,73,0.4), 0 0 20px rgba(88,166,255,0.2); }
+  25% { box-shadow: 0 0 8px rgba(63,185,80,0.4), 0 0 20px rgba(240,192,64,0.2); }
+  50% { box-shadow: 0 0 8px rgba(88,166,255,0.4), 0 0 20px rgba(188,140,255,0.2); }
+  75% { box-shadow: 0 0 8px rgba(247,120,186,0.4), 0 0 20px rgba(248,81,73,0.2); }
+}
+.live-toggle-on {
+  background: linear-gradient(
+    270deg,
+    #f85149, #ff6a33, #f0c040, #3fb950, #58a6ff, #bc8cff, #f778ba, #f85149
+  );
+  background-size: 400% 100%;
+  animation: live-bg-shift 4s ease infinite, live-btn-glow 3s ease-in-out infinite;
+  border-color: transparent;
+  color: #fff;
+}
+.live-toggle-on .live-toggle-label {
+  text-shadow: 0 1px 4px rgba(0,0,0,0.4);
+}
+.live-toggle-on .live-toggle-hint {
+  opacity: 0.85;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+
 /* Desktop defaults (overridden by mobile media query below) */
 .sidebar-backdrop {
   display: none;
@@ -173,5 +270,13 @@ html, body, #root {
     min-width: 44px;
     padding: 8px 14px !important;
     font-size: 14px !important;
+  }
+
+  /* Show full-width LIVE toggle on mobile, hide desktop version */
+  .live-toggle-mobile {
+    display: flex !important;
+  }
+  .live-toggle-desktop {
+    display: none !important;
   }
 }

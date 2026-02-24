@@ -53,7 +53,7 @@ export function SessionDetail({
       </div>
       <TerminalOutput sessionKey={`${machineId}:${sessionId}`} lines={lines} cursor={cursor} logMapRef={logMapRef} scrollbackMapRef={scrollbackMapRef} subscribeScrollback={subscribeScrollback} onRequestScrollback={onRequestScrollback} onData={onSendData} onResize={onResize} />
       <div style={{ borderTop: "1px solid var(--border)" }}>
-        <ChatInput onSendText={onSendText} onSendKey={onSendKey} />
+        <ChatInput onSendText={onSendText} onSendKey={onSendKey} onSendData={onSendData} />
       </div>
     </div>
   );
