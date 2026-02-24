@@ -251,7 +251,7 @@ export function TerminalOutput({ sessionKey, lines, cursor, logMapRef, scrollbac
     };
     if (xtermTextarea) xtermTextarea.addEventListener("focus", onXtermFocus);
 
-    const dataDisposable = term.onData((data) => { onDataRef.current?.(data); });
+    const dataDisposable = term.onData((data) => { if (!scrollModeRef.current) onDataRef.current?.(data); });
 
     const selDisposable = term.onSelectionChange(() => {
       if (!term.hasSelection() && !scrollModeRef.current && pendingLinesRef.current) {
