@@ -3,6 +3,7 @@ import type {
   MachineSnapshot,
   ServerToDashboardMessage,
   AgentHookEventMessage,
+  CliTool,
 } from "@blkcat/shared";
 import { NOTIFY_HOOK_EVENTS } from "@blkcat/shared";
 
@@ -68,7 +69,7 @@ export interface UseSocketReturn {
   subscribeOutput: (cb: (key: string) => void) => () => void;
   subscribeScrollback: (cb: (key: string) => void) => () => void;
   sendInput: (machineId: string, sessionId: string, opts: { text?: string; key?: string; data?: string }) => void;
-  startSession: (machineId: string, args?: string, cwd?: string, name?: string, cliTool?: "claude" | "codex") => void;
+  startSession: (machineId: string, args?: string, cwd?: string, name?: string, cliTool?: CliTool) => void;
   closeSession: (machineId: string, sessionId: string) => void;
   reloadSession: (machineId: string, sessionId: string, args?: string, resume?: boolean) => void;
   sendResize: (machineId: string, sessionId: string, cols: number, rows: number, force?: boolean) => void;
@@ -411,7 +412,7 @@ export function useSocket(url: string): UseSocketReturn {
   );
 
   const startSession = useCallback(
-    (machineId: string, args?: string, cwd?: string, name?: string, cliTool?: "claude" | "codex") => {
+    (machineId: string, args?: string, cwd?: string, name?: string, cliTool?: CliTool) => {
       const ws = wsRef.current;
       if (ws && ws.readyState === WebSocket.OPEN) {
         const msg: Record<string, any> = { type: "start_session", machineId };
