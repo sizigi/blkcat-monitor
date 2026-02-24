@@ -7,6 +7,7 @@ import { hasChanged } from "./diff";
 import { HooksServer } from "./hooks-server";
 import { installHooks } from "./hooks-install";
 import { findLatestCodexSessionId } from "./codex-sessions";
+import { findLatestGeminiSessionId } from "./gemini-sessions";
 import type { SessionInfo, AgentHookEventMessage, CliTool } from "@blkcat/shared";
 import { CLI_TOOLS } from "@blkcat/shared";
 import { resolve, dirname } from "path";
@@ -302,6 +303,21 @@ async function main() {
       const session = allSessions.find((s) => s.id === paneId);
       if (session?.cliTool === "codex" && !sessionIds.has(paneId)) {
         const latest = findLatestCodexSessionId(codexSessionsDir);
+        if (latest) {
+          sessionIds.set(paneId, latest);
+        }
+      }
+    }
+  }, 5000);
+
+  // Poll for Gemini session IDs (no hooks system available)
+  const geminiSessionsDir = resolve(process.env.HOME ?? "/root", ".gemini/tmp");
+  setInterval(() => {
+    for (const [paneId] of captures) {
+      const allSessions = [...autoSessions, ...manualSessions];
+      const session = allSessions.find((s) => s.id === paneId);
+      if (session?.cliTool === "gemini" && !sessionIds.has(paneId)) {
+        const latest = findLatestGeminiSessionId(geminiSessionsDir);
         if (latest) {
           sessionIds.set(paneId, latest);
         }
