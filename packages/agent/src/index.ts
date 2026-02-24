@@ -6,6 +6,7 @@ import { discoverCliSessions } from "./discovery";
 import { hasChanged } from "./diff";
 import { HooksServer } from "./hooks-server";
 import { installHooks } from "./hooks-install";
+import { findLatestCodexSessionId } from "./codex-sessions";
 import type { SessionInfo, AgentHookEventMessage } from "@blkcat/shared";
 import { CLI_TOOLS } from "@blkcat/shared";
 import { resolve, dirname } from "path";
@@ -292,6 +293,21 @@ async function main() {
   }).catch((err) => {
     console.warn("Failed to install Claude Code hooks:", err);
   });
+
+  // Poll for Codex session IDs (no hooks system available)
+  const codexSessionsDir = resolve(process.env.HOME ?? "/root", ".codex/sessions");
+  setInterval(() => {
+    for (const [paneId] of captures) {
+      const allSessions = [...autoSessions, ...manualSessions];
+      const session = allSessions.find((s) => s.id === paneId);
+      if (session?.cliTool === "codex" && !sessionIds.has(paneId)) {
+        const latest = findLatestCodexSessionId(codexSessionsDir);
+        if (latest) {
+          sessionIds.set(paneId, latest);
+        }
+      }
+    }
+  }, 5000);
 
   const prevLines = new Map<string, string[]>();
 
