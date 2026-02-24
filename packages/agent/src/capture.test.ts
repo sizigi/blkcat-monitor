@@ -136,6 +136,22 @@ describe("TmuxCapture", () => {
     expect(sendKeysCmd!.join(" ")).toContain("codex --full-auto");
   });
 
+  it("startSession uses gemini command when cliTool is gemini", () => {
+    const cmds: string[][] = [];
+    const exec: ExecFn = (cmd) => {
+      cmds.push([...cmd]);
+      if (cmd.some(c => c === "new-window")) {
+        return { success: true, stdout: "test:0.0\n" };
+      }
+      return { success: true, stdout: "" };
+    };
+    const cap = new TmuxCapture(exec);
+    cap.startSession("--yolo", undefined, "gemini");
+    const sendKeysCmd = cmds.find(c => c.includes("send-keys") && c.includes("-l"));
+    expect(sendKeysCmd).toBeDefined();
+    expect(sendKeysCmd!.join(" ")).toContain("gemini --yolo");
+  });
+
   it("lists directory entries", () => {
     const exec = mockExec({
       "ls -1 -p /home/user/projects": {

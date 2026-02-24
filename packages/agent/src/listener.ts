@@ -1,10 +1,10 @@
-import type { SessionInfo, ServerToAgentMessage, AgentHookEventMessage } from "@blkcat/shared";
+import type { SessionInfo, ServerToAgentMessage, AgentHookEventMessage, CliTool } from "@blkcat/shared";
 
 interface AgentListenerOptions {
   port: number;
   machineId: string;
   onInput: (msg: { sessionId: string; text?: string; key?: string; data?: string }) => void;
-  onStartSession?: (args?: string, cwd?: string, name?: string, cliTool?: "claude" | "codex") => void;
+  onStartSession?: (args?: string, cwd?: string, name?: string, cliTool?: CliTool) => void;
   onCloseSession?: (sessionId: string) => void;
   onResize?: (sessionId: string, cols: number, rows: number) => void;
   onRequestScrollback?: (sessionId: string) => void;

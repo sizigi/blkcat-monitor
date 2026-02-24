@@ -1,3 +1,5 @@
+import type { CliTool } from "@blkcat/shared";
+
 export interface ExecResult {
   success: boolean;
   stdout: string;
@@ -101,8 +103,8 @@ export class TmuxCapture {
     return this.exec(cmd).success;
   }
 
-  startSession(args?: string, cwd?: string, cliTool: "claude" | "codex" = "claude"): string | null {
-    const command = cliTool === "codex" ? "codex" : "claude";
+  startSession(args?: string, cwd?: string, cliTool: CliTool = "claude"): string | null {
+    const command = cliTool;
     const fullCmd = args ? `${command} ${args}` : command;
     // Resolve ~ since Bun.spawnSync doesn't invoke a shell for tilde expansion
     const resolvedCwd = cwd?.startsWith("~")

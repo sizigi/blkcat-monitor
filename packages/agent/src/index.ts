@@ -7,7 +7,7 @@ import { hasChanged } from "./diff";
 import { HooksServer } from "./hooks-server";
 import { installHooks } from "./hooks-install";
 import { findLatestCodexSessionId } from "./codex-sessions";
-import type { SessionInfo, AgentHookEventMessage } from "@blkcat/shared";
+import type { SessionInfo, AgentHookEventMessage, CliTool } from "@blkcat/shared";
 import { CLI_TOOLS } from "@blkcat/shared";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -115,7 +115,7 @@ async function main() {
     console.log(`Reloaded ${tool.command} session: ${sessionId}${shouldResume && toolSessionId ? ` (session: ${toolSessionId})` : ""}${args ? ` (args: ${args})` : ""}${!shouldResume ? " (fresh)" : ""}`);
   }
 
-  function handleStartSession(args?: string, cwd?: string, name?: string, cliTool?: "claude" | "codex") {
+  function handleStartSession(args?: string, cwd?: string, name?: string, cliTool?: CliTool) {
     const tool = cliTool ?? "claude";
     const localCap = new TmuxCapture(bunExec);
     const paneId = localCap.startSession(args, cwd, tool);
