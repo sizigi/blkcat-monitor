@@ -101,4 +101,18 @@ describe("Sidebar", () => {
 
     expect(screen.queryByText("Outbound Agents")).not.toBeInTheDocument();
   });
+
+  it("shows (codex) label for codex sessions", () => {
+    const codexMachines: MachineSnapshot[] = [
+      {
+        machineId: "m1",
+        sessions: [
+          { id: "s1", name: "dev", target: "local", cliTool: "codex" },
+        ],
+        lastSeen: Date.now(),
+      },
+    ];
+    render(<Sidebar machines={codexMachines} onSelectSession={() => {}} />);
+    expect(screen.getByText("(codex)")).toBeInTheDocument();
+  });
 });

@@ -1,7 +1,8 @@
 import React, { useState } from "react";
-import type { MachineSnapshot, OutboundAgentInfo } from "@blkcat/shared";
+import type { MachineSnapshot, OutboundAgentInfo, SessionInfo } from "@blkcat/shared";
 import { AgentManager } from "./AgentManager";
 import { StartSessionModal } from "./StartSessionModal";
+import { ReloadSessionModal } from "./ReloadSessionModal";
 
 interface SidebarProps {
   width?: number;
@@ -9,9 +10,9 @@ interface SidebarProps {
   selectedMachine?: string;
   selectedSession?: string;
   onSelectSession: (machineId: string, sessionId: string) => void;
-  onStartSession?: (machineId: string, args?: string, cwd?: string, name?: string) => void;
+  onStartSession?: (machineId: string, args?: string, cwd?: string, name?: string, cliTool?: "claude" | "codex") => void;
   onCloseSession?: (machineId: string, sessionId: string) => void;
-  onReloadSession?: (machineId: string, sessionId: string) => void;
+  onReloadSession?: (machineId: string, sessionId: string, args?: string, resume?: boolean) => void;
   getMachineName?: (machineId: string) => string;
   getSessionName?: (machineId: string, sessionId: string, defaultName: string) => string;
   onRenameMachine?: (machineId: string, name: string) => void;
@@ -53,6 +54,7 @@ export function Sidebar({
   className,
 }: SidebarProps) {
   const [modalMachineId, setModalMachineId] = useState<string | null>(null);
+  const [reloadTarget, setReloadTarget] = useState<{ machineId: string; session: SessionInfo } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   return (
@@ -276,6 +278,11 @@ export function Sidebar({
                           (ssh)
                         </span>
                       )}
+                      {session.cliTool === "codex" && (
+                        <span style={{ color: "var(--text-muted)", marginLeft: 4 }}>
+                          (codex)
+                        </span>
+                      )}
                     </span>
                   )}
                   {(() => {
@@ -327,11 +334,9 @@ export function Sidebar({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (confirm("Reload this session?")) {
-                        onReloadSession(machine.machineId, session.id);
-                      }
+                      setReloadTarget({ machineId: machine.machineId, session });
                     }}
-                    title="Reload session (claude --resume)"
+                    title={`Reload session (${session.cliTool === "codex" ? "codex resume" : "claude --resume"})`}
                     style={{
                       background: "none",
                       border: "none",
@@ -387,12 +392,26 @@ export function Sidebar({
         <StartSessionModal
           machineId={modalMachineId}
           machineName={getMachineName ? getMachineName(modalMachineId) : modalMachineId}
-          onStart={(mid, args, cwd, name) => {
-            onStartSession(mid, args, cwd, name);
+          onStart={(mid, args, cwd, name, cliTool) => {
+            onStartSession(mid, args, cwd, name, cliTool);
             setModalMachineId(null);
           }}
           onClose={() => setModalMachineId(null)}
           listDirectory={listDirectory}
+        />
+      )}
+      {reloadTarget && onReloadSession && (
+        <ReloadSessionModal
+          sessionName={getSessionName
+            ? getSessionName(reloadTarget.machineId, reloadTarget.session.id, reloadTarget.session.name)
+            : reloadTarget.session.name}
+          currentArgs={reloadTarget.session.args}
+          cliTool={reloadTarget.session.cliTool}
+          onReload={(args, resume) => {
+            onReloadSession(reloadTarget.machineId, reloadTarget.session.id, args, resume);
+            setReloadTarget(null);
+          }}
+          onClose={() => setReloadTarget(null)}
         />
       )}
     </aside>
