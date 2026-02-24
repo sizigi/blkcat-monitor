@@ -15,6 +15,14 @@ interface StartSessionModalProps {
     entries: { name: string; isDir: boolean }[];
     error?: string;
   }>;
+  createDirectory?: (
+    machineId: string,
+    path: string,
+  ) => Promise<{
+    path: string;
+    success: boolean;
+    error?: string;
+  }>;
 }
 
 export function StartSessionModal({
@@ -23,6 +31,7 @@ export function StartSessionModal({
   onStart,
   onClose,
   listDirectory,
+  createDirectory,
 }: StartSessionModalProps) {
   const [sessionName, setSessionName] = useState("");
   const [currentPath, setCurrentPath] = useState("~");
@@ -33,6 +42,10 @@ export function StartSessionModal({
   const [selectedTool, setSelectedTool] = useState<CliTool>("claude");
   const [selectedFlags, setSelectedFlags] = useState<Set<string>>(new Set());
   const [extraArgs, setExtraArgs] = useState("");
+  const [newFolderMode, setNewFolderMode] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const newFolderInputRef = useRef<HTMLInputElement>(null);
 
   const flagOptions = [
     { flag: selectedTool === "codex" ? "resume" : "--resume", color: "var(--accent)" },
@@ -149,6 +162,22 @@ export function StartSessionModal({
       }
       return next;
     });
+  }
+
+  async function handleCreateFolder() {
+    const name = newFolderName.trim();
+    if (!name || !createDirectory) return;
+    const newPath = currentPath === "/" ? `/${name}` : `${currentPath}/${name}`;
+    setCreatingFolder(true);
+    const result = await createDirectory(machineId, newPath);
+    setCreatingFolder(false);
+    if (result.success) {
+      setNewFolderMode(false);
+      setNewFolderName("");
+      loadDirectory(newPath);
+    } else {
+      setError(result.error ?? "Failed to create directory");
+    }
   }
 
   function handleStart() {
@@ -343,10 +372,97 @@ export function StartSessionModal({
                 >
                   {"\u2191"}
                 </button>
+                {createDirectory && (
+                  <button
+                    onClick={() => {
+                      setNewFolderMode(true);
+                      setNewFolderName("");
+                      setTimeout(() => newFolderInputRef.current?.focus(), 0);
+                    }}
+                    title="New folder"
+                    style={{
+                      background: "var(--bg-tertiary)",
+                      border: "1px solid var(--border)",
+                      borderRadius: 4,
+                      color: "var(--text-muted)",
+                      cursor: "pointer",
+                      fontSize: 14,
+                      lineHeight: 1,
+                      padding: "2px 8px",
+                    }}
+                  >
+                    +
+                  </button>
+                )}
               </div>
 
               {/* Directory listing */}
               <div style={{ maxHeight: 200, overflowY: "auto" }}>
+                {newFolderMode && (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      padding: "4px 12px",
+                      gap: 6,
+                      borderBottom: "1px solid var(--border)",
+                    }}
+                  >
+                    <span style={{ fontSize: 14 }}>{"\uD83D\uDCC1"}</span>
+                    <input
+                      ref={newFolderInputRef}
+                      type="text"
+                      value={newFolderName}
+                      onChange={(e) => setNewFolderName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleCreateFolder();
+                        if (e.key === "Escape") { setNewFolderMode(false); setNewFolderName(""); }
+                      }}
+                      placeholder="folder name"
+                      disabled={creatingFolder}
+                      style={{
+                        flex: 1,
+                        fontSize: 13,
+                        fontFamily: "monospace",
+                        color: "var(--text)",
+                        background: "transparent",
+                        border: "1px solid var(--accent)",
+                        borderRadius: 4,
+                        outline: "none",
+                        padding: "2px 6px",
+                      }}
+                    />
+                    <button
+                      onClick={handleCreateFolder}
+                      disabled={creatingFolder || !newFolderName.trim()}
+                      style={{
+                        background: "var(--accent)",
+                        border: "none",
+                        borderRadius: 4,
+                        color: "#fff",
+                        cursor: creatingFolder || !newFolderName.trim() ? "default" : "pointer",
+                        fontSize: 12,
+                        padding: "2px 8px",
+                        opacity: creatingFolder || !newFolderName.trim() ? 0.5 : 1,
+                      }}
+                    >
+                      {creatingFolder ? "..." : "Create"}
+                    </button>
+                    <button
+                      onClick={() => { setNewFolderMode(false); setNewFolderName(""); }}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        color: "var(--text-muted)",
+                        cursor: "pointer",
+                        fontSize: 14,
+                        padding: "0 4px",
+                      }}
+                    >
+                      {"\u00d7"}
+                    </button>
+                  </div>
+                )}
                 {loading && (
                   <div style={{ padding: "12px 12px", color: "var(--text-muted)", fontSize: 13 }}>
                     Loading...

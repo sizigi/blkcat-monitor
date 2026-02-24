@@ -10,6 +10,7 @@ interface AgentConnectionOptions {
   onRequestScrollback?: (sessionId: string) => void;
   onReloadSession?: (sessionId: string, args?: string, resume?: boolean) => void;
   onListDirectory?: (requestId: string, path: string) => void;
+  onCreateDirectory?: (requestId: string, path: string) => void;
   onDeploySkills?: (requestId: string, skills: { name: string; files: { path: string; content: string }[] }[]) => void;
   onRemoveSkills?: (requestId: string, skillNames: string[]) => void;
   onGetSettings?: (requestId: string, scope: "global" | "project", projectPath?: string) => void;
@@ -52,6 +53,8 @@ export class AgentConnection {
           opts.onReloadSession?.(msg.sessionId, msg.args, msg.resume);
         } else if (msg.type === "list_directory") {
           opts.onListDirectory?.(msg.requestId, msg.path);
+        } else if (msg.type === "create_directory") {
+          opts.onCreateDirectory?.(msg.requestId, msg.path);
         } else if (msg.type === "deploy_skills") {
           opts.onDeploySkills?.(msg.requestId, msg.skills);
         } else if (msg.type === "remove_skills") {
@@ -160,6 +163,18 @@ export class AgentConnection {
       type: "reload_session_result",
       machineId: this.opts.machineId,
       sessionId,
+      success,
+    };
+    if (error) msg.error = error;
+    this.ws.send(JSON.stringify(msg));
+  }
+
+  sendCreateDirectoryResult(requestId: string, path: string, success: boolean, error?: string) {
+    const msg: Record<string, any> = {
+      type: "create_directory_result",
+      machineId: this.opts.machineId,
+      requestId,
+      path,
       success,
     };
     if (error) msg.error = error;

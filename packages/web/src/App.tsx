@@ -49,7 +49,7 @@ function useSessionOutput(
 }
 
 export default function App() {
-  const { connected, machines, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory, deploySkills, removeSkills, getSettings, updateSettings, subscribeDeployResult, subscribeSettingsSnapshot, subscribeSettingsResult, setDisplayName, subscribeDisplayNames, subscribeReloadResult } = useSocket(WS_URL);
+  const { connected, machines, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory, createDirectory, deploySkills, removeSkills, getSettings, updateSettings, subscribeDeployResult, subscribeSettingsSnapshot, subscribeSettingsResult, setDisplayName, subscribeDisplayNames, subscribeReloadResult } = useSocket(WS_URL);
   const { agents, addAgent, removeAgent } = useAgents();
   const { getMachineName, getSessionName, setMachineName, setSessionName } = useDisplayNames({
     sendDisplayName: setDisplayName,
@@ -267,6 +267,7 @@ export default function App() {
     notificationCounts,
     onStartSession: startSession,
     listDirectory,
+    createDirectory,
     onCloseSession: (machineId: string, sessionId: string) => {
       closeSession(machineId, sessionId);
       if (selectedMachine === machineId && selectedSession === sessionId) {

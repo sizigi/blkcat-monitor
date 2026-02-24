@@ -135,7 +135,7 @@ Open http://localhost:5173 — select a session from the sidebar to view termina
 ## Dashboard Features
 
 - **Terminal streaming** — live xterm.js terminal with full tmux scrollback history. Enter scroll mode with `Ctrl+Shift+S`, the scroll button, or `Shift+PageUp`. Once in scroll mode, navigate with vim-style keys: `j`/`k` (line), `d`/`u` or `f`/`b` (page), `g`/`G` (top/bottom), `q` or `Esc` to exit.
-- **Session management** — start new sessions with the "+" button. The start session modal lets you choose the CLI tool (Claude, Codex, or Gemini), set a session name, browse and select a working directory, and toggle tool-specific flags (`--dangerously-skip-permissions` for Claude, `--full-auto` for Codex, `--yolo` for Gemini). Close sessions with the "x" button, reload with the "↻" button. Reload uses tool-aware resume: `claude --resume` for Claude sessions, `codex resume <id>` for Codex sessions.
+- **Session management** — start new sessions with the "+" button. The start session modal lets you choose the CLI tool (Claude, Codex, or Gemini), set a session name, browse and select a working directory (with a "+" button to create new folders inline), and toggle tool-specific flags (`--dangerously-skip-permissions` for Claude, `--full-auto` for Codex, `--yolo` for Gemini). Close sessions with the "x" button, reload with the "↻" button. Reload uses tool-aware resume: `claude --resume` for Claude sessions, `codex resume <id>` for Codex sessions.
 - **Multi-CLI support** — the agent auto-discovers `claude`, `codex`, and `gemini` tmux sessions. Codex sessions are labeled with `(codex)` and Gemini sessions are labeled with `(gemini)` in the sidebar. Since Codex and Gemini have no hooks system, session IDs are tracked by polling `~/.codex/sessions/` and `~/.gemini/tmp/` on the filesystem respectively. Hook events (Stop, Notification, PermissionRequest) are only available for Claude sessions.
 - **Rename sessions & machines** — double-click any session or machine name in the sidebar to set a custom display name. Names are scoped per machine and persist in browser localStorage.
 - **Input indicator** — a pulsing blue dot appears next to sessions that are waiting for user input (e.g. Claude prompting for a response).
@@ -265,6 +265,8 @@ The dashboard communicates with the server over WebSocket (`/ws/dashboard`). Key
 | Dashboard → Server | `reload_session` | Reload session with tool-aware resume (Claude, Codex, or Gemini) |
 | Dashboard → Server | `resize` | Resize terminal dimensions (supports `force` flag) |
 | Dashboard → Server | `list_directory` | Browse directories on agent machine |
+| Dashboard → Server | `create_directory` | Create a new directory on agent machine |
+| Server → Dashboard | `create_directory_result` | Result of directory creation (success/error) |
 | Dashboard → Server | `deploy_skills` | Deploy skill files to an agent's `~/.claude/skills/` |
 | Dashboard → Server | `remove_skills` | Remove deployed skills from an agent |
 | Dashboard → Server | `get_settings` | Request an agent's `settings.json` (global or project scope) |

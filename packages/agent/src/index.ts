@@ -170,6 +170,15 @@ async function main() {
     }
   }
 
+  function handleCreateDirectory(requestId: string, path: string) {
+    const resolved = path.startsWith("~")
+      ? path.replace("~", process.env.HOME ?? "/root")
+      : path;
+    const localCap = new TmuxCapture(bunExec);
+    const result = localCap.createDirectory(resolved);
+    conn.sendCreateDirectoryResult(requestId, resolved, result.success, result.error);
+  }
+
   async function handleDeploySkills(requestId: string, skills: { name: string; files: { path: string; content: string }[] }[]) {
     try {
       const home = process.env.HOME ?? "/root";
@@ -234,6 +243,7 @@ async function main() {
     sendSettingsSnapshot(requestId: string, settings: Record<string, unknown>, scope: "global" | "project", deployedSkills?: string[]): void;
     sendSettingsResult(requestId: string, success: boolean, error?: string): void;
     sendReloadResult(sessionId: string, success: boolean, error?: string): void;
+    sendCreateDirectoryResult(requestId: string, path: string, success: boolean, error?: string): void;
     close(): void;
   };
 
@@ -248,6 +258,7 @@ async function main() {
       onRequestScrollback: handleRequestScrollback,
       onReloadSession: handleReloadSession,
       onListDirectory: handleListDirectory,
+      onCreateDirectory: handleCreateDirectory,
       onDeploySkills: handleDeploySkills,
       onRemoveSkills: handleRemoveSkills,
       onGetSettings: handleGetSettings,
@@ -270,6 +281,7 @@ async function main() {
       onRequestScrollback: handleRequestScrollback,
       onReloadSession: handleReloadSession,
       onListDirectory: handleListDirectory,
+      onCreateDirectory: handleCreateDirectory,
       onDeploySkills: handleDeploySkills,
       onRemoveSkills: handleRemoveSkills,
       onGetSettings: handleGetSettings,

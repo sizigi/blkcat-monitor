@@ -153,6 +153,16 @@ export class TmuxCapture {
     return { entries };
   }
 
+  createDirectory(path: string): { success: boolean; error?: string } {
+    const resolved = path.startsWith("~")
+      ? path.replace("~", process.env.HOME ?? "/root")
+      : path;
+    const cmd = [...this.sshPrefix, "mkdir", "-p", resolved];
+    const result = this.exec(cmd);
+    if (!result.success) return { success: false, error: "Failed to create directory" };
+    return { success: true };
+  }
+
   static forSSH(host: string, key?: string): TmuxCapture {
     const sshCmd = ["ssh", "-o", "ControlMaster=auto",
       "-o", "ControlPath=~/.ssh/blkcat-%r@%h:%p",

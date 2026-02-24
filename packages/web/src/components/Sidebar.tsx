@@ -25,6 +25,7 @@ interface SidebarProps {
   onRemoveAgent?: (address: string) => Promise<void>;
   onCollapse?: () => void;
   listDirectory?: (machineId: string, path: string) => Promise<{ path: string; entries: { name: string; isDir: boolean }[]; error?: string }>;
+  createDirectory?: (machineId: string, path: string) => Promise<{ path: string; success: boolean; error?: string }>;
   onSessionSettings?: (machineId: string, sessionId: string) => void;
   subscribeReloadResult?: (cb: (msg: { machineId: string; sessionId: string; success: boolean; error?: string }) => void) => () => void;
   onReorderMachine?: (fromIndex: number, toIndex: number) => void;
@@ -53,6 +54,7 @@ export function Sidebar({
   onRemoveAgent,
   onCollapse,
   listDirectory,
+  createDirectory,
   onSessionSettings,
   subscribeReloadResult,
   onReorderMachine,
@@ -548,6 +550,7 @@ export function Sidebar({
           }}
           onClose={() => setModalMachineId(null)}
           listDirectory={listDirectory}
+          createDirectory={createDirectory}
         />
       )}
       {reloadTarget && onReloadSession && (
