@@ -225,7 +225,7 @@ async function main() {
 
   let conn: {
     register(sessions: SessionInfo[]): void;
-    sendOutput(sessionId: string, lines: string[], waitingForInput?: boolean): void;
+    sendOutput(sessionId: string, lines: string[], waitingForInput?: boolean, cursor?: { x: number; y: number }): void;
     updateSessions(sessions: SessionInfo[]): void;
     sendScrollback(sessionId: string, lines: string[]): void;
     sendHookEvent(event: AgentHookEventMessage): void;
@@ -375,7 +375,8 @@ async function main() {
       const prev = prevLines.get(paneId) ?? [];
       if (hasChanged(prev, lines)) {
         const waitingForInput = detectWaitingForInput(lines);
-        conn.sendOutput(paneId, lines, waitingForInput);
+        const cursor = cap.getCursorPos(paneId);
+        conn.sendOutput(paneId, lines, waitingForInput, cursor ?? undefined);
         prevLines.set(paneId, lines);
       }
     }

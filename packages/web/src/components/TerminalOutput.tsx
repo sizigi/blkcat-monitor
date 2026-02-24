@@ -6,6 +6,7 @@ import "@xterm/xterm/css/xterm.css";
 interface TerminalOutputProps {
   sessionKey?: string;
   lines: string[];
+  cursor?: { x: number; y: number };
   logMapRef?: React.RefObject<Map<string, string[]>>;
   scrollbackMapRef?: React.RefObject<Map<string, string[]>>;
   subscribeScrollback?: (cb: (key: string) => void) => () => void;
@@ -14,7 +15,7 @@ interface TerminalOutputProps {
   onResize?: (cols: number, rows: number, force?: boolean) => void;
 }
 
-export function TerminalOutput({ sessionKey, lines, logMapRef, scrollbackMapRef, subscribeScrollback, onRequestScrollback, onData, onResize }: TerminalOutputProps) {
+export function TerminalOutput({ sessionKey, lines, cursor, logMapRef, scrollbackMapRef, subscribeScrollback, onRequestScrollback, onData, onResize }: TerminalOutputProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -30,6 +31,8 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, scrollbackMapRef,
   onDataRef.current = onData;
   const onResizeRef = useRef(onResize);
   onResizeRef.current = onResize;
+  const cursorRef = useRef(cursor);
+  cursorRef.current = cursor;
   const sessionKeyRef = useRef(sessionKey);
   sessionKeyRef.current = sessionKey;
   const logMapRefRef = useRef(logMapRef);
@@ -418,6 +421,7 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, scrollbackMapRef,
   }, [sessionKey]);
 
   // Write live terminal output — only update changed lines to avoid flicker.
+  // After writing, move the cursor to match tmux's cursor position.
   useEffect(() => {
     const term = termRef.current;
     if (!term || lines === prevLinesRef.current) return;
@@ -427,9 +431,12 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, scrollbackMapRef,
       pendingLinesRef.current = lines;
       return;
     }
-    // If previous was empty or line count changed significantly, do full write
+    // Cursor positioning escape: \x1b[row;colH (1-based)
+    const cur = cursorRef.current;
+    const cursorSeq = cur ? `\x1b[${cur.y + 1};${cur.x + 1}H` : "";
+    // If previous was empty, do full write
     if (prev.length === 0) {
-      term.write("\x1b[H\x1b[2J" + lines.join("\r\n"));
+      term.write("\x1b[H\x1b[2J" + lines.join("\r\n") + cursorSeq);
       return;
     }
     // Differential update: only rewrite rows that changed
@@ -441,12 +448,13 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, scrollbackMapRef,
           buf += `\x1b[${i + 1};1H${lines[i]}\x1b[K`;
         }
       } else {
-        // Clear leftover rows from previous render
         buf += `\x1b[${i + 1};1H\x1b[K`;
       }
     }
+    // Always append cursor positioning (even if no lines changed, cursor may have moved)
+    buf += cursorSeq;
     if (buf) term.write(buf);
-  }, [lines]);
+  }, [lines, cursor]);
 
   const forceFit = useCallback(() => {
     const fit = fitRef.current;

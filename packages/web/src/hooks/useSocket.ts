@@ -13,6 +13,7 @@ export interface OutputLine {
   lines: string[];
   timestamp: number;
   waitingForInput?: boolean;
+  cursor?: { x: number; y: number };
 }
 
 const MAX_LOG_LINES = 10000;
@@ -264,6 +265,7 @@ export function useSocket(url: string): UseSocketReturn {
               lines: msg.lines,
               timestamp: msg.timestamp,
               waitingForInput: (msg as any).waitingForInput,
+              cursor: (msg as any).cursor,
             };
             outputMapRef.current.set(key, entry);
 

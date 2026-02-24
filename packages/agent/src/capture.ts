@@ -33,6 +33,18 @@ export class TmuxCapture {
     return lines;
   }
 
+  /** Get the cursor position (0-based x, y) in the pane. */
+  getCursorPos(target: string): { x: number; y: number } | null {
+    const cmd = [...this.sshPrefix, "tmux", "display-message", "-p", "-t", target, "#{cursor_x},#{cursor_y}"];
+    const result = this.exec(cmd);
+    if (!result.success) return null;
+    const [xStr, yStr] = result.stdout.trim().split(",");
+    const x = parseInt(xStr);
+    const y = parseInt(yStr);
+    if (isNaN(x) || isNaN(y)) return null;
+    return { x, y };
+  }
+
   captureScrollback(target: string): string[] {
     const cmd = [...this.sshPrefix, "tmux", "capture-pane", "-p", "-e", "-S", "-", "-t", target];
     const result = this.exec(cmd);
@@ -70,10 +82,9 @@ export class TmuxCapture {
   }
 
   sendRaw(target: string, data: string): void {
-    const hex = Array.from(data).map((c) =>
-      c.charCodeAt(0).toString(16).padStart(2, "0")
-    ).join(" ");
-    const cmd = [...this.sshPrefix, "tmux", "send-keys", "-H", "-t", target, ...hex.split(" ")];
+    const bytes = new TextEncoder().encode(data);
+    const hex = Array.from(bytes).map((b) => b.toString(16).padStart(2, "0"));
+    const cmd = [...this.sshPrefix, "tmux", "send-keys", "-H", "-t", target, ...hex];
     this.exec(cmd);
   }
 

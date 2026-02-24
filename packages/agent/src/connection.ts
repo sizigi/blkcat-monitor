@@ -75,7 +75,7 @@ export class AgentConnection {
     }));
   }
 
-  sendOutput(sessionId: string, lines: string[], waitingForInput?: boolean) {
+  sendOutput(sessionId: string, lines: string[], waitingForInput?: boolean, cursor?: { x: number; y: number }) {
     const msg: Record<string, any> = {
       type: "output",
       machineId: this.opts.machineId,
@@ -84,6 +84,7 @@ export class AgentConnection {
       timestamp: Date.now(),
     };
     if (waitingForInput) msg.waitingForInput = true;
+    if (cursor) msg.cursor = cursor;
     this.ws.send(JSON.stringify(msg));
   }
 
