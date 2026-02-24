@@ -129,7 +129,11 @@ async function main() {
     // Protect this pane from auto-discovery removal during bash->cli transition
     reloadGracePanes.set(sessionId, Date.now());
     // Update stored args on the session so sidebar reflects the new flags
-    if (session) session.args = args || undefined;
+    if (session) {
+      session.args = args || undefined;
+      const all = [...autoSessions, ...manualSessions];
+      conn.updateSessions(all);
+    }
     conn.sendReloadResult(sessionId, true);
     console.log(`Reloaded ${tool.command} session: ${sessionId}${shouldResume && toolSessionId ? ` (session: ${toolSessionId})` : ""}${args ? ` (args: ${args})` : ""}${!shouldResume ? " (fresh)" : ""}`);
   }
