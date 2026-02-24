@@ -1,6 +1,6 @@
 # blkcat-monitor
 
-A web dashboard for monitoring and interacting with Claude Code and Codex CLI sessions via tmux across multiple machines, using an agent-push WebSocket architecture.
+A web dashboard for monitoring and interacting with Claude Code, Codex CLI, and Gemini CLI sessions via tmux across multiple machines, using an agent-push WebSocket architecture.
 
 ```
         Browser (React + xterm.js)
@@ -54,7 +54,7 @@ BLKCAT_SERVER_URL=ws://your-server:3000/ws/agent \
 bun packages/agent/src/index.ts
 ```
 
-The agent auto-discovers local tmux sessions running Claude Code or Codex CLI and begins streaming their output.
+The agent auto-discovers local tmux sessions running Claude Code, Codex CLI, or Gemini CLI and begins streaming their output.
 
 #### Reverse connection mode
 
@@ -80,13 +80,13 @@ For development, run the Vite dev server:
 cd packages/web && bunx vite
 ```
 
-Open http://localhost:5173 — select a session from the sidebar to view terminal output and send commands. Use the "+" button next to a machine name to start a new Claude Code or Codex session with optional arguments.
+Open http://localhost:5173 — select a session from the sidebar to view terminal output and send commands. Use the "+" button next to a machine name to start a new Claude Code, Codex, or Gemini session with optional arguments.
 
 ## Dashboard Features
 
 - **Terminal streaming** — live xterm.js terminal with full tmux scrollback history. Enter scroll mode with `Ctrl+Shift+S`, the scroll button, or `Shift+PageUp`. Once in scroll mode, navigate with vim-style keys: `j`/`k` (line), `d`/`u` or `f`/`b` (page), `g`/`G` (top/bottom), `q` or `Esc` to exit.
-- **Session management** — start new sessions with the "+" button. The start session modal lets you choose the CLI tool (Claude or Codex), set a session name, browse and select a working directory, and toggle tool-specific flags (`--dangerously-skip-permissions` for Claude, `--full-auto` for Codex). Close sessions with the "x" button, reload with the "↻" button. Reload uses tool-aware resume: `claude --resume` for Claude sessions, `codex resume <id>` for Codex sessions.
-- **Codex CLI support** — the agent auto-discovers both `claude` and `codex` tmux sessions. Codex sessions are labeled with `(codex)` in the sidebar. Since Codex has no hooks system, session IDs are tracked by polling `~/.codex/sessions/` on the filesystem. Hook events (Stop, Notification, PermissionRequest) are only available for Claude sessions.
+- **Session management** — start new sessions with the "+" button. The start session modal lets you choose the CLI tool (Claude, Codex, or Gemini), set a session name, browse and select a working directory, and toggle tool-specific flags (`--dangerously-skip-permissions` for Claude, `--full-auto` for Codex, `--yolo` for Gemini). Close sessions with the "x" button, reload with the "↻" button. Reload uses tool-aware resume: `claude --resume` for Claude sessions, `codex resume <id>` for Codex sessions.
+- **Multi-CLI support** — the agent auto-discovers `claude`, `codex`, and `gemini` tmux sessions. Codex sessions are labeled with `(codex)` and Gemini sessions are labeled with `(gemini)` in the sidebar. Since Codex and Gemini have no hooks system, session IDs are tracked by polling `~/.codex/sessions/` and `~/.gemini/tmp/` on the filesystem respectively. Hook events (Stop, Notification, PermissionRequest) are only available for Claude sessions.
 - **Rename sessions & machines** — double-click any session or machine name in the sidebar to set a custom display name. Names are scoped per machine and persist in browser localStorage.
 - **Input indicator** — a pulsing blue dot appears next to sessions that are waiting for user input (e.g. Claude prompting for a response).
 - **Hook events & notifications** — the agent auto-installs Claude Code hooks to forward events (Stop, Notification, PermissionRequest) to the dashboard. View events in the Events panel and action-required notifications in the Notifications panel, accessible from the top-right tabs. Notification badges appear on sidebar sessions.
@@ -102,7 +102,7 @@ Open http://localhost:5173 — select a session from the sidebar to view termina
 |---------|-------------|
 | `@blkcat/shared` | Protocol message types and parsers |
 | `@blkcat/server` | WebSocket hub with agent/dashboard routing and REST API |
-| `@blkcat/agent` | tmux capture, Claude/Codex session discovery, server connection |
+| `@blkcat/agent` | tmux capture, Claude/Codex/Gemini session discovery, server connection |
 | `@blkcat/web` | React dashboard with xterm.js terminal and chat input |
 
 ## Configuration
@@ -153,7 +153,7 @@ Server options can also be set in `~/.blkcat/server.json` (environment variables
 }
 ```
 
-- `auto` — discover tmux sessions containing "claude" or "codex"
+- `auto` — discover tmux sessions containing "claude", "codex", or "gemini"
 - `local` — monitor a specific local tmux session
 - `ssh` — monitor a tmux session on a remote host via SSH
 
@@ -212,7 +212,7 @@ The dashboard communicates with the server over WebSocket (`/ws/dashboard`). Key
 | Server → Dashboard | `directory_listing` | Response to directory listing request |
 | Dashboard → Server | `start_session` | Create a new session (with optional name, cwd, args, cliTool) |
 | Dashboard → Server | `close_session` | Kill a tmux session |
-| Dashboard → Server | `reload_session` | Reload session with tool-aware resume (Claude or Codex) |
+| Dashboard → Server | `reload_session` | Reload session with tool-aware resume (Claude, Codex, or Gemini) |
 | Dashboard → Server | `resize` | Resize terminal dimensions (supports `force` flag) |
 | Dashboard → Server | `list_directory` | Browse directories on agent machine |
 | Dashboard → Server | `deploy_skills` | Deploy skill files to an agent's `~/.claude/skills/` |
