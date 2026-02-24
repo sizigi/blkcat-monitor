@@ -248,6 +248,16 @@ export function TerminalOutput({ sessionKey, lines, cursor, logMapRef, scrollbac
     term.attachCustomKeyEventHandler((event) => {
       if (event.type !== "keydown") return true;
 
+      // Intercept Ctrl+V / Cmd+V: read clipboard ourselves and send as data.
+      // Without this, xterm sends raw \x16 which Claude Code interprets as
+      // "paste image" rather than receiving the actual clipboard text.
+      if ((event.ctrlKey || event.metaKey) && event.key === "v") {
+        navigator.clipboard.readText().then((text) => {
+          if (text) onDataRef.current?.(text);
+        }).catch(() => {});
+        return false;
+      }
+
       // Enter scroll mode via keyboard
       if (!scrollModeRef.current) {
         if (event.shiftKey && event.key === "PageUp") {
