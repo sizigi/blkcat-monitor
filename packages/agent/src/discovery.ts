@@ -1,7 +1,7 @@
 import { type ExecFn, bunExec } from "./capture";
-import type { SessionInfo } from "@blkcat/shared";
+import type { SessionInfo, CliTool } from "@blkcat/shared";
 
-const CLI_COMMANDS = new Set(["claude", "codex"]);
+const CLI_COMMANDS = new Set(["claude", "codex", "gemini"]);
 
 export function discoverCliSessions(exec: ExecFn = bunExec): SessionInfo[] {
   const result = exec([
@@ -15,7 +15,7 @@ export function discoverCliSessions(exec: ExecFn = bunExec): SessionInfo[] {
     if (!line) continue;
     const [paneId, sessionName, cmd] = line.split("\t");
     if (CLI_COMMANDS.has(cmd)) {
-      found.push({ id: paneId, name: sessionName, target: "local", cliTool: cmd as "claude" | "codex" });
+      found.push({ id: paneId, name: sessionName, target: "local", cliTool: cmd as CliTool });
     }
   }
 

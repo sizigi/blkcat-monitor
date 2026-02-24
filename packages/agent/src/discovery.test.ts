@@ -15,6 +15,7 @@ describe("discoverCliSessions", () => {
             "build:0.0\tbuild\tnpm",
             "web:0.0\tweb\tclaude",
             "codex:0.0\tcodex\tcodex",
+            "gemini:0.0\tgemini\tgemini",
           ].join("\n") + "\n",
         };
       }
@@ -22,10 +23,11 @@ describe("discoverCliSessions", () => {
     };
 
     const sessions = discoverCliSessions(exec);
-    expect(sessions).toHaveLength(3);
+    expect(sessions).toHaveLength(4);
     expect(sessions[0]).toEqual({ id: "dev:0.0", name: "dev", target: "local", cliTool: "claude" });
     expect(sessions[1]).toEqual({ id: "web:0.0", name: "web", target: "local", cliTool: "claude" });
     expect(sessions[2]).toEqual({ id: "codex:0.0", name: "codex", target: "local", cliTool: "codex" });
+    expect(sessions[3]).toEqual({ id: "gemini:0.0", name: "gemini", target: "local", cliTool: "gemini" });
   });
 
   it("returns empty array when list-panes fails", () => {
