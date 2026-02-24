@@ -10,12 +10,12 @@ describe("discoverCliSessions", () => {
         return {
           success: true,
           stdout: [
-            "dev:0.0\tdev\tclaude\t1000",
-            "dev:1.0\tdev\tvim\t1001",
-            "build:0.0\tbuild\tnpm\t1002",
-            "web:0.0\tweb\tclaude\t1003",
-            "codex:0.0\tcodex\tcodex\t1004",
-            "gemini:0.0\tgemini\tgemini\t1005",
+            "dev:0.0\tdev\tclaude\t1000\t%0",
+            "dev:1.0\tdev\tvim\t1001\t%1",
+            "build:0.0\tbuild\tnpm\t1002\t%2",
+            "web:0.0\tweb\tclaude\t1003\t%3",
+            "codex:0.0\tcodex\tcodex\t1004\t%4",
+            "gemini:0.0\tgemini\tgemini\t1005\t%5",
           ].join("\n") + "\n",
         };
       }
@@ -37,10 +37,10 @@ describe("discoverCliSessions", () => {
         return {
           success: true,
           stdout: [
-            "dev:0.0\tdev\tclaude\t1000",
-            "work:0.0\twork\tnode\t2000",
-            "ai:0.0\tai\tnode\t3000",
-            "other:0.0\tother\tnode\t4000",
+            "dev:0.0\tdev\tclaude\t1000\t%0",
+            "work:0.0\twork\tnode\t2000\t%1",
+            "ai:0.0\tai\tnode\t3000\t%2",
+            "other:0.0\tother\tnode\t4000\t%3",
           ].join("\n") + "\n",
         };
       }
@@ -62,6 +62,28 @@ describe("discoverCliSessions", () => {
     expect(sessions[0]).toEqual({ id: "dev:0.0", name: "dev", target: "local", cliTool: "claude" });
     expect(sessions[1]).toEqual({ id: "work:0.0", name: "work", target: "local", cliTool: "codex" });
     expect(sessions[2]).toEqual({ id: "ai:0.0", name: "ai", target: "local", cliTool: "gemini" });
+  });
+
+  it("deduplicates grouped tmux sessions sharing the same physical pane", () => {
+    const exec: ExecFn = (cmd) => {
+      const joined = cmd.join(" ");
+      if (joined.includes("list-panes")) {
+        // tmux grouped sessions: session "1" and "1-2" share the same window/pane
+        // Both entries have the same #{pane_id} (%5)
+        return {
+          success: true,
+          stdout: [
+            "1:2.0\t1\tclaude\t5000\t%5",
+            "1-2:2.0\t1-2\tclaude\t5000\t%5",
+          ].join("\n") + "\n",
+        };
+      }
+      return { success: false, stdout: "" };
+    };
+
+    const sessions = discoverCliSessions(exec);
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0]).toEqual({ id: "1:2.0", name: "1", target: "local", cliTool: "claude" });
   });
 
   it("returns empty array when list-panes fails", () => {

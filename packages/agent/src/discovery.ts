@@ -29,14 +29,20 @@ function resolveNodeCliTool(panePid: string, exec: ExecFn): CliTool | null {
 export function discoverCliSessions(exec: ExecFn = bunExec): SessionInfo[] {
   const result = exec([
     "tmux", "list-panes", "-a",
-    "-F", "#{session_name}:#{window_index}.#{pane_index}\t#{session_name}\t#{pane_current_command}\t#{pane_pid}",
+    "-F", "#{session_name}:#{window_index}.#{pane_index}\t#{session_name}\t#{pane_current_command}\t#{pane_pid}\t#{pane_id}",
   ]);
   if (!result.success) return [];
 
   const found: SessionInfo[] = [];
+  const seenPaneIds = new Set<string>();
   for (const line of result.stdout.trim().split("\n")) {
     if (!line) continue;
-    const [paneId, sessionName, cmd, panePid] = line.split("\t");
+    const [paneId, sessionName, cmd, panePid, tmuxPaneId] = line.split("\t");
+    // Deduplicate: tmux grouped sessions list the same physical pane
+    // under multiple session names (e.g., "1:2.0" and "1-2:2.0").
+    // #{pane_id} (e.g., %0) is unique per physical pane.
+    if (tmuxPaneId && seenPaneIds.has(tmuxPaneId)) continue;
+    if (tmuxPaneId) seenPaneIds.add(tmuxPaneId);
     if (CLI_COMMANDS.has(cmd)) {
       found.push({ id: paneId, name: sessionName, target: "local", cliTool: cmd as CliTool });
     } else if (HOST_RUNTIMES.has(cmd) && panePid) {
