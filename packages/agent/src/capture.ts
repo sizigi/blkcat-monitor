@@ -82,6 +82,19 @@ export class TmuxCapture {
   }
 
   sendRaw(target: string, data: string): void {
+    // For large data, use load-buffer + paste-buffer which is O(1) vs O(n) for send-keys -H
+    if (data.length > 512) {
+      // Write data to a temp file, load into tmux buffer, then paste into target pane
+      const tmpPath = `/tmp/blkcat-paste-${process.pid}`;
+      try {
+        Bun.spawnSync(["bash", "-c", `cat > ${tmpPath}`], { stdin: new TextEncoder().encode(data) });
+        this.exec([...this.sshPrefix, "tmux", "load-buffer", tmpPath]);
+        this.exec([...this.sshPrefix, "tmux", "paste-buffer", "-d", "-t", target]);
+      } finally {
+        try { Bun.spawnSync(["rm", "-f", tmpPath]); } catch {}
+      }
+      return;
+    }
     const bytes = new TextEncoder().encode(data);
     const hex = Array.from(bytes).map((b) => b.toString(16).padStart(2, "0"));
     const cmd = [...this.sshPrefix, "tmux", "send-keys", "-H", "-t", target, ...hex];
