@@ -154,5 +154,16 @@ export class AgentConnection {
     this.ws.send(JSON.stringify(msg));
   }
 
+  sendReloadResult(sessionId: string, success: boolean, error?: string) {
+    const msg: Record<string, any> = {
+      type: "reload_session_result",
+      machineId: this.opts.machineId,
+      sessionId,
+      success,
+    };
+    if (error) msg.error = error;
+    this.ws.send(JSON.stringify(msg));
+  }
+
   close() { this.ws.close(); }
 }

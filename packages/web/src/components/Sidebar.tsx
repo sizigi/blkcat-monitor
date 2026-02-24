@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import type { MachineSnapshot, OutboundAgentInfo, SessionInfo, CliTool } from "@blkcat/shared";
 import { AgentManager } from "./AgentManager";
 import { StartSessionModal } from "./StartSessionModal";
@@ -26,6 +26,9 @@ interface SidebarProps {
   onCollapse?: () => void;
   listDirectory?: (machineId: string, path: string) => Promise<{ path: string; entries: { name: string; isDir: boolean }[]; error?: string }>;
   onSessionSettings?: (machineId: string, sessionId: string) => void;
+  subscribeReloadResult?: (cb: (msg: { machineId: string; sessionId: string; success: boolean; error?: string }) => void) => () => void;
+  onReorderMachine?: (fromIndex: number, toIndex: number) => void;
+  onReorderSession?: (machineId: string, fromIndex: number, toIndex: number) => void;
   className?: string;
 }
 
@@ -51,12 +54,50 @@ export function Sidebar({
   onCollapse,
   listDirectory,
   onSessionSettings,
+  subscribeReloadResult,
+  onReorderMachine,
+  onReorderSession,
   className,
 }: SidebarProps) {
   const [modalMachineId, setModalMachineId] = useState<string | null>(null);
   const [reloadTarget, setReloadTarget] = useState<{ machineId: string; session: SessionInfo } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
+  // Drag-to-reorder state (refs to avoid re-renders during drag)
+  const dragMachineRef = useRef<{ index: number } | null>(null);
+  const dragSessionRef = useRef<{ machineId: string; index: number } | null>(null);
+  const [dropIndicator, setDropIndicator] = useState<
+    | { kind: "machine"; toIndex: number }
+    | { kind: "session"; machineId: string; toIndex: number }
+    | null
+  >(null);
+  // Track reload status per session: "success" | "error:message"
+  const [reloadStatus, setReloadStatus] = useState<Map<string, string>>(new Map());
+  const reloadTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  useEffect(() => {
+    if (!subscribeReloadResult) return;
+    return subscribeReloadResult((msg) => {
+      const key = `${msg.machineId}:${msg.sessionId}`;
+      setReloadStatus((prev) => {
+        const next = new Map(prev);
+        next.set(key, msg.success ? "success" : `error:${msg.error ?? "Failed"}`);
+        return next;
+      });
+      // Clear after 3 seconds
+      const prev = reloadTimersRef.current.get(key);
+      if (prev) clearTimeout(prev);
+      reloadTimersRef.current.set(key, setTimeout(() => {
+        reloadTimersRef.current.delete(key);
+        setReloadStatus((prev) => {
+          if (!prev.has(key)) return prev;
+          const next = new Map(prev);
+          next.delete(key);
+          return next;
+        });
+      }, 3000));
+    });
+  }, [subscribeReloadResult]);
   return (
     <aside
       className={`sidebar${className ? ` ${className}` : ""}`}
@@ -93,19 +134,60 @@ export function Sidebar({
       {machines.length === 0 && (
         <p style={{ padding: 16, color: "var(--text-muted)" }}>No machines connected</p>
       )}
-      {machines.map((machine) => (
+      {machines.map((machine, machineIndex) => (
         <div key={machine.machineId}>
+          {dropIndicator?.kind === "machine" && dropIndicator.toIndex === machineIndex && (
+            <div style={{ height: 2, background: "var(--accent)", margin: "0 8px" }} />
+          )}
           <div
+            className="sidebar-machine-row"
+            draggable={!!onReorderMachine}
+            onDragStart={(e) => {
+              dragMachineRef.current = { index: machineIndex };
+              dragSessionRef.current = null;
+              e.dataTransfer.effectAllowed = "move";
+              e.dataTransfer.setData("text/plain", machine.machineId);
+            }}
+            onDragOver={(e) => {
+              if (!dragMachineRef.current) return;
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "move";
+              if (dropIndicator?.kind !== "machine" || dropIndicator.toIndex !== machineIndex) {
+                setDropIndicator({ kind: "machine", toIndex: machineIndex });
+              }
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              if (!dragMachineRef.current) return;
+              const from = dragMachineRef.current.index;
+              dragMachineRef.current = null;
+              setDropIndicator(null);
+              if (from !== machineIndex) onReorderMachine?.(from, machineIndex);
+            }}
+            onDragEnd={() => {
+              dragMachineRef.current = null;
+              setDropIndicator(null);
+            }}
             style={{
-              padding: "8px 16px",
+              padding: "8px 12px",
               fontSize: 13,
               fontWeight: 600,
               color: "var(--text-muted)",
               display: "flex",
               alignItems: "center",
               gap: 6,
+              background: selectedMachine === machine.machineId ? "rgba(88,166,255,0.06)" : "transparent",
+              borderBottom: "1px solid var(--border)",
             }}
           >
+            {machineIndex < 9 && (
+              <span className="shortcut-badge shortcut-badge-machine">{machineIndex + 1}</span>
+            )}
+            {onReorderMachine && (
+              <span className="drag-handle" style={{ fontSize: 10, lineHeight: 1, userSelect: "none", flexShrink: 0 }}>
+                ⠿
+              </span>
+            )}
             <span
               style={{
                 width: 8,
@@ -113,6 +195,7 @@ export function Sidebar({
                 borderRadius: "50%",
                 background: "var(--green)",
                 display: "inline-block",
+                flexShrink: 0,
               }}
             />
             {editingId === `machine:${machine.machineId}` ? (
@@ -176,7 +259,7 @@ export function Sidebar({
               </button>
             )}
           </div>
-          {machine.sessions.map((session) => {
+          {machine.sessions.map((session, sessionIndex) => {
             const isSelected =
               selectedMachine === machine.machineId &&
               selectedSession === session.id;
@@ -184,8 +267,43 @@ export function Sidebar({
             const isActive = activeSessions?.has(`${machine.machineId}:${session.id}`);
             const isDangerous = session.args?.includes("--dangerously-skip-permissions");
             return (
+              <React.Fragment key={session.id}>
+                {dropIndicator?.kind === "session" &&
+                  dropIndicator.machineId === machine.machineId &&
+                  dropIndicator.toIndex === sessionIndex && (
+                  <div style={{ height: 2, background: "var(--accent)", margin: "0 8px 0 20px" }} />
+                )}
               <div
-                key={session.id}
+                className="sidebar-session-row"
+                draggable={!!onReorderSession}
+                onDragStart={(e) => {
+                  dragSessionRef.current = { machineId: machine.machineId, index: sessionIndex };
+                  dragMachineRef.current = null;
+                  e.dataTransfer.effectAllowed = "move";
+                  e.dataTransfer.setData("text/plain", session.id);
+                }}
+                onDragOver={(e) => {
+                  if (!dragSessionRef.current) return;
+                  if (dragSessionRef.current.machineId !== machine.machineId) return;
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                  if (dropIndicator?.kind !== "session" || dropIndicator.machineId !== machine.machineId || dropIndicator.toIndex !== sessionIndex) {
+                    setDropIndicator({ kind: "session", machineId: machine.machineId, toIndex: sessionIndex });
+                  }
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (!dragSessionRef.current) return;
+                  if (dragSessionRef.current.machineId !== machine.machineId) return;
+                  const from = dragSessionRef.current.index;
+                  dragSessionRef.current = null;
+                  setDropIndicator(null);
+                  if (from !== sessionIndex) onReorderSession?.(machine.machineId, from, sessionIndex);
+                }}
+                onDragEnd={() => {
+                  dragSessionRef.current = null;
+                  setDropIndicator(null);
+                }}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -198,7 +316,7 @@ export function Sidebar({
                   style={{
                     flex: 1,
                     textAlign: "left",
-                    padding: "6px 4px 6px 20px",
+                    padding: "6px 4px 6px 16px",
                     display: "flex",
                     alignItems: "center",
                     gap: 6,
@@ -212,6 +330,14 @@ export function Sidebar({
                     whiteSpace: "nowrap",
                   }}
                 >
+                  {sessionIndex < 9 && (
+                    <span className="shortcut-badge shortcut-badge-session">{sessionIndex + 1}</span>
+                  )}
+                  {onReorderSession && (
+                    <span className="drag-handle" style={{ fontSize: 10, lineHeight: 1, userSelect: "none", flexShrink: 0 }}>
+                      ⠿
+                    </span>
+                  )}
                   <span
                     className={isActive ? "active-indicator" : isWaiting ? "waiting-indicator" : undefined}
                     style={{
@@ -335,29 +461,47 @@ export function Sidebar({
                     ⚙
                   </button>
                 )}
-                {onReloadSession && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setReloadTarget({ machineId: machine.machineId, session });
-                    }}
-                    title={`Reload session (${session.cliTool === "codex" ? "codex resume" : `${session.cliTool ?? "claude"} --resume`})`}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      color: "var(--text-muted)",
-                      cursor: "pointer",
-                      fontSize: 12,
-                      padding: "4px 8px",
-                      lineHeight: 1,
-                      opacity: 0.5,
-                    }}
-                    onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; }}
-                    onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.5"; }}
-                  >
-                    ↻
-                  </button>
-                )}
+                {onReloadSession && (() => {
+                  const rKey = `${machine.machineId}:${session.id}`;
+                  const status = reloadStatus.get(rKey);
+                  if (status === "success") {
+                    return (
+                      <span style={{ fontSize: 12, padding: "4px 8px", color: "var(--green)" }} title="Reload succeeded">
+                        ✓
+                      </span>
+                    );
+                  }
+                  if (status?.startsWith("error:")) {
+                    return (
+                      <span style={{ fontSize: 12, padding: "4px 8px", color: "var(--red)" }} title={status.slice(6)}>
+                        ✕
+                      </span>
+                    );
+                  }
+                  return (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setReloadTarget({ machineId: machine.machineId, session });
+                      }}
+                      title={`Reload session (${session.cliTool === "codex" ? "codex resume" : `${session.cliTool ?? "claude"} --resume`})`}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        color: "var(--text-muted)",
+                        cursor: "pointer",
+                        fontSize: 12,
+                        padding: "4px 8px",
+                        lineHeight: 1,
+                        opacity: 0.5,
+                      }}
+                      onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; }}
+                      onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.5"; }}
+                    >
+                      ↻
+                    </button>
+                  );
+                })()}
                 {onCloseSession && (
                   <button
                     data-testid={`close-session-${session.id}`}
@@ -385,6 +529,7 @@ export function Sidebar({
                   </button>
                 )}
               </div>
+              </React.Fragment>
             );
           })}
         </div>

@@ -57,6 +57,53 @@ html, body, #root {
   animation: pulse-active 0.8s ease-in-out infinite;
 }
 
+/* Shortcut number badges */
+.shortcut-badge {
+  font-family: monospace;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+  min-width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  flex-shrink: 0;
+  user-select: none;
+}
+.shortcut-badge-machine {
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+.shortcut-badge-session {
+  background: transparent;
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
+/* Drag-to-reorder handles */
+.drag-handle {
+  opacity: 0;
+  color: var(--text-muted);
+  transition: opacity 0.15s;
+  cursor: grab;
+}
+.sidebar-machine-row:hover .drag-handle,
+.sidebar-session-row:hover .drag-handle {
+  opacity: 0.5;
+}
+.drag-handle:hover {
+  opacity: 1 !important;
+}
+[draggable="true"] {
+  cursor: default;
+}
+[draggable="true"]:active {
+  cursor: grabbing;
+}
+
 /* Desktop defaults (overridden by mobile media query below) */
 .sidebar-backdrop {
   display: none;

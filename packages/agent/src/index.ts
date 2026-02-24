@@ -20,6 +20,9 @@ async function main() {
   const captures = new Map<string, TmuxCapture>();
   const sessionIds = new Map<string, string>();
   const manualSessions: SessionInfo[] = [];
+  // Grace period: recently reloaded panes are protected from auto-discovery removal
+  const reloadGracePanes = new Map<string, number>();
+  const RELOAD_GRACE_MS = 10_000;
 
   for (const target of config.targets) {
     if (target.type === "local" && target.session) {
@@ -71,9 +74,10 @@ async function main() {
     captures.delete(sessionId);
     prevLines.delete(sessionId);
     sessionIds.delete(sessionId);
-    // Remove from manual sessions
-    const manualIdx = manualSessions.findIndex((s) => s.id === sessionId);
-    if (manualIdx >= 0) manualSessions.splice(manualIdx, 1);
+    // Remove ALL entries with this ID from manual sessions (prevent stale duplicates)
+    for (let i = manualSessions.length - 1; i >= 0; i--) {
+      if (manualSessions[i].id === sessionId) manualSessions.splice(i, 1);
+    }
     // Remove from auto sessions
     autoSessions = autoSessions.filter((s) => s.id !== sessionId);
     const all = [...autoSessions, ...manualSessions];
@@ -98,7 +102,11 @@ async function main() {
 
   function handleReloadSession(sessionId: string, args?: string, resume?: boolean) {
     const cap = captures.get(sessionId);
-    if (!cap) return;
+    if (!cap) {
+      console.error(`Reload failed: session ${sessionId} not found in captures`);
+      conn.sendReloadResult(sessionId, false, "Session not found");
+      return;
+    }
     const allSessions = [...autoSessions, ...manualSessions];
     const session = allSessions.find((s) => s.id === sessionId);
     const tool = CLI_TOOLS[session?.cliTool ?? "claude"];
@@ -109,10 +117,20 @@ async function main() {
       cmd += " " + tool.resumeFlag(toolSessionId);
     }
     if (args) cmd += ` ${args}`;
-    cap.respawnPane(sessionId, cmd);
+    const ok = cap.respawnPane(sessionId, cmd);
+    if (!ok) {
+      console.error(`Reload failed: tmux respawn-pane failed for ${sessionId}`);
+      conn.sendReloadResult(sessionId, false, "tmux respawn-pane failed");
+      return;
+    }
     prevLines.delete(sessionId);
+    // Clear stale session UUID so hooks server repopulates from new session
+    sessionIds.delete(sessionId);
+    // Protect this pane from auto-discovery removal during bash->cli transition
+    reloadGracePanes.set(sessionId, Date.now());
     // Update stored args on the session so sidebar reflects the new flags
     if (session) session.args = args || undefined;
+    conn.sendReloadResult(sessionId, true);
     console.log(`Reloaded ${tool.command} session: ${sessionId}${shouldResume && toolSessionId ? ` (session: ${toolSessionId})` : ""}${args ? ` (args: ${args})` : ""}${!shouldResume ? " (fresh)" : ""}`);
   }
 
@@ -127,6 +145,11 @@ async function main() {
     captures.set(paneId, localCap);
     const sessionName = name || `${tool}${args ? ` ${args}` : ""}`;
     const session: SessionInfo = { id: paneId, name: sessionName, target: "local", args: args || undefined, cliTool: tool };
+    // Remove any existing entry with the same pane ID to prevent duplicates
+    const existingIdx = manualSessions.findIndex((s) => s.id === paneId);
+    if (existingIdx >= 0) manualSessions.splice(existingIdx, 1);
+    // Also remove from auto-discovered sessions to prevent duplicates in the merged list
+    autoSessions = autoSessions.filter((s) => s.id !== paneId);
     manualSessions.push(session);
     const all = [...autoSessions, ...manualSessions];
     conn.updateSessions(all);
@@ -210,6 +233,7 @@ async function main() {
     sendDeployResult(requestId: string, success: boolean, error?: string): void;
     sendSettingsSnapshot(requestId: string, settings: Record<string, unknown>, scope: "global" | "project", deployedSkills?: string[]): void;
     sendSettingsResult(requestId: string, success: boolean, error?: string): void;
+    sendReloadResult(sessionId: string, success: boolean, error?: string): void;
     close(): void;
   };
 
@@ -361,8 +385,14 @@ async function main() {
     setInterval(() => {
       const fresh = discoverCliSessions();
       const newSessions = fresh.filter((s) => !captures.has(s.id));
+      // Expire old grace entries
+      const now = Date.now();
+      for (const [id, ts] of reloadGracePanes) {
+        if (now - ts > RELOAD_GRACE_MS) reloadGracePanes.delete(id);
+      }
+      // Skip removing sessions that are within the reload grace period
       const goneSessions = autoSessions.filter(
-        (s) => !fresh.find((f) => f.id === s.id)
+        (s) => !fresh.find((f) => f.id === s.id) && !reloadGracePanes.has(s.id)
       );
 
       if (newSessions.length > 0 || goneSessions.length > 0) {

@@ -173,6 +173,17 @@ export class AgentListener {
     this.broadcast(msg);
   }
 
+  sendReloadResult(sessionId: string, success: boolean, error?: string) {
+    const msg: Record<string, any> = {
+      type: "reload_session_result",
+      machineId: this.machineId,
+      sessionId,
+      success,
+    };
+    if (error) msg.error = error;
+    this.broadcast(msg);
+  }
+
   close() {
     this.server.stop();
   }
