@@ -117,8 +117,9 @@ export class TmuxCapture {
     const result = this.exec(cmd);
     if (!result.success) return null;
     const target = result.stdout.trim();
-    // Send the command to the interactive shell
-    this.sendText(target, fullCmd);
+    // Unset CLAUDECODE so Claude Code doesn't refuse to start when blkcat
+    // itself is running inside a Claude Code session.
+    this.sendText(target, `unset CLAUDECODE; ${fullCmd}`);
     this.sendKey(target, "Enter");
     return target;
   }

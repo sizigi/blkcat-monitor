@@ -24,25 +24,67 @@ Agents can connect outbound to the server (default), or the server can dial out 
 
 - [Bun](https://bun.sh/) runtime
 - tmux
+- [Tailscale](https://tailscale.com/) (recommended for multi-machine setups)
+
+### Install Tailscale
+
+Run on **every machine** (server and agents):
+
+```bash
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
+```
+
+After `tailscale up`, authenticate in the browser. Then get the machine's Tailscale IP:
+
+```bash
+tailscale ip -4
+```
+
+Use this IP in `BLKCAT_SERVER_URL` and `BLKCAT_AGENTS` so agents and server can reach each other securely across the internet without opening firewall ports.
 
 ### Install
 
 ```bash
+# Clone the repository
+git clone <repo-url> blkcat-monitor
+cd blkcat-monitor
+
+# Install dependencies
 bun install
+
+# Build the web dashboard
+cd packages/web && bunx vite build && cd ../..
 ```
 
 ### 1. Start the server
 
+The included `start.sh` builds the web assets and starts the server in one step:
+
 ```bash
-bun packages/server/src/index.ts
+BLKCAT_STATIC_DIR=packages/web/dist ./start.sh
+```
+
+Or manually:
+
+```bash
+# Build web assets first (required for static serving)
+cd packages/web && bunx vite build && cd ../..
+
+# Start server (serves dashboard at http://your-server:3000)
+BLKCAT_STATIC_DIR=packages/web/dist bun packages/server/src/index.ts
 ```
 
 The server listens on `0.0.0.0:3000` by default. Use `BLKCAT_HOST` and `BLKCAT_PORT` to change.
 
-To serve the built dashboard as static files:
+#### Running persistently with tmux
+
+Use tmux to keep the server running after you disconnect:
 
 ```bash
-BLKCAT_STATIC_DIR=packages/web/dist bun packages/server/src/index.ts
+tmux new-session -d -s blkcat-server
+tmux send-keys -t blkcat-server \
+  "cd ~/blkcat-monitor && BLKCAT_STATIC_DIR=packages/web/dist ./start.sh" Enter
 ```
 
 ### 2. Start an agent
@@ -52,6 +94,14 @@ On each machine you want to monitor:
 ```bash
 BLKCAT_SERVER_URL=ws://your-server:3000/ws/agent \
 bun packages/agent/src/index.ts
+```
+
+#### Running the agent persistently with tmux
+
+```bash
+tmux new-session -d -s blkcat-agent
+tmux send-keys -t blkcat-agent \
+  "cd ~/blkcat-monitor && BLKCAT_SERVER_URL=ws://your-server:3000/ws/agent bun packages/agent/src/index.ts" Enter
 ```
 
 The agent auto-discovers local tmux sessions running Claude Code, Codex CLI, or Gemini CLI and begins streaming their output.
@@ -222,6 +272,33 @@ The dashboard communicates with the server over WebSocket (`/ws/dashboard`). Key
 | Server → Dashboard | `deploy_result` | Result of a skill deploy/remove (success/error) |
 | Server → Dashboard | `settings_snapshot` | Agent's current settings and deployed skills list |
 | Server → Dashboard | `settings_result` | Result of a settings update (success/error) |
+
+## Troubleshooting
+
+### "Claude Code cannot be launched inside another Claude Code session"
+
+If you launch blkcat from within a Claude Code terminal session, the `CLAUDECODE` environment variable is inherited by tmux panes managed by the agent. Any `claude` command started in those panes will detect the variable and refuse to run.
+
+The agent automatically strips `CLAUDECODE` when starting new sessions via the dashboard "+" button (fixed in `packages/agent/src/capture.ts`). If you hit this error manually in a tmux pane, unset the variable first:
+
+```bash
+unset CLAUDECODE && claude
+```
+
+### Agent shows 0 sessions on startup
+
+The agent auto-discovers tmux panes running `claude`, `codex`, or `gemini`. If you start a Claude session **after** the agent is already running, it will pick it up on the next poll cycle (default 150ms). If nothing is discovered, make sure your sessions are named or contain those strings in their running commands.
+
+### Web dashboard shows blank / cannot connect
+
+Make sure you built the web assets before starting the server with `BLKCAT_STATIC_DIR`:
+
+```bash
+cd packages/web && bunx vite build && cd ../..
+BLKCAT_STATIC_DIR=packages/web/dist bun packages/server/src/index.ts
+```
+
+For development without a build step, use the Vite dev server instead (see Quick Start step 3).
 
 ## Testing
 
