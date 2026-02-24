@@ -52,7 +52,7 @@ export function SessionDetail({
         </span>
       </div>
       <TerminalOutput sessionKey={`${machineId}:${sessionId}`} lines={lines} cursor={cursor} logMapRef={logMapRef} scrollbackMapRef={scrollbackMapRef} subscribeScrollback={subscribeScrollback} onRequestScrollback={onRequestScrollback} onData={onSendData} onResize={onResize} />
-      <div style={{ borderTop: "1px solid var(--border)" }}>
+      <div style={{ borderTop: "1px solid var(--border)", flexShrink: 0, overflowY: "auto", maxHeight: "40vh" }}>
         <ChatInput onSendText={onSendText} onSendKey={onSendKey} onSendData={onSendData} />
       </div>
     </div>

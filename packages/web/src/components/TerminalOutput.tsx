@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
+import { ChevronsUp, ChevronsDown, X, Maximize, ArrowUpDown } from "./Icons";
 
 interface TerminalOutputProps {
   sessionKey?: string;
@@ -343,18 +344,29 @@ export function TerminalOutput({ sessionKey, lines, cursor, logMapRef, scrollbac
     container.addEventListener("touchmove", onTouchMove, { passive: false });
     container.addEventListener("touchend", onTouchEnd, { passive: true });
 
-    // --- Resize handling ---
+    // Double-click to exit scroll mode (desktop)
+    const onDblClick = () => {
+      if (scrollModeRef.current) exitScrollMode();
+    };
+    container.addEventListener("dblclick", onDblClick);
+
+    // --- Resize handling (debounced to avoid keyboard open/close thrashing) ---
+    let fitTimer: ReturnType<typeof setTimeout> | undefined;
     let resizeTimer: ReturnType<typeof setTimeout> | undefined;
     const doFit = () => {
-      fit.fit();
-      clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(() => onResizeRef.current?.(term.cols, term.rows), 300);
+      clearTimeout(fitTimer);
+      fitTimer = setTimeout(() => {
+        fit.fit();
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => onResizeRef.current?.(term.cols, term.rows), 300);
+      }, 100);
     };
     const resizeObserver = new ResizeObserver(doFit);
     resizeObserver.observe(containerRef.current);
     window.addEventListener("resize", doFit);
 
     return () => {
+      clearTimeout(fitTimer);
       clearTimeout(resizeTimer);
       resizeObserver.disconnect();
       window.removeEventListener("resize", doFit);
@@ -362,6 +374,7 @@ export function TerminalOutput({ sessionKey, lines, cursor, logMapRef, scrollbac
       container.removeEventListener("touchstart", onTouchStart);
       container.removeEventListener("touchmove", onTouchMove);
       container.removeEventListener("touchend", onTouchEnd);
+      container.removeEventListener("dblclick", onDblClick);
       stopMomentum();
       if (scrollRafRef.current) cancelAnimationFrame(scrollRafRef.current);
       dataDisposable.dispose();
@@ -415,7 +428,8 @@ export function TerminalOutput({ sessionKey, lines, cursor, logMapRef, scrollbac
     if (!sessionKey) return;
     const t = setTimeout(() => onRequestScrollbackRef.current?.(), 2000);
     const i = setInterval(() => {
-      if (!scrollModeRef.current) onRequestScrollbackRef.current?.();
+      if (!scrollModeRef.current && document.visibilityState === "visible")
+        onRequestScrollbackRef.current?.();
     }, 30000);
     return () => { clearTimeout(t); clearInterval(i); };
   }, [sessionKey]);
@@ -424,7 +438,13 @@ export function TerminalOutput({ sessionKey, lines, cursor, logMapRef, scrollbac
   // After writing, move the cursor to match tmux's cursor position.
   useEffect(() => {
     const term = termRef.current;
-    if (!term || lines === prevLinesRef.current) return;
+    if (!term) return;
+    // Cursor-only update: if lines haven't changed, just reposition cursor
+    if (lines === prevLinesRef.current) {
+      const cur = cursorRef.current;
+      if (cur && !scrollModeRef.current) term.write(`\x1b[${cur.y + 1};${cur.x + 1}H`);
+      return;
+    }
     const prev = prevLinesRef.current;
     prevLinesRef.current = lines;
     if (scrollModeRef.current || term.hasSelection()) {
@@ -530,11 +550,9 @@ export function TerminalOutput({ sessionKey, lines, cursor, logMapRef, scrollbac
           <span>SCROLL</span>
           {scrollbackLoading && <span style={{ fontWeight: 400, fontSize: 10, opacity: 0.7 }}>loading...</span>}
           {scrollInfo && !scrollbackLoading && <span style={{ fontWeight: 400, fontSize: 10, opacity: 0.7 }}>{scrollInfo}</span>}
-          <button onMouseDown={pd} onClick={() => scrollNav("top")} style={btnBase} title="Top (Home)">&#8607;</button>
-          <button onMouseDown={pd} onClick={() => scrollNav("pageUp")} style={btnBase} title="Page Up">&#8679;</button>
-          <button onMouseDown={pd} onClick={() => scrollNav("pageDown")} style={btnBase} title="Page Down">&#8681;</button>
-          <button onMouseDown={pd} onClick={() => scrollNav("bottom")} style={btnBase} title="Bottom (End)">&#8609;</button>
-          <button onMouseDown={pd} onClick={exitScrollMode} style={{ ...btnBase, fontWeight: 700, fontSize: 12 }} title="Exit (Esc)">&#10005;</button>
+          <button onMouseDown={pd} onClick={() => scrollNav("top")} style={btnBase} title="Top (Home)"><ChevronsUp size={12} /></button>
+          <button onMouseDown={pd} onClick={() => scrollNav("bottom")} style={btnBase} title="Bottom (End)"><ChevronsDown size={12} /></button>
+          <button onMouseDown={pd} onClick={exitScrollMode} style={{ ...btnBase, fontWeight: 700 }} title="Exit (Esc)"><X size={12} /></button>
         </div>
       ) : (
         <div style={{ position: "absolute", top: 6, right: 6, display: "flex", gap: 6, zIndex: 10 }}>
@@ -546,7 +564,7 @@ export function TerminalOutput({ sessionKey, lines, cursor, logMapRef, scrollbac
             onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = "1"; }}
             onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.6"; }}
           >
-            &#8862;
+            <Maximize size={14} />
           </button>
           {(hasLog || lines.length > 0) && (
             <button
@@ -557,7 +575,7 @@ export function TerminalOutput({ sessionKey, lines, cursor, logMapRef, scrollbac
               onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = "1"; }}
               onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.6"; }}
             >
-              &#8597;
+              <ArrowUpDown size={14} />
             </button>
           )}
         </div>

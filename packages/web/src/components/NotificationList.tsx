@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import type { AgentHookEventMessage, MachineSnapshot } from "@blkcat/shared";
 import { NOTIFY_HOOK_EVENTS } from "@blkcat/shared";
+import { X } from "./Icons";
 
 interface NotificationListProps {
   hookEventsRef: React.RefObject<AgentHookEventMessage[]>;
@@ -111,9 +112,9 @@ export function NotificationList({
         {onClose && (
           <button onClick={onClose} style={{
             background: "none", border: "none", color: "var(--text-muted)",
-            cursor: "pointer", fontSize: 18, lineHeight: 1, padding: "8px 12px",
+            cursor: "pointer", lineHeight: 1, padding: "8px 12px",
             minWidth: 44, minHeight: 44, display: "flex", alignItems: "center", justifyContent: "center",
-          }}>&#x2715;</button>
+          }}><X size={18} /></button>
         )}
         <span style={{ fontWeight: 600, fontSize: 13 }}>Notifications</span>
         <span style={{ fontSize: 11, color: "var(--text-muted)", marginLeft: "auto" }}>

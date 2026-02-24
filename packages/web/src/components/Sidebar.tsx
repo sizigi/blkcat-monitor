@@ -3,6 +3,7 @@ import type { MachineSnapshot, OutboundAgentInfo, SessionInfo, CliTool } from "@
 import { AgentManager } from "./AgentManager";
 import { StartSessionModal } from "./StartSessionModal";
 import { ReloadSessionModal } from "./ReloadSessionModal";
+import { ChevronsLeft, GripDots, Settings, Check, X, RotateCw, Plus } from "./Icons";
 
 interface SidebarProps {
   width?: number;
@@ -124,12 +125,11 @@ export function Sidebar({
               border: "none",
               color: "var(--text-muted)",
               cursor: "pointer",
-              fontSize: 14,
               lineHeight: 1,
               padding: "2px 4px",
             }}
           >
-            &#x2039;&#x2039;
+            <ChevronsLeft size={14} />
           </button>
         )}
       </div>
@@ -186,8 +186,8 @@ export function Sidebar({
               <span className="shortcut-badge shortcut-badge-machine">{machineIndex + 1}</span>
             )}
             {onReorderMachine && (
-              <span className="drag-handle" style={{ fontSize: 10, lineHeight: 1, userSelect: "none", flexShrink: 0 }}>
-                ⠿
+              <span className="drag-handle" style={{ lineHeight: 1, userSelect: "none", flexShrink: 0 }}>
+                <GripDots size={10} />
               </span>
             )}
             <span
@@ -252,12 +252,14 @@ export function Sidebar({
                   borderRadius: 4,
                   color: "var(--text-muted)",
                   cursor: "pointer",
-                  fontSize: 14,
                   lineHeight: 1,
-                  padding: "2px 6px",
+                  padding: "2px 4px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
                 }}
               >
-                +
+                <Plus size={14} />
               </button>
             )}
           </div>
@@ -336,8 +338,8 @@ export function Sidebar({
                     <span className="shortcut-badge shortcut-badge-session">{sessionIndex + 1}</span>
                   )}
                   {onReorderSession && (
-                    <span className="drag-handle" style={{ fontSize: 10, lineHeight: 1, userSelect: "none", flexShrink: 0 }}>
-                      ⠿
+                    <span className="drag-handle" style={{ lineHeight: 1, userSelect: "none", flexShrink: 0 }}>
+                      <GripDots size={10} />
                     </span>
                   )}
                   <span
@@ -452,7 +454,6 @@ export function Sidebar({
                       border: "none",
                       color: "var(--text-muted)",
                       cursor: "pointer",
-                      fontSize: 12,
                       padding: "4px 8px",
                       lineHeight: 1,
                       opacity: 0.5,
@@ -460,7 +461,7 @@ export function Sidebar({
                     onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; }}
                     onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.5"; }}
                   >
-                    ⚙
+                    <Settings size={12} />
                   </button>
                 )}
                 {onReloadSession && (() => {
@@ -468,15 +469,15 @@ export function Sidebar({
                   const status = reloadStatus.get(rKey);
                   if (status === "success") {
                     return (
-                      <span style={{ fontSize: 12, padding: "4px 8px", color: "var(--green)" }} title="Reload succeeded">
-                        ✓
+                      <span style={{ padding: "4px 8px", color: "var(--green)" }} title="Reload succeeded">
+                        <Check size={12} />
                       </span>
                     );
                   }
                   if (status?.startsWith("error:")) {
                     return (
-                      <span style={{ fontSize: 12, padding: "4px 8px", color: "var(--red)" }} title={status.slice(6)}>
-                        ✕
+                      <span style={{ padding: "4px 8px", color: "var(--red)" }} title={status.slice(6)}>
+                        <X size={12} />
                       </span>
                     );
                   }
@@ -492,7 +493,6 @@ export function Sidebar({
                         border: "none",
                         color: "var(--text-muted)",
                         cursor: "pointer",
-                        fontSize: 12,
                         padding: "4px 8px",
                         lineHeight: 1,
                         opacity: 0.5,
@@ -500,7 +500,7 @@ export function Sidebar({
                       onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; }}
                       onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.5"; }}
                     >
-                      ↻
+                      <RotateCw size={12} />
                     </button>
                   );
                 })()}
@@ -519,7 +519,6 @@ export function Sidebar({
                       border: "none",
                       color: "var(--text-muted)",
                       cursor: "pointer",
-                      fontSize: 12,
                       padding: "4px 8px",
                       lineHeight: 1,
                       opacity: 0.5,
@@ -527,7 +526,7 @@ export function Sidebar({
                     onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; (e.target as HTMLElement).style.color = "var(--red)"; }}
                     onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.5"; (e.target as HTMLElement).style.color = "var(--text-muted)"; }}
                   >
-                    ✕
+                    <X size={12} />
                   </button>
                 )}
               </div>

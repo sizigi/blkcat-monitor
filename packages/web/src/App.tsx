@@ -10,6 +10,7 @@ import { EventFeed } from "./components/EventFeed";
 import { NotificationList } from "./components/NotificationList";
 import { SkillsMatrix } from "./components/SkillsMatrix";
 import { ProjectSettingsModal } from "./components/ProjectSettingsModal";
+import { Menu, Pencil, ClipboardList, Bell, Settings, ChevronUp } from "./components/Icons";
 
 const WS_URL =
   (import.meta as any).env?.VITE_WS_URL ??
@@ -83,22 +84,28 @@ export default function App() {
   const [topbarEditValue, setTopbarEditValue] = useState("");
   const [navMode, setNavMode] = useState(false);
   const resizing = useRef(false);
+  // Refs for values used in stable effects (avoids re-registering document listeners)
+  const selectedMachineRef = useRef(selectedMachine);
+  selectedMachineRef.current = selectedMachine;
+  const selectedSessionRef = useRef(selectedSession);
+  selectedSessionRef.current = selectedSession;
 
   const sessionOutput = useSessionOutput(outputMapRef, subscribeOutput, selectedMachine, selectedSession);
 
   // Keep sidebar order in sync with server-provided machines
   const orderedMachines = useMemo(() => applyOrder(machines), [applyOrder, machines]);
+  const orderedMachinesRef = useRef(orderedMachines);
+  orderedMachinesRef.current = orderedMachines;
   useEffect(() => { if (machines.length > 0) syncOrder(machines); }, [machines, syncOrder]);
 
   // Navigation mode: backtick (`) as leader key, works in xterm and input fields.
-  // ` → enter nav mode → bare keys navigate → auto-exit after action
-  // `` (double backtick) → send literal ` to the focused element
+  // Uses refs so the keydown listener registers once and never re-attaches.
   const navModeRef = useRef(false);
   useEffect(() => {
     function setNav(v: boolean) { navModeRef.current = v; setNavMode(v); }
 
     function selectMachine(idx: number) {
-      const machine = orderedMachines[idx];
+      const machine = orderedMachinesRef.current[idx];
       if (!machine) return;
       setSelectedMachine(machine.machineId);
       if (machine.sessions.length > 0) {
@@ -107,43 +114,44 @@ export default function App() {
       }
     }
     function cycleMachine(delta: number) {
-      const idx = orderedMachines.findIndex((m) => m.machineId === selectedMachine);
-      const next = (idx + delta + orderedMachines.length) % orderedMachines.length;
+      const machines = orderedMachinesRef.current;
+      const idx = machines.findIndex((m) => m.machineId === selectedMachineRef.current);
+      const next = (idx + delta + machines.length) % machines.length;
       selectMachine(next);
     }
     function selectSession(idx: number) {
-      if (!selectedMachine) return;
-      const machine = orderedMachines.find((m) => m.machineId === selectedMachine);
+      const mid = selectedMachineRef.current;
+      if (!mid) return;
+      const machine = orderedMachinesRef.current.find((m) => m.machineId === mid);
       const session = machine?.sessions[idx];
       if (session) {
         setSelectedSession(session.id);
-        clearNotifications(`${selectedMachine}:${session.id}`);
+        clearNotifications(`${mid}:${session.id}`);
       }
     }
     function cycleSession(delta: number) {
-      if (!selectedMachine) return;
-      const machine = orderedMachines.find((m) => m.machineId === selectedMachine);
+      const mid = selectedMachineRef.current;
+      if (!mid) return;
+      const machine = orderedMachinesRef.current.find((m) => m.machineId === mid);
       if (!machine || machine.sessions.length === 0) return;
-      const idx = machine.sessions.findIndex((s) => s.id === selectedSession);
+      const idx = machine.sessions.findIndex((s) => s.id === selectedSessionRef.current);
       const next = (idx + delta + machine.sessions.length) % machine.sessions.length;
       selectSession(next);
     }
     function sendLiteralBacktick() {
       const el = document.activeElement as HTMLElement;
       if (el?.closest?.(".xterm")) {
-        // Send ` to the terminal via WebSocket input
-        const ws = (window as any).__blkcatSendBacktick;
-        if (ws) ws();
+        const mid = selectedMachineRef.current;
+        const sid = selectedSessionRef.current;
+        if (mid && sid) sendInput(mid, sid, { data: "`" });
       } else if (el?.tagName === "INPUT" || el?.tagName === "TEXTAREA") {
         document.execCommand("insertText", false, "`");
       }
     }
 
     function handleKeyDown(e: KeyboardEvent) {
-      // Don't interfere with IME composition
       if (e.isComposing) return;
 
-      // --- Leader key: backtick (`) ---
       if (e.key === "`" && !e.ctrlKey && !e.altKey && !e.metaKey && !navModeRef.current) {
         e.preventDefault();
         e.stopPropagation();
@@ -153,81 +161,40 @@ export default function App() {
 
       if (!navModeRef.current) return;
 
-      // --- In nav mode: handle second keystroke ---
       const code = e.code;
       const num = code?.startsWith("Digit") ? parseInt(code[5]) : NaN;
 
-      // ` again → send literal backtick, exit
       if (e.key === "`") {
-        e.preventDefault();
-        e.stopPropagation();
-        setNav(false);
-        sendLiteralBacktick();
-        return;
+        e.preventDefault(); e.stopPropagation();
+        setNav(false); sendLiteralBacktick(); return;
       }
-
-      // Escape / Enter → just exit
       if (e.key === "Escape" || e.key === "Enter") {
-        e.preventDefault();
-        e.stopPropagation();
-        setNav(false);
-        return;
+        e.preventDefault(); e.stopPropagation();
+        setNav(false); return;
       }
-
-      // 1-9 → select machine, exit
       if (!e.shiftKey && num >= 1 && num <= 9) {
-        e.preventDefault();
-        e.stopPropagation();
-        selectMachine(num - 1);
-        setNav(false);
-        return;
+        e.preventDefault(); e.stopPropagation();
+        selectMachine(num - 1); setNav(false); return;
       }
-
-      // Shift+1-9 → select session, exit
       if (e.shiftKey && num >= 1 && num <= 9) {
-        e.preventDefault();
-        e.stopPropagation();
-        selectSession(num - 1);
-        setNav(false);
-        return;
+        e.preventDefault(); e.stopPropagation();
+        selectSession(num - 1); setNav(false); return;
       }
-
-      // [ / ] → cycle machines (stay in nav mode)
       if (code === "BracketLeft" || code === "BracketRight") {
-        e.preventDefault();
-        e.stopPropagation();
-        cycleMachine(code === "BracketLeft" ? -1 : 1);
-        return;
+        e.preventDefault(); e.stopPropagation();
+        cycleMachine(code === "BracketLeft" ? -1 : 1); return;
       }
-
-      // Tab / Shift+Tab → cycle sessions (stay in nav mode)
       if (e.key === "Tab") {
-        e.preventDefault();
-        e.stopPropagation();
-        cycleSession(e.shiftKey ? -1 : 1);
-        return;
+        e.preventDefault(); e.stopPropagation();
+        cycleSession(e.shiftKey ? -1 : 1); return;
       }
-
-      // Ignore modifier-only keypresses (Shift, Ctrl, Alt, Meta)
       if (e.key === "Shift" || e.key === "Control" || e.key === "Alt" || e.key === "Meta") return;
-
-      // Any other key → exit nav mode, don't consume the key
       setNav(false);
     }
 
     document.addEventListener("keydown", handleKeyDown, true);
     return () => document.removeEventListener("keydown", handleKeyDown, true);
-  }, [orderedMachines, selectedMachine, selectedSession, clearNotifications]);
-
-  // Expose a helper so the nav mode handler can send ` to the terminal
-  useEffect(() => {
-    (window as any).__blkcatSendBacktick = () => {
-      if (selectedMachine && selectedSession) {
-        sendInput(selectedMachine, selectedSession, { data: "`" });
-      }
-    };
-    return () => { delete (window as any).__blkcatSendBacktick; };
-  }, [selectedMachine, selectedSession, sendInput]);
+  }, [clearNotifications, sendInput]); // stable deps — registers once
 
   const selectedSessionName = useMemo(() => {
     if (!selectedMachine || !selectedSession) return "";
@@ -292,7 +259,7 @@ export default function App() {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", height: "100vh", position: "relative" }}>
+    <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", height: "100dvh", position: "relative" }}>
       {isMobile ? (
         <>
           {drawerOpen && (
@@ -357,11 +324,10 @@ export default function App() {
             border: "none",
             color: "var(--text)",
             cursor: "pointer",
-            fontSize: 20,
             padding: "4px 8px",
             lineHeight: 1,
           }}
-        >&#9776;</button>
+        ><Menu size={20} /></button>
         {editingTopbarName && selectedMachine && selectedSession ? (
           <input
             autoFocus
@@ -408,13 +374,12 @@ export default function App() {
               border: "none",
               color: "var(--text-muted)",
               cursor: "pointer",
-              fontSize: 14,
               padding: "4px 6px",
               lineHeight: 1,
               flexShrink: 0,
             }}
             title="Rename session"
-          >&#9998;</button>
+          ><Pencil size={14} /></button>
         )}
         {(["events", "notifications", "skills"] as const).map((tab) => (
           <button
@@ -425,20 +390,22 @@ export default function App() {
               border: "none",
               color: panelTab === tab ? "#fff" : "var(--text-muted)",
               cursor: "pointer",
-              fontSize: 16,
               padding: "4px 8px",
               borderRadius: 4,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 2,
             }}
           >
-            {tab === "events" ? "\u{1F4CB}" : tab === "notifications" ? (() => {
+            {tab === "events" ? <ClipboardList size={16} /> : tab === "notifications" ? (() => {
               let total = 0;
               for (const c of notificationCounts.values()) total += c;
-              return total > 0 ? `\u{1F514}${total}` : "\u{1F514}";
-            })() : "\u{2699}\u{FE0F}"}
+              return <><Bell size={16} />{total > 0 && <span style={{ fontSize: 11, fontWeight: 600 }}>{total}</span>}</>;
+            })() : <Settings size={16} />}
           </button>
         ))}
       </div>
-      <main style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+      <main style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0, overflow: "hidden" }}>
         {(!isMobile && sidebarCollapsed) && (
           <button
             onClick={() => setSidebarCollapsed(false)}
@@ -449,12 +416,11 @@ export default function App() {
               borderRight: "1px solid var(--border)",
               color: "var(--text-muted)",
               cursor: "pointer",
-              fontSize: 16,
               padding: "8px 12px",
               lineHeight: 1,
             }}
           >
-            &#9776;
+            <Menu size={16} />
           </button>
         )}
         {!connected && (
@@ -483,7 +449,7 @@ export default function App() {
           }}>
             <span style={{ fontFamily: "monospace" }}>`</span>
             <span style={{ fontWeight: 400 }}>1-9 machine</span>
-            <span style={{ fontWeight: 400 }}>⇧1-9 session</span>
+            <span style={{ fontWeight: 400, display: "inline-flex", alignItems: "center", gap: 2 }}><ChevronUp size={12} />1-9 session</span>
             <span style={{ fontWeight: 400 }}>[ ] cycle machine</span>
             <span style={{ fontWeight: 400 }}>Tab cycle session</span>
             <span style={{ fontWeight: 400, opacity: 0.7 }}>`` literal `</span>

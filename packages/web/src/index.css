@@ -104,29 +104,21 @@ html, body, #root {
   cursor: grabbing;
 }
 
-/* Live mode: animated rainbow border around textarea */
-@property --live-angle {
-  syntax: "<angle>";
-  initial-value: 0deg;
-  inherits: false;
-}
-@keyframes live-rotate {
-  to { --live-angle: 360deg; }
-}
+/* Live mode: animated rainbow border around textarea.
+   Uses linear-gradient + background-position shift instead of
+   conic-gradient + @property, which is much lighter on mobile GPUs. */
 .live-border-wrap {
-  position: relative;
   border-radius: 6px;
   padding: 2px;
   flex: 1;
-  background: conic-gradient(
-    from var(--live-angle),
+  background: linear-gradient(
+    270deg,
     #f85149, #ff6a33, #f0c040, #3fb950, #58a6ff, #bc8cff, #f778ba, #f85149
   );
-  animation: live-rotate 2.5s linear infinite;
+  background-size: 400% 100%;
+  animation: live-bg-shift 4s ease infinite;
 }
 .live-border-wrap > textarea {
-  position: relative;
-  z-index: 1;
   display: block;
 }
 
@@ -201,6 +193,16 @@ html, body, #root {
   text-shadow: 0 1px 2px rgba(0,0,0,0.3);
 }
 
+/* Respect reduced-motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .waiting-indicator,
+  .active-indicator,
+  .live-border-wrap,
+  .live-toggle-on {
+    animation: none !important;
+  }
+}
+
 /* Desktop defaults (overridden by mobile media query below) */
 .sidebar-backdrop {
   display: none;
@@ -211,6 +213,12 @@ html, body, #root {
 
 /* ── Mobile responsive (≤768px) ── */
 @media (max-width: 768px) {
+  /* Prevent page scroll on mobile (position:fixed causes keyboard layout thrashing) */
+  html, body, #root {
+    overflow: hidden;
+    height: 100%;
+  }
+
   /* Sidebar as slide-out drawer */
   .sidebar {
     position: fixed !important;
@@ -272,11 +280,22 @@ html, body, #root {
     font-size: 14px !important;
   }
 
+  /* Prevent iOS auto-zoom on input focus (triggers when font-size < 16px) */
+  textarea, input, select {
+    font-size: 16px !important;
+  }
+
   /* Show full-width LIVE toggle on mobile, hide desktop version */
   .live-toggle-mobile {
     display: flex !important;
   }
   .live-toggle-desktop {
     display: none !important;
+  }
+
+  /* Mobile: push textarea to bottom so buttons are visible above it.
+     Order: key-buttons (0) → LIVE toggle (1) → textarea (2) */
+  .chat-input-textarea {
+    order: 2;
   }
 }

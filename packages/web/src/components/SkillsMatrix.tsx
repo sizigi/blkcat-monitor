@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import type { MachineSnapshot } from "@blkcat/shared";
+import { Check, X as XIcon, Minus } from "./Icons";
 
 interface SkillDef {
   name: string;
@@ -172,7 +173,6 @@ export function SkillsMatrix({
             border: "none",
             color: "var(--text-muted)",
             cursor: "pointer",
-            fontSize: 18,
             padding: "8px 12px",
             lineHeight: 1,
             minWidth: 44,
@@ -182,7 +182,7 @@ export function SkillsMatrix({
             justifyContent: "center",
           }}
         >
-          ✕
+          <XIcon size={18} />
         </button>
       </div>
 
@@ -287,10 +287,10 @@ export function SkillsMatrix({
                                   padding: "2px 4px",
                                 }}
                               >
-                                ✓
+                                <Check size={11} />
                               </button>
                             ) : (
-                              <span style={{ color: "var(--green)", fontSize: 11, fontWeight: 600, padding: "2px 4px" }}>✓</span>
+                              <span style={{ color: "var(--green)", padding: "2px 4px" }}><Check size={11} /></span>
                             )}
                             <button
                               onClick={() => handleRemove(mId, name)}
@@ -307,7 +307,7 @@ export function SkillsMatrix({
                               onMouseEnter={(e) => { (e.currentTarget).style.opacity = "1"; (e.currentTarget).style.color = "var(--red)"; }}
                               onMouseLeave={(e) => { (e.currentTarget).style.opacity = "0.5"; (e.currentTarget).style.color = "var(--text-muted)"; }}
                             >
-                              ✕
+                              <XIcon size={10} />
                             </button>
                           </span>
                         ) : available ? (
@@ -326,7 +326,7 @@ export function SkillsMatrix({
                             Deploy
                           </button>
                         ) : (
-                          <span style={{ color: "var(--text-muted)", fontSize: 11 }}>—</span>
+                          <span style={{ color: "var(--text-muted)" }}><Minus size={11} /></span>
                         )}
                       </td>
                     );

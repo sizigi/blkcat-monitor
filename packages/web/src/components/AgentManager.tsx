@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import type { OutboundAgentInfo } from "@blkcat/shared";
+import { X } from "./Icons";
 
 interface AgentManagerProps {
   agents: OutboundAgentInfo[];
@@ -184,12 +185,11 @@ export function AgentManager({ agents, onAdd, onRemove }: AgentManagerProps) {
               border: "none",
               color: "var(--text-muted)",
               cursor: "pointer",
-              fontSize: 14,
               lineHeight: 1,
               padding: "0 2px",
             }}
           >
-            ×
+            <X size={14} />
           </button>
         </div>
       ))}

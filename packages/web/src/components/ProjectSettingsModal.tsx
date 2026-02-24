@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { X, Folder } from "./Icons";
 
 interface ProjectSettingsModalProps {
   machineId: string;
@@ -140,11 +141,10 @@ export function ProjectSettingsModal({
               border: "none",
               color: "var(--text-muted)",
               cursor: "pointer",
-              fontSize: 16,
               padding: "2px 6px",
             }}
           >
-            ✕
+            <X size={16} />
           </button>
         </div>
 
@@ -254,7 +254,7 @@ export function ProjectSettingsModal({
                 onClick={() => handleBrowse(`${browsePath}/${e.name}`)}
                 onDoubleClick={() => selectDir(`${browsePath}/${e.name}`)}
               >
-                <span style={{ color: "var(--text-muted)" }}>📁</span>
+                <Folder size={14} style={{ color: "var(--text-muted)" }} />
                 {e.name}
               </div>
             ))}
