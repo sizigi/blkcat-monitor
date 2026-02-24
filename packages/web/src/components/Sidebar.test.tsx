@@ -115,4 +115,18 @@ describe("Sidebar", () => {
     render(<Sidebar machines={codexMachines} onSelectSession={() => {}} />);
     expect(screen.getByText("(codex)")).toBeInTheDocument();
   });
+
+  it("shows (gemini) label for gemini sessions", () => {
+    const geminiMachines: MachineSnapshot[] = [
+      {
+        machineId: "m1",
+        sessions: [
+          { id: "s1", name: "dev", target: "local", cliTool: "gemini" },
+        ],
+        lastSeen: Date.now(),
+      },
+    ];
+    render(<Sidebar machines={geminiMachines} onSelectSession={() => {}} />);
+    expect(screen.getByText("(gemini)")).toBeInTheDocument();
+  });
 });

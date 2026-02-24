@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import type { MachineSnapshot, OutboundAgentInfo, SessionInfo } from "@blkcat/shared";
+import type { MachineSnapshot, OutboundAgentInfo, SessionInfo, CliTool } from "@blkcat/shared";
 import { AgentManager } from "./AgentManager";
 import { StartSessionModal } from "./StartSessionModal";
 import { ReloadSessionModal } from "./ReloadSessionModal";
@@ -10,7 +10,7 @@ interface SidebarProps {
   selectedMachine?: string;
   selectedSession?: string;
   onSelectSession: (machineId: string, sessionId: string) => void;
-  onStartSession?: (machineId: string, args?: string, cwd?: string, name?: string, cliTool?: "claude" | "codex") => void;
+  onStartSession?: (machineId: string, args?: string, cwd?: string, name?: string, cliTool?: CliTool) => void;
   onCloseSession?: (machineId: string, sessionId: string) => void;
   onReloadSession?: (machineId: string, sessionId: string, args?: string, resume?: boolean) => void;
   getMachineName?: (machineId: string) => string;
@@ -283,6 +283,11 @@ export function Sidebar({
                           (codex)
                         </span>
                       )}
+                      {session.cliTool === "gemini" && (
+                        <span style={{ color: "var(--text-muted)", marginLeft: 4 }}>
+                          (gemini)
+                        </span>
+                      )}
                     </span>
                   )}
                   {(() => {
@@ -336,7 +341,7 @@ export function Sidebar({
                       e.stopPropagation();
                       setReloadTarget({ machineId: machine.machineId, session });
                     }}
-                    title={`Reload session (${session.cliTool === "codex" ? "codex resume" : "claude --resume"})`}
+                    title={`Reload session (${session.cliTool === "codex" ? "codex resume" : `${session.cliTool ?? "claude"} --resume`})`}
                     style={{
                       background: "none",
                       border: "none",

@@ -35,7 +35,7 @@ export function StartSessionModal({
   const [extraArgs, setExtraArgs] = useState("");
 
   const flagOptions = [
-    { flag: selectedTool === "claude" ? "--resume" : "resume", color: "var(--accent)" },
+    { flag: selectedTool === "codex" ? "resume" : "--resume", color: "var(--accent)" },
     ...CLI_TOOLS[selectedTool].flags,
   ];
 
@@ -405,7 +405,7 @@ export function StartSessionModal({
               CLI Tool
             </label>
             <div style={{ display: "flex", gap: 8 }}>
-              {(["claude", "codex"] as const).map((tool) => {
+              {(["claude", "codex", "gemini"] as const).map((tool) => {
                 const isSelected = selectedTool === tool;
                 return (
                   <button

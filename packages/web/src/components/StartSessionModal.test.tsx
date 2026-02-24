@@ -136,7 +136,7 @@ describe("StartSessionModal", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it("shows tool selector with Claude and Codex", async () => {
+  it("shows tool selector with Claude, Codex, and Gemini", async () => {
     render(
       <StartSessionModal
         machineId="m1"
@@ -148,6 +148,7 @@ describe("StartSessionModal", () => {
     );
     expect(screen.getByText("Claude")).toBeInTheDocument();
     expect(screen.getByText("Codex")).toBeInTheDocument();
+    expect(screen.getByText("Gemini")).toBeInTheDocument();
   });
 
   it("shows --full-auto flag when Codex is selected", async () => {
@@ -181,5 +182,37 @@ describe("StartSessionModal", () => {
     fireEvent.click(screen.getByText("Codex"));
     fireEvent.click(screen.getByText("Start"));
     expect(onStart).toHaveBeenCalledWith("m1", undefined, "~", undefined, "codex");
+  });
+
+  it("shows --yolo flag when Gemini is selected", async () => {
+    render(
+      <StartSessionModal
+        machineId="m1"
+        machineName="m1"
+        onStart={vi.fn()}
+        onClose={vi.fn()}
+        listDirectory={mockListDir}
+      />,
+    );
+    fireEvent.click(screen.getByText("Gemini"));
+    expect(screen.getByText("--yolo")).toBeInTheDocument();
+    expect(screen.queryByText("--dangerously-skip-permissions")).not.toBeInTheDocument();
+    expect(screen.queryByText("--full-auto")).not.toBeInTheDocument();
+  });
+
+  it("passes gemini cliTool to onStart", async () => {
+    const onStart = vi.fn();
+    render(
+      <StartSessionModal
+        machineId="m1"
+        machineName="m1"
+        onStart={onStart}
+        onClose={vi.fn()}
+        listDirectory={mockListDir}
+      />,
+    );
+    fireEvent.click(screen.getByText("Gemini"));
+    fireEvent.click(screen.getByText("Start"));
+    expect(onStart).toHaveBeenCalledWith("m1", undefined, "~", undefined, "gemini");
   });
 });
