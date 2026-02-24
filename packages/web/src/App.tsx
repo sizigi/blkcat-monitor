@@ -22,32 +22,30 @@ const MAX_SIDEBAR_WIDTH = 500;
 /** Subscribe to output changes for a specific session. Only triggers a
  *  re-render when the selected session's output changes — not when any
  *  other session receives new data. */
-function useSessionLines(
+function useSessionOutput(
   outputMapRef: React.RefObject<Map<string, OutputLine>>,
   subscribeOutput: (cb: (key: string) => void) => () => void,
   machineId?: string,
   sessionId?: string,
-): string[] {
-  const [lines, setLines] = useState<string[]>([]);
+): { lines: string[]; cursor?: { x: number; y: number } } {
+  const [output, setOutput] = useState<{ lines: string[]; cursor?: { x: number; y: number } }>({ lines: [] });
   const targetKey = machineId && sessionId ? `${machineId}:${sessionId}` : "";
 
   useEffect(() => {
-    if (!targetKey) { setLines([]); return; }
+    if (!targetKey) { setOutput({ lines: [] }); return; }
 
-    // Read current cached value
     const current = outputMapRef.current?.get(targetKey);
-    setLines(current?.lines ?? []);
+    if (current) setOutput({ lines: current.lines, cursor: current.cursor });
 
-    // Subscribe to future updates for this session only
     return subscribeOutput((key) => {
       if (key === targetKey) {
-        const output = outputMapRef.current?.get(key);
-        if (output) setLines(output.lines);
+        const o = outputMapRef.current?.get(key);
+        if (o) setOutput({ lines: o.lines, cursor: o.cursor });
       }
     });
   }, [targetKey, outputMapRef, subscribeOutput]);
 
-  return lines;
+  return output;
 }
 
 export default function App() {
@@ -86,7 +84,7 @@ export default function App() {
   const [navMode, setNavMode] = useState(false);
   const resizing = useRef(false);
 
-  const sessionLines = useSessionLines(outputMapRef, subscribeOutput, selectedMachine, selectedSession);
+  const sessionOutput = useSessionOutput(outputMapRef, subscribeOutput, selectedMachine, selectedSession);
 
   // Keep sidebar order in sync with server-provided machines
   const orderedMachines = useMemo(() => applyOrder(machines), [applyOrder, machines]);
@@ -142,6 +140,9 @@ export default function App() {
     }
 
     function handleKeyDown(e: KeyboardEvent) {
+      // Don't interfere with IME composition
+      if (e.isComposing) return;
+
       // --- Leader key: backtick (`) ---
       if (e.key === "`" && !e.ctrlKey && !e.altKey && !e.metaKey && !navModeRef.current) {
         e.preventDefault();
@@ -493,7 +494,8 @@ export default function App() {
             machineId={selectedMachine}
             sessionId={selectedSession}
             sessionName={selectedSessionName}
-            lines={sessionLines}
+            lines={sessionOutput.lines}
+            cursor={sessionOutput.cursor}
             logMapRef={logMapRef}
             scrollbackMapRef={scrollbackMapRef}
             subscribeScrollback={subscribeScrollback}

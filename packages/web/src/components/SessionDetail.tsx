@@ -7,6 +7,7 @@ interface SessionDetailProps {
   sessionId: string;
   sessionName: string;
   lines: string[];
+  cursor?: { x: number; y: number };
   logMapRef?: React.RefObject<Map<string, string[]>>;
   scrollbackMapRef?: React.RefObject<Map<string, string[]>>;
   subscribeScrollback?: (cb: (key: string) => void) => () => void;
@@ -22,6 +23,7 @@ export function SessionDetail({
   sessionId,
   sessionName,
   lines,
+  cursor,
   logMapRef,
   scrollbackMapRef,
   subscribeScrollback,
@@ -49,7 +51,7 @@ export function SessionDetail({
           {machineId} / {sessionId}
         </span>
       </div>
-      <TerminalOutput sessionKey={`${machineId}:${sessionId}`} lines={lines} logMapRef={logMapRef} scrollbackMapRef={scrollbackMapRef} subscribeScrollback={subscribeScrollback} onRequestScrollback={onRequestScrollback} onData={onSendData} onResize={onResize} />
+      <TerminalOutput sessionKey={`${machineId}:${sessionId}`} lines={lines} cursor={cursor} logMapRef={logMapRef} scrollbackMapRef={scrollbackMapRef} subscribeScrollback={subscribeScrollback} onRequestScrollback={onRequestScrollback} onData={onSendData} onResize={onResize} />
       <div style={{ borderTop: "1px solid var(--border)" }}>
         <ChatInput onSendText={onSendText} onSendKey={onSendKey} />
       </div>

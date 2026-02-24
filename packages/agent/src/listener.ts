@@ -93,7 +93,7 @@ export class AgentListener {
     });
   }
 
-  sendOutput(sessionId: string, lines: string[], waitingForInput?: boolean) {
+  sendOutput(sessionId: string, lines: string[], waitingForInput?: boolean, cursor?: { x: number; y: number }) {
     const msg: Record<string, any> = {
       type: "output",
       machineId: this.machineId,
@@ -102,6 +102,7 @@ export class AgentListener {
       timestamp: Date.now(),
     };
     if (waitingForInput) msg.waitingForInput = true;
+    if (cursor) msg.cursor = cursor;
     this.broadcast(msg);
   }
 
