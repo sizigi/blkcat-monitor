@@ -18,7 +18,7 @@ export function ReloadSessionModal({
   onClose,
 }: ReloadSessionModalProps) {
   const tool = cliTool ?? "claude";
-  const resumeFlag = tool === "claude" ? "--resume" : "resume";
+  const resumeFlag = tool === "codex" ? "resume" : "--resume";
   const FLAG_OPTIONS = [
     { flag: resumeFlag, color: "var(--accent)" },
     ...CLI_TOOLS[tool].flags,
