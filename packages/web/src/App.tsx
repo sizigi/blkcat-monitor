@@ -3,6 +3,7 @@ import { useSocket, type OutputLine } from "./hooks/useSocket";
 import { useAgents } from "./hooks/useAgents";
 import { useDisplayNames } from "./hooks/useDisplayNames";
 import { useIsMobile } from "./hooks/useIsMobile";
+import { useSidebarOrder } from "./hooks/useSidebarOrder";
 import { Sidebar } from "./components/Sidebar";
 import { SessionDetail } from "./components/SessionDetail";
 import { EventFeed } from "./components/EventFeed";
@@ -50,12 +51,13 @@ function useSessionLines(
 }
 
 export default function App() {
-  const { connected, machines, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory, deploySkills, removeSkills, getSettings, updateSettings, subscribeDeployResult, subscribeSettingsSnapshot, subscribeSettingsResult, setDisplayName, subscribeDisplayNames } = useSocket(WS_URL);
+  const { connected, machines, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory, deploySkills, removeSkills, getSettings, updateSettings, subscribeDeployResult, subscribeSettingsSnapshot, subscribeSettingsResult, setDisplayName, subscribeDisplayNames, subscribeReloadResult } = useSocket(WS_URL);
   const { agents, addAgent, removeAgent } = useAgents();
   const { getMachineName, getSessionName, setMachineName, setSessionName } = useDisplayNames({
     sendDisplayName: setDisplayName,
     subscribeDisplayNames,
   });
+  const { applyOrder, reorderMachine, reorderSession, syncOrder } = useSidebarOrder();
   const isMobile = useIsMobile();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -81,9 +83,150 @@ export default function App() {
   const [settingsSession, setSettingsSession] = useState<{ machineId: string; sessionId: string } | null>(null);
   const [editingTopbarName, setEditingTopbarName] = useState(false);
   const [topbarEditValue, setTopbarEditValue] = useState("");
+  const [navMode, setNavMode] = useState(false);
   const resizing = useRef(false);
 
   const sessionLines = useSessionLines(outputMapRef, subscribeOutput, selectedMachine, selectedSession);
+
+  // Keep sidebar order in sync with server-provided machines
+  const orderedMachines = useMemo(() => applyOrder(machines), [applyOrder, machines]);
+  useEffect(() => { if (machines.length > 0) syncOrder(machines); }, [machines, syncOrder]);
+
+  // Navigation mode: backtick (`) as leader key, works in xterm and input fields.
+  // ` → enter nav mode → bare keys navigate → auto-exit after action
+  // `` (double backtick) → send literal ` to the focused element
+  const navModeRef = useRef(false);
+  useEffect(() => {
+    function setNav(v: boolean) { navModeRef.current = v; setNavMode(v); }
+
+    function selectMachine(idx: number) {
+      const machine = orderedMachines[idx];
+      if (!machine) return;
+      setSelectedMachine(machine.machineId);
+      if (machine.sessions.length > 0) {
+        setSelectedSession(machine.sessions[0].id);
+        clearNotifications(`${machine.machineId}:${machine.sessions[0].id}`);
+      }
+    }
+    function cycleMachine(delta: number) {
+      const idx = orderedMachines.findIndex((m) => m.machineId === selectedMachine);
+      const next = (idx + delta + orderedMachines.length) % orderedMachines.length;
+      selectMachine(next);
+    }
+    function selectSession(idx: number) {
+      if (!selectedMachine) return;
+      const machine = orderedMachines.find((m) => m.machineId === selectedMachine);
+      const session = machine?.sessions[idx];
+      if (session) {
+        setSelectedSession(session.id);
+        clearNotifications(`${selectedMachine}:${session.id}`);
+      }
+    }
+    function cycleSession(delta: number) {
+      if (!selectedMachine) return;
+      const machine = orderedMachines.find((m) => m.machineId === selectedMachine);
+      if (!machine || machine.sessions.length === 0) return;
+      const idx = machine.sessions.findIndex((s) => s.id === selectedSession);
+      const next = (idx + delta + machine.sessions.length) % machine.sessions.length;
+      selectSession(next);
+    }
+    function sendLiteralBacktick() {
+      const el = document.activeElement as HTMLElement;
+      if (el?.closest?.(".xterm")) {
+        // Send ` to the terminal via WebSocket input
+        const ws = (window as any).__blkcatSendBacktick;
+        if (ws) ws();
+      } else if (el?.tagName === "INPUT" || el?.tagName === "TEXTAREA") {
+        document.execCommand("insertText", false, "`");
+      }
+    }
+
+    function handleKeyDown(e: KeyboardEvent) {
+      // --- Leader key: backtick (`) ---
+      if (e.key === "`" && !e.ctrlKey && !e.altKey && !e.metaKey && !navModeRef.current) {
+        e.preventDefault();
+        e.stopPropagation();
+        setNav(true);
+        return;
+      }
+
+      if (!navModeRef.current) return;
+
+      // --- In nav mode: handle second keystroke ---
+      const code = e.code;
+      const num = code?.startsWith("Digit") ? parseInt(code[5]) : NaN;
+
+      // ` again → send literal backtick, exit
+      if (e.key === "`") {
+        e.preventDefault();
+        e.stopPropagation();
+        setNav(false);
+        sendLiteralBacktick();
+        return;
+      }
+
+      // Escape / Enter → just exit
+      if (e.key === "Escape" || e.key === "Enter") {
+        e.preventDefault();
+        e.stopPropagation();
+        setNav(false);
+        return;
+      }
+
+      // 1-9 → select machine, exit
+      if (!e.shiftKey && num >= 1 && num <= 9) {
+        e.preventDefault();
+        e.stopPropagation();
+        selectMachine(num - 1);
+        setNav(false);
+        return;
+      }
+
+      // Shift+1-9 → select session, exit
+      if (e.shiftKey && num >= 1 && num <= 9) {
+        e.preventDefault();
+        e.stopPropagation();
+        selectSession(num - 1);
+        setNav(false);
+        return;
+      }
+
+      // [ / ] → cycle machines (stay in nav mode)
+      if (code === "BracketLeft" || code === "BracketRight") {
+        e.preventDefault();
+        e.stopPropagation();
+        cycleMachine(code === "BracketLeft" ? -1 : 1);
+        return;
+      }
+
+      // Tab / Shift+Tab → cycle sessions (stay in nav mode)
+      if (e.key === "Tab") {
+        e.preventDefault();
+        e.stopPropagation();
+        cycleSession(e.shiftKey ? -1 : 1);
+        return;
+      }
+
+      // Ignore modifier-only keypresses (Shift, Ctrl, Alt, Meta)
+      if (e.key === "Shift" || e.key === "Control" || e.key === "Alt" || e.key === "Meta") return;
+
+      // Any other key → exit nav mode, don't consume the key
+      setNav(false);
+    }
+
+    document.addEventListener("keydown", handleKeyDown, true);
+    return () => document.removeEventListener("keydown", handleKeyDown, true);
+  }, [orderedMachines, selectedMachine, selectedSession, clearNotifications]);
+
+  // Expose a helper so the nav mode handler can send ` to the terminal
+  useEffect(() => {
+    (window as any).__blkcatSendBacktick = () => {
+      if (selectedMachine && selectedSession) {
+        sendInput(selectedMachine, selectedSession, { data: "`" });
+      }
+    };
+    return () => { delete (window as any).__blkcatSendBacktick; };
+  }, [selectedMachine, selectedSession, sendInput]);
 
   const selectedSessionName = useMemo(() => {
     if (!selectedMachine || !selectedSession) return "";
@@ -117,7 +260,7 @@ export default function App() {
   }, [sidebarWidth]);
 
   const sidebarBaseProps = {
-    machines,
+    machines: orderedMachines,
     selectedMachine,
     selectedSession,
     notificationCounts,
@@ -141,6 +284,9 @@ export default function App() {
     onAddAgent: addAgent,
     onRemoveAgent: removeAgent,
     onSessionSettings: (m: string, s: string) => setSettingsSession({ machineId: m, sessionId: s }),
+    subscribeReloadResult,
+    onReorderMachine: reorderMachine,
+    onReorderSession: reorderSession,
   };
 
   return (
@@ -319,6 +465,27 @@ export default function App() {
             }}
           >
             Disconnected from server
+          </div>
+        )}
+        {navMode && (
+          <div style={{
+            padding: "6px 16px",
+            background: "rgba(255, 200, 0, 0.9)",
+            color: "#000",
+            fontSize: 12,
+            fontWeight: 600,
+            display: "flex",
+            gap: 16,
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}>
+            <span style={{ fontFamily: "monospace" }}>`</span>
+            <span style={{ fontWeight: 400 }}>1-9 machine</span>
+            <span style={{ fontWeight: 400 }}>⇧1-9 session</span>
+            <span style={{ fontWeight: 400 }}>[ ] cycle machine</span>
+            <span style={{ fontWeight: 400 }}>Tab cycle session</span>
+            <span style={{ fontWeight: 400, opacity: 0.7 }}>`` literal `</span>
+            <span style={{ fontWeight: 400, opacity: 0.7 }}>Esc cancel</span>
           </div>
         )}
         {selectedMachine && selectedSession ? (

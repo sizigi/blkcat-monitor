@@ -24,6 +24,8 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, scrollbackMapRef,
   const [scrollMode, setScrollMode] = useState(false);
   const [scrollInfo, setScrollInfo] = useState("");
   const [scrollbackLoading, setScrollbackLoading] = useState(false);
+
+  // Stable refs for callbacks that change frequently
   const onDataRef = useRef(onData);
   onDataRef.current = onData;
   const onResizeRef = useRef(onResize);
@@ -37,57 +39,132 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, scrollbackMapRef,
   const onRequestScrollbackRef = useRef(onRequestScrollback);
   onRequestScrollbackRef.current = onRequestScrollback;
 
-  // Scroll mode state: offset into the full log array.
-  // offset=0 → bottom (most recent), positive → scrolled up N lines.
+  // Scroll state: offset=0 → bottom (most recent), positive → scrolled up N lines.
   const scrollOffsetRef = useRef(0);
   const scrollAllRef = useRef<string[]>([]);
+  const lastRenderedOffsetRef = useRef(-1);
+  const lastRenderedStartRef = useRef(-1);
+  const scrollInfoTimerRef = useRef(0);
+  const scrollRafRef = useRef(0);
 
-  /** Render the visible window of the scroll buffer using cursor positioning. */
+  /** Render the visible window of the scroll buffer. Uses differential rendering
+   *  for small scrolls (1-5 lines) and full rewrite for large jumps. */
   const renderScrollView = useCallback(() => {
     const term = termRef.current;
     if (!term) return;
+    const offset = scrollOffsetRef.current;
+    if (offset === lastRenderedOffsetRef.current) return;
+
     const all = scrollAllRef.current;
     const rows = term.rows;
-    const cols = term.cols;
-    const end = all.length - scrollOffsetRef.current;
+    const end = all.length - offset;
     const start = Math.max(0, end - rows);
-    const slice = all.slice(start, end);
+    const prevStart = lastRenderedStartRef.current;
+    const prevOffset = lastRenderedOffsetRef.current;
+    lastRenderedOffsetRef.current = offset;
+    lastRenderedStartRef.current = start;
 
-    // Build output using absolute cursor positioning per row.
-    // Truncate each line to terminal width to prevent wrapping issues.
-    let buf = "\x1b[2J"; // clear screen
-    for (let i = 0; i < rows; i++) {
-      buf += `\x1b[${i + 1};1H`; // move to row i+1, col 1
-      if (i < slice.length) {
-        buf += slice[i];
+    const delta = start - prevStart;
+
+    if (prevOffset >= 0 && delta !== 0 && Math.abs(delta) <= 5 && Math.abs(delta) < rows) {
+      // Differential: shift existing content, write only new lines
+      let buf = "";
+      if (delta < 0) {
+        const n = -delta;
+        buf += `\x1b[${n}T`; // scroll down: new lines at top
+        for (let i = 0; i < n; i++) {
+          buf += `\x1b[${i + 1};1H`;
+          if (start + i < all.length) buf += all[start + i];
+          buf += "\x1b[K";
+        }
+      } else {
+        const n = delta;
+        buf += `\x1b[${n}S`; // scroll up: new lines at bottom
+        for (let i = 0; i < n; i++) {
+          const row = rows - n + i;
+          buf += `\x1b[${row + 1};1H`;
+          if (start + row < end) buf += all[start + row];
+          buf += "\x1b[K";
+        }
       }
-      buf += "\x1b[K"; // clear to end of line
+      term.write(buf);
+    } else {
+      // Full render
+      let buf = "";
+      for (let i = 0; i < rows; i++) {
+        buf += `\x1b[${i + 1};1H`;
+        if (start + i < end) buf += all[start + i];
+        buf += "\x1b[K";
+      }
+      term.write(buf);
     }
-    term.write(buf);
 
-    // Update position indicator
-    const total = all.length;
-    const pos = total > 0 ? Math.max(1, start + 1) : 0;
-    const endPos = Math.min(total, start + slice.length);
-    setScrollInfo(total > 0 ? `${pos}-${endPos} / ${total}` : "empty");
+    // Throttle position indicator updates (max every 100ms)
+    if (!scrollInfoTimerRef.current) {
+      scrollInfoTimerRef.current = window.setTimeout(() => {
+        scrollInfoTimerRef.current = 0;
+        const total = scrollAllRef.current.length;
+        const t = termRef.current;
+        if (!t) return;
+        const e2 = total - scrollOffsetRef.current;
+        const s2 = Math.max(0, e2 - t.rows);
+        const p = total > 0 ? Math.max(1, s2 + 1) : 0;
+        const ep = Math.min(total, e2);
+        setScrollInfo(total > 0 ? `${p}-${ep} / ${total}` : "empty");
+      }, 100);
+    }
   }, []);
+
+  /** Schedule a render on the next animation frame (coalesces multiple calls). */
+  const scheduleRender = useCallback(() => {
+    if (scrollRafRef.current) return;
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = 0;
+      renderScrollView();
+    });
+  }, [renderScrollView]);
+
+  /** Adjust scroll offset by `delta` lines (positive = up) and schedule render. */
+  const scrollBy = useCallback((delta: number) => {
+    if (!scrollModeRef.current) return;
+    const rows = termRef.current?.rows ?? 24;
+    const maxOffset = Math.max(0, scrollAllRef.current.length - rows);
+    scrollOffsetRef.current = Math.max(0, Math.min(maxOffset, scrollOffsetRef.current + delta));
+    scheduleRender();
+  }, [scheduleRender]);
+
+  /** Named scroll actions — delegates to scrollBy. */
+  const scrollNav = useCallback((action: "pageUp" | "pageDown" | "top" | "bottom" | "lineUp" | "lineDown") => {
+    const rows = termRef.current?.rows ?? 24;
+    switch (action) {
+      case "lineUp":   scrollBy(1); break;
+      case "lineDown": scrollBy(-1); break;
+      case "pageUp":   scrollBy(rows); break;
+      case "pageDown": scrollBy(-rows); break;
+      case "top":      scrollBy(Infinity); break;   // clamped to maxOffset
+      case "bottom":   scrollBy(-Infinity); break;  // clamped to 0
+    }
+  }, [scrollBy]);
 
   const enterScrollMode = useCallback(() => {
     const term = termRef.current;
     if (!term || scrollModeRef.current) return;
     scrollModeRef.current = true;
     setScrollMode(true);
-    // Use client-side log as immediate fallback
-    const log = logMapRefRef.current?.current?.get(sessionKeyRef.current ?? "") || [];
-    const all = [...log, ...prevLinesRef.current];
-    scrollAllRef.current = all;
+
+    // Use preloaded scrollback if available, otherwise fall back to client-side log
+    const cached = scrollbackMapRefRef.current?.current?.get(sessionKeyRef.current ?? "");
+    if (cached && cached.length > 0) {
+      scrollAllRef.current = cached;
+    } else {
+      const log = logMapRefRef.current?.current?.get(sessionKeyRef.current ?? "") || [];
+      scrollAllRef.current = [...log, ...prevLinesRef.current];
+      setScrollbackLoading(true);
+    }
     scrollOffsetRef.current = 0;
     renderScrollView();
-    // Request full tmux scrollback from agent
-    if (onRequestScrollbackRef.current) {
-      setScrollbackLoading(true);
-      onRequestScrollbackRef.current();
-    }
+    // Always request fresh scrollback
+    onRequestScrollbackRef.current?.();
   }, [renderScrollView]);
 
   const exitScrollMode = useCallback(() => {
@@ -99,42 +176,17 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, scrollbackMapRef,
     setScrollbackLoading(false);
     scrollAllRef.current = [];
     scrollOffsetRef.current = 0;
+    lastRenderedOffsetRef.current = -1;
+    lastRenderedStartRef.current = -1;
+    if (scrollInfoTimerRef.current) { clearTimeout(scrollInfoTimerRef.current); scrollInfoTimerRef.current = 0; }
+    if (scrollRafRef.current) { cancelAnimationFrame(scrollRafRef.current); scrollRafRef.current = 0; }
     const latest = pendingLinesRef.current || prevLinesRef.current;
     pendingLinesRef.current = null;
     term.write("\x1b[H\x1b[2J" + latest.join("\r\n"));
     term.focus();
   }, []);
 
-  const scrollNav = useCallback((action: "pageUp" | "pageDown" | "top" | "bottom" | "lineUp" | "lineDown") => {
-    const term = termRef.current;
-    if (!term || !scrollModeRef.current) return;
-    const all = scrollAllRef.current;
-    const rows = term.rows;
-    const maxOffset = Math.max(0, all.length - rows);
-
-    switch (action) {
-      case "pageUp":
-        scrollOffsetRef.current = Math.min(maxOffset, scrollOffsetRef.current + rows);
-        break;
-      case "pageDown":
-        scrollOffsetRef.current = Math.max(0, scrollOffsetRef.current - rows);
-        break;
-      case "lineUp":
-        scrollOffsetRef.current = Math.min(maxOffset, scrollOffsetRef.current + 1);
-        break;
-      case "lineDown":
-        scrollOffsetRef.current = Math.max(0, scrollOffsetRef.current - 1);
-        break;
-      case "top":
-        scrollOffsetRef.current = maxOffset;
-        break;
-      case "bottom":
-        scrollOffsetRef.current = 0;
-        break;
-    }
-    renderScrollView();
-  }, [renderScrollView]);
-
+  // --- Main terminal setup effect ---
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -143,11 +195,7 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, scrollbackMapRef,
       convertEol: true,
       cursorBlink: !!onData,
       scrollback: 0,
-      theme: {
-        background: "#0d1117",
-        foreground: "#c9d1d9",
-        cursor: "#c9d1d9",
-      },
+      theme: { background: "#0d1117", foreground: "#c9d1d9", cursor: "#c9d1d9" },
       fontSize: 13,
       fontFamily: "'Cascadia Code', 'Fira Code', monospace",
     });
@@ -156,7 +204,6 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, scrollbackMapRef,
     term.loadAddon(fit);
     term.open(containerRef.current);
     fit.fit();
-    // Send initial dimensions immediately (don't wait for debounced ResizeObserver)
     onResizeRef.current?.(term.cols, term.rows);
 
     termRef.current = term;
@@ -173,105 +220,135 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, scrollbackMapRef,
       }
     });
 
+    // Suppress xterm's internal wheel→arrow-key conversion (scrollback:0 triggers it)
+    (term as any).attachCustomWheelEventHandler(() => false);
+
     term.attachCustomKeyEventHandler((event) => {
       if (event.type !== "keydown") return true;
 
-      // Shift+PageUp: enter scroll mode and page up
-      if (!scrollModeRef.current && event.shiftKey && event.key === "PageUp") {
-        enterScrollMode();
-        scrollNav("pageUp");
-        return false;
+      // Enter scroll mode via keyboard
+      if (!scrollModeRef.current) {
+        if (event.shiftKey && event.key === "PageUp") {
+          enterScrollMode();
+          scrollNav("pageUp");
+          return false;
+        }
+        if (event.ctrlKey && event.shiftKey && event.key === "S") {
+          enterScrollMode();
+          return false;
+        }
+        return true;
       }
 
-      // Ctrl+Shift+S: enter scroll mode (for keyboards without PageUp)
-      if (!scrollModeRef.current && event.ctrlKey && event.shiftKey && event.key === "S") {
-        enterScrollMode();
-        return false;
-      }
-
-      if (scrollModeRef.current) {
-        if (event.key === "Escape" || event.key === "q") { exitScrollMode(); return false; }
-        if (event.key === "PageUp") { scrollNav("pageUp"); return false; }
-        if (event.key === "PageDown") { scrollNav("pageDown"); return false; }
-        if (event.key === "ArrowUp" || event.key === "k") { scrollNav("lineUp"); return false; }
-        if (event.key === "ArrowDown" || event.key === "j") { scrollNav("lineDown"); return false; }
-        if (event.key === "Home" || event.key === "g") { scrollNav("top"); return false; }
-        if (event.key === "End" || event.key === "G") { scrollNav("bottom"); return false; }
-        if (event.key === "b" || event.key === "u") { scrollNav("pageUp"); return false; }
-        if (event.key === "f" || event.key === "d") { scrollNav("pageDown"); return false; }
-        return false;
-      }
-
-      return true;
+      // Scroll mode keyboard navigation
+      if (event.key === "Escape" || event.key === "q") { exitScrollMode(); return false; }
+      if (event.key === "PageUp") { scrollNav("pageUp"); return false; }
+      if (event.key === "PageDown") { scrollNav("pageDown"); return false; }
+      if (event.key === "ArrowUp" || event.key === "k") { scrollNav("lineUp"); return false; }
+      if (event.key === "ArrowDown" || event.key === "j") { scrollNav("lineDown"); return false; }
+      if (event.key === "Home" || event.key === "g") { scrollNav("top"); return false; }
+      if (event.key === "End" || event.key === "G") { scrollNav("bottom"); return false; }
+      if (event.key === "b" || event.key === "u") { scrollNav("pageUp"); return false; }
+      if (event.key === "f" || event.key === "d") { scrollNav("pageDown"); return false; }
+      return false;
     });
 
-    // Mouse wheel: scroll in scroll mode, or enter scroll mode on wheel up
+    // --- Mouse wheel ---
     const container = containerRef.current;
     const onWheel = (e: WheelEvent) => {
       if (!scrollModeRef.current) {
-        // Enter scroll mode on scroll up
         if (e.deltaY < 0) {
+          e.preventDefault();
           enterScrollMode();
-          scrollNav("lineUp");
-          scrollNav("lineUp");
-          scrollNav("lineUp");
+          scrollBy(3);
         }
         return;
       }
       e.preventDefault();
-      const lines = Math.max(1, Math.round(Math.abs(e.deltaY) / 20));
-      for (let i = 0; i < lines; i++) {
-        scrollNav(e.deltaY < 0 ? "lineUp" : "lineDown");
-      }
+      const n = Math.max(1, Math.round(Math.abs(e.deltaY) / 20));
+      scrollBy(e.deltaY < 0 ? n : -n);
     };
     container.addEventListener("wheel", onWheel, { passive: false });
 
-    // Touch: swipe to scroll in scroll mode, or enter on swipe down (finger moves down = scroll up)
+    // --- Touch scrolling ---
     let touchStartY = 0;
+    let touchLastY = 0;
+    let touchLastTime = 0;
     let touchAccum = 0;
-    const LINE_PX = 20; // pixels per line of scroll
+    let touchEntryAccum = 0;
+    let touchVelocity = 0;
+    let momentumRaf = 0;
+    const LINE_PX = 12;
+    const ENTRY_THRESHOLD = 40;
+
+    const stopMomentum = () => { if (momentumRaf) { cancelAnimationFrame(momentumRaf); momentumRaf = 0; } };
+
     const onTouchStart = (e: TouchEvent) => {
-      touchStartY = e.touches[0].clientY;
-      touchAccum = 0;
+      stopMomentum();
+      touchStartY = touchLastY = e.touches[0].clientY;
+      touchLastTime = Date.now();
+      touchAccum = touchEntryAccum = touchVelocity = 0;
     };
+
     const onTouchMove = (e: TouchEvent) => {
-      const dy = e.touches[0].clientY - touchStartY;
-      touchStartY = e.touches[0].clientY;
+      e.preventDefault(); // always block page scroll / pull-to-refresh
+
+      const y = e.touches[0].clientY;
+      const dy = y - touchLastY;
+      const now = Date.now();
+      const dt = now - touchLastTime;
+      if (dt > 0) touchVelocity = dy / dt;
+      touchLastY = y;
+      touchLastTime = now;
 
       if (!scrollModeRef.current) {
-        // Swipe down (finger moves down) = scroll up into history
-        if (dy > 30) {
+        if (dy > 0) touchEntryAccum += dy;
+        else touchEntryAccum = 0;
+        if (touchEntryAccum > ENTRY_THRESHOLD) {
           enterScrollMode();
-          scrollNav("pageUp");
+          scrollBy(termRef.current?.rows ?? 24); // start one page up
         }
         return;
       }
-      e.preventDefault();
       touchAccum += dy;
-      const lines = Math.floor(Math.abs(touchAccum) / LINE_PX);
-      if (lines > 0) {
-        for (let i = 0; i < lines; i++) {
-          scrollNav(touchAccum > 0 ? "lineUp" : "lineDown");
-        }
-        touchAccum = touchAccum % LINE_PX;
+      const n = Math.floor(Math.abs(touchAccum) / LINE_PX);
+      if (n > 0) {
+        scrollBy(touchAccum > 0 ? n : -n);
+        touchAccum %= LINE_PX;
       }
     };
+
+    const onTouchEnd = () => {
+      if (!scrollModeRef.current) return;
+      // Tap to exit (minimal movement)
+      if (Math.abs(touchLastY - touchStartY) < 10) { exitScrollMode(); return; }
+      // Momentum
+      const v = touchVelocity;
+      if (Math.abs(v) < 0.3) return;
+      let remaining = v * 300;
+      const step = () => {
+        if (!scrollModeRef.current || Math.abs(remaining) < LINE_PX) { momentumRaf = 0; return; }
+        const n = Math.max(1, Math.floor(Math.abs(remaining) / LINE_PX / 8));
+        scrollBy(remaining > 0 ? n : -n);
+        remaining *= 0.92;
+        momentumRaf = requestAnimationFrame(step);
+      };
+      momentumRaf = requestAnimationFrame(step);
+    };
+
     container.addEventListener("touchstart", onTouchStart, { passive: true });
     container.addEventListener("touchmove", onTouchMove, { passive: false });
+    container.addEventListener("touchend", onTouchEnd, { passive: true });
 
+    // --- Resize handling ---
     let resizeTimer: ReturnType<typeof setTimeout> | undefined;
     const doFit = () => {
       fit.fit();
       clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(() => {
-        onResizeRef.current?.(term.cols, term.rows);
-      }, 300);
+      resizeTimer = setTimeout(() => onResizeRef.current?.(term.cols, term.rows), 300);
     };
     const resizeObserver = new ResizeObserver(doFit);
     resizeObserver.observe(containerRef.current);
-
-    // Safety net: also listen for window resize events (covers layout transitions
-    // where ResizeObserver may not re-fire if element dimensions didn't change)
     window.addEventListener("resize", doFit);
 
     return () => {
@@ -281,33 +358,37 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, scrollbackMapRef,
       container.removeEventListener("wheel", onWheel);
       container.removeEventListener("touchstart", onTouchStart);
       container.removeEventListener("touchmove", onTouchMove);
+      container.removeEventListener("touchend", onTouchEnd);
+      stopMomentum();
+      if (scrollRafRef.current) cancelAnimationFrame(scrollRafRef.current);
       dataDisposable.dispose();
       selDisposable.dispose();
       term.dispose();
     };
   }, []);
 
-  // Subscribe to scrollback responses: replace scroll buffer with full tmux history.
+  // Cache scrollback responses; update live scroll buffer if in scroll mode.
   useEffect(() => {
     if (!subscribeScrollback) return;
     return subscribeScrollback((key) => {
-      if (!scrollModeRef.current) return;
       if (key !== sessionKeyRef.current) return;
       const data = scrollbackMapRefRef.current?.current?.get(key);
       if (!data) return;
-      scrollAllRef.current = data;
-      // Maintain relative position: stay at same offset, clamped to new bounds
-      const term = termRef.current;
-      if (term) {
-        const maxOffset = Math.max(0, data.length - term.rows);
-        scrollOffsetRef.current = Math.min(scrollOffsetRef.current, maxOffset);
+      if (scrollModeRef.current) {
+        scrollAllRef.current = data;
+        const term = termRef.current;
+        if (term) {
+          const maxOffset = Math.max(0, data.length - term.rows);
+          scrollOffsetRef.current = Math.min(scrollOffsetRef.current, maxOffset);
+        }
+        lastRenderedOffsetRef.current = -1; // force re-render
+        setScrollbackLoading(false);
+        renderScrollView();
       }
-      setScrollbackLoading(false);
-      renderScrollView();
     });
   }, [subscribeScrollback, renderScrollView]);
 
-  // Reset terminal display when switching sessions.
+  // Reset on session switch.
   useEffect(() => {
     const term = termRef.current;
     if (!term) return;
@@ -316,33 +397,55 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, scrollbackMapRef,
     scrollModeRef.current = false;
     scrollOffsetRef.current = 0;
     scrollAllRef.current = [];
+    lastRenderedOffsetRef.current = -1;
+    lastRenderedStartRef.current = -1;
     setScrollMode(false);
     setScrollInfo("");
     setScrollbackLoading(false);
     term.clear();
     term.write("\x1b[H\x1b[2J");
-    // Send current dimensions so the agent resizes the tmux pane for this session
     onResizeRef.current?.(term.cols, term.rows);
   }, [sessionKey]);
 
+  // Preload scrollback for the current session; refresh every 30s.
+  useEffect(() => {
+    if (!sessionKey) return;
+    const t = setTimeout(() => onRequestScrollbackRef.current?.(), 2000);
+    const i = setInterval(() => {
+      if (!scrollModeRef.current) onRequestScrollbackRef.current?.();
+    }, 30000);
+    return () => { clearTimeout(t); clearInterval(i); };
+  }, [sessionKey]);
+
+  // Write live terminal output — only update changed lines to avoid flicker.
   useEffect(() => {
     const term = termRef.current;
-    if (!term) return;
-    if (lines === prevLinesRef.current) return;
-
+    if (!term || lines === prevLinesRef.current) return;
+    const prev = prevLinesRef.current;
     prevLinesRef.current = lines;
-
-    if (scrollModeRef.current) {
+    if (scrollModeRef.current || term.hasSelection()) {
       pendingLinesRef.current = lines;
       return;
     }
-
-    if (term.hasSelection()) {
-      pendingLinesRef.current = lines;
+    // If previous was empty or line count changed significantly, do full write
+    if (prev.length === 0) {
+      term.write("\x1b[H\x1b[2J" + lines.join("\r\n"));
       return;
     }
-
-    term.write("\x1b[H\x1b[2J" + lines.join("\r\n"));
+    // Differential update: only rewrite rows that changed
+    let buf = "";
+    const maxRows = Math.max(lines.length, prev.length);
+    for (let i = 0; i < maxRows; i++) {
+      if (i < lines.length) {
+        if (prev[i] !== lines[i]) {
+          buf += `\x1b[${i + 1};1H${lines[i]}\x1b[K`;
+        }
+      } else {
+        // Clear leftover rows from previous render
+        buf += `\x1b[${i + 1};1H\x1b[K`;
+      }
+    }
+    if (buf) term.write(buf);
   }, [lines]);
 
   const forceFit = useCallback(() => {
@@ -350,8 +453,6 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, scrollbackMapRef,
     const term = termRef.current;
     if (!fit || !term) return;
     fit.fit();
-    // Clear the terminal and discard stale lines so the next agent capture
-    // fills in content formatted for the correct dimensions.
     term.write("\x1b[H\x1b[2J");
     prevLinesRef.current = [];
     onResizeRef.current?.(term.cols, term.rows, true);
@@ -376,11 +477,29 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, scrollbackMapRef,
     minHeight: 36,
   };
 
+  const floatBtn: React.CSSProperties = {
+    background: "rgba(255,255,255,0.12)",
+    border: "1px solid rgba(255,255,255,0.25)",
+    color: "#fff",
+    cursor: "pointer",
+    borderRadius: 6,
+    padding: "8px 12px",
+    fontSize: 18,
+    lineHeight: 1,
+    opacity: 0.6,
+    transition: "opacity 0.15s",
+    minWidth: 40,
+    minHeight: 40,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  };
+
   return (
     <div style={{ position: "relative", flex: 1, minHeight: 0 }}>
       <div
         ref={containerRef}
-        style={{ width: "100%", height: "100%", overflow: "hidden", background: "#0d1117" }}
+        style={{ width: "100%", height: "100%", overflow: "hidden", background: "#0d1117", touchAction: "none" }}
       />
       {scrollMode ? (
         <div
@@ -415,23 +534,7 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, scrollbackMapRef,
             onMouseDown={pd}
             onClick={forceFit}
             title="Force resize terminal"
-            style={{
-              background: "rgba(255,255,255,0.12)",
-              border: "1px solid rgba(255,255,255,0.25)",
-              color: "#fff",
-              cursor: "pointer",
-              borderRadius: 6,
-              padding: "8px 12px",
-              fontSize: 18,
-              lineHeight: 1,
-              opacity: 0.6,
-              transition: "opacity 0.15s",
-              minWidth: 40,
-              minHeight: 40,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
+            style={floatBtn}
             onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = "1"; }}
             onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.6"; }}
           >
@@ -442,23 +545,7 @@ export function TerminalOutput({ sessionKey, lines, logMapRef, scrollbackMapRef,
               onMouseDown={pd}
               onClick={enterScrollMode}
               title="Scroll history (Ctrl+Shift+S)"
-              style={{
-                background: "rgba(255,255,255,0.12)",
-                border: "1px solid rgba(255,255,255,0.25)",
-                color: "#fff",
-                cursor: "pointer",
-                borderRadius: 6,
-                padding: "8px 12px",
-                fontSize: 18,
-                lineHeight: 1,
-                opacity: 0.6,
-                transition: "opacity 0.15s",
-                minWidth: 40,
-                minHeight: 40,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
+              style={floatBtn}
               onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = "1"; }}
               onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.6"; }}
             >

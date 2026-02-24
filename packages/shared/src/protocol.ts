@@ -124,6 +124,14 @@ export interface AgentSettingsResultMessage {
   error?: string;
 }
 
+export interface AgentReloadSessionResultMessage {
+  type: "reload_session_result";
+  machineId: string;
+  sessionId: string;
+  success: boolean;
+  error?: string;
+}
+
 export type AgentToServerMessage =
   | AgentRegisterMessage
   | AgentOutputMessage
@@ -133,7 +141,8 @@ export type AgentToServerMessage =
   | AgentDirectoryListingMessage
   | AgentDeployResultMessage
   | AgentSettingsSnapshotMessage
-  | AgentSettingsResultMessage;
+  | AgentSettingsResultMessage
+  | AgentReloadSessionResultMessage;
 
 // --- Server -> Agent messages ---
 
@@ -295,6 +304,14 @@ export interface ServerSettingsResultMessage {
   error?: string;
 }
 
+export interface ServerReloadSessionResultMessage {
+  type: "reload_session_result";
+  machineId: string;
+  sessionId: string;
+  success: boolean;
+  error?: string;
+}
+
 export type ServerToDashboardMessage =
   | ServerSnapshotMessage
   | ServerMachineUpdateMessage
@@ -305,7 +322,8 @@ export type ServerToDashboardMessage =
   | ServerDeployResultMessage
   | ServerSettingsSnapshotMessage
   | ServerSettingsResultMessage
-  | ServerDisplayNameUpdateMessage;
+  | ServerDisplayNameUpdateMessage
+  | ServerReloadSessionResultMessage;
 
 // --- Dashboard -> Server messages ---
 
@@ -417,7 +435,7 @@ export const NOTIFY_HOOK_EVENTS = new Set(["Stop", "Notification", "PermissionRe
 
 // --- Parsers ---
 
-const AGENT_TYPES = new Set(["register", "output", "sessions", "scrollback", "hook_event", "directory_listing", "deploy_result", "settings_snapshot", "settings_result"]);
+const AGENT_TYPES = new Set(["register", "output", "sessions", "scrollback", "hook_event", "directory_listing", "deploy_result", "settings_snapshot", "settings_result", "reload_session_result"]);
 const DASHBOARD_TYPES = new Set(["input", "start_session", "close_session", "resize", "request_scrollback", "reload_session", "list_directory", "deploy_skills", "get_settings", "update_settings", "remove_skills", "set_display_name"]);
 
 export function parseAgentMessage(raw: string): AgentToServerMessage | null {

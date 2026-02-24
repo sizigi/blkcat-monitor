@@ -89,6 +89,7 @@ export interface UseSocketReturn {
   subscribeSettingsResult: (cb: (msg: any) => void) => () => void;
   setDisplayName: (target: "machine" | "session", machineId: string, sessionId: string | undefined, name: string) => void;
   subscribeDisplayNames: (cb: (names: DisplayNamesData) => void) => () => void;
+  subscribeReloadResult: (cb: (msg: { machineId: string; sessionId: string; success: boolean; error?: string }) => void) => () => void;
 }
 
 export function useSocket(url: string): UseSocketReturn {
@@ -121,6 +122,7 @@ export function useSocket(url: string): UseSocketReturn {
   const deployResultSubsRef = useRef(new Set<(msg: any) => void>());
   const settingsSnapshotSubsRef = useRef(new Set<(msg: any) => void>());
   const settingsResultSubsRef = useRef(new Set<(msg: any) => void>());
+  const reloadResultSubsRef = useRef(new Set<(msg: { machineId: string; sessionId: string; success: boolean; error?: string }) => void>());
 
   const displayNamesRef = useRef<DisplayNamesData>({ machines: {}, sessions: {} });
   const displayNamesSubsRef = useRef(new Set<(names: DisplayNamesData) => void>());
@@ -169,6 +171,11 @@ export function useSocket(url: string): UseSocketReturn {
   const subscribeDisplayNames = useCallback((cb: (names: DisplayNamesData) => void) => {
     displayNamesSubsRef.current.add(cb);
     return () => { displayNamesSubsRef.current.delete(cb); };
+  }, []);
+
+  const subscribeReloadResult = useCallback((cb: (msg: { machineId: string; sessionId: string; success: boolean; error?: string }) => void) => {
+    reloadResultSubsRef.current.add(cb);
+    return () => { reloadResultSubsRef.current.delete(cb); };
   }, []);
 
   useEffect(() => {
@@ -342,6 +349,8 @@ export function useSocket(url: string): UseSocketReturn {
             for (const sub of settingsSnapshotSubsRef.current) sub(msg);
           } else if (msg.type === "settings_result") {
             for (const sub of settingsResultSubsRef.current) sub(msg);
+          } else if ((msg as any).type === "reload_session_result") {
+            for (const sub of reloadResultSubsRef.current) sub(msg as any);
           } else if (msg.type === "display_name_update") {
             const u = msg as any;
             if (u.target === "machine") {
@@ -531,5 +540,5 @@ export function useSocket(url: string): UseSocketReturn {
     sendRaw(msg);
   }, [sendRaw]);
 
-  return { connected, machines, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory, sendRaw, deploySkills, removeSkills, getSettings, updateSettings, subscribeDeployResult, subscribeSettingsSnapshot, subscribeSettingsResult, setDisplayName, subscribeDisplayNames };
+  return { connected, machines, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory, sendRaw, deploySkills, removeSkills, getSettings, updateSettings, subscribeDeployResult, subscribeSettingsSnapshot, subscribeSettingsResult, setDisplayName, subscribeDisplayNames, subscribeReloadResult };
 }

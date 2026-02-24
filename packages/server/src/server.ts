@@ -181,7 +181,7 @@ export function createServer(opts: ServerOptions) {
       }
     } else if (msg.type === "directory_listing") {
       broadcastToDashboards(msg);
-    } else if (msg.type === "deploy_result" || msg.type === "settings_snapshot" || msg.type === "settings_result") {
+    } else if (msg.type === "deploy_result" || msg.type === "settings_snapshot" || msg.type === "settings_result" || msg.type === "reload_session_result") {
       broadcastToDashboards(msg);
     }
   }
