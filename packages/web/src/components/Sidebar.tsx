@@ -3,7 +3,7 @@ import type { MachineSnapshot, OutboundAgentInfo, SessionInfo, CliTool } from "@
 import { AgentManager } from "./AgentManager";
 import { StartSessionModal } from "./StartSessionModal";
 import { ReloadSessionModal } from "./ReloadSessionModal";
-import { ChevronsLeft, GripDots, Settings, Check, X, RotateCw, Plus } from "./Icons";
+import { ChevronsLeft, ChevronDown, GripDots, Settings, Check, X, RotateCw, Plus } from "./Icons";
 
 interface SidebarProps {
   width?: number;
@@ -83,6 +83,8 @@ export function Sidebar({
   >(null);
   // Track reload status per session: "success" | "error:message"
   const [reloadStatus, setReloadStatus] = useState<Map<string, string>>(new Map());
+  // Collapsed machines: sessions hidden when machine is collapsed
+  const [collapsedMachines, setCollapsedMachines] = useState<Set<string>>(new Set());
   const reloadTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   useEffect(() => {
@@ -123,6 +125,63 @@ export function Sidebar({
       <div style={{ flex: 1, overflowY: "auto" }}>
       <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <h2 style={{ fontSize: 16, fontWeight: 600 }}>Machines</h2>
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          {themes && onThemeChange && (
+            <span style={{ position: "relative" }}>
+              <button
+                onClick={() => setThemeOpen(!themeOpen)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "var(--text-muted)",
+                  cursor: "pointer",
+                  fontSize: 16,
+                  padding: "2px 6px",
+                  lineHeight: 1,
+                  display: "flex",
+                  alignItems: "center",
+                }}
+                title="Theme"
+              >{"\u22EE"}</button>
+              {themeOpen && (
+                <div style={{
+                  position: "absolute",
+                  top: "100%",
+                  right: 0,
+                  marginTop: 4,
+                  background: "var(--bg-secondary)",
+                  border: "1px solid var(--border)",
+                  borderRadius: 6,
+                  padding: 4,
+                  zIndex: 50,
+                  boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+                  minWidth: 140,
+                }}>
+                  {themes.map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => { onThemeChange(t.id); setThemeOpen(false); }}
+                      style={{
+                        display: "block",
+                        width: "100%",
+                        padding: "6px 8px",
+                        background: currentTheme === t.id ? "var(--bg-tertiary)" : "transparent",
+                        border: "none",
+                        borderRadius: 4,
+                        color: currentTheme === t.id ? "var(--text)" : "var(--text-muted)",
+                        cursor: "pointer",
+                        fontSize: 12,
+                        textAlign: "left",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {currentTheme === t.id ? "\u2713 " : "  "}{t.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </span>
+          )}
         {onCollapse && (
           <button
             onClick={onCollapse}
@@ -139,6 +198,7 @@ export function Sidebar({
             <ChevronsLeft size={14} />
           </button>
         )}
+        </div>
       </div>
       {machines.length === 0 && (
         <p style={{ padding: 16, color: "var(--text-muted)" }}>No machines connected</p>
@@ -189,6 +249,27 @@ export function Sidebar({
               borderBottom: "1px solid var(--border)",
             }}
           >
+            <span
+              onClick={(e) => {
+                e.stopPropagation();
+                setCollapsedMachines((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(machine.machineId)) next.delete(machine.machineId);
+                  else next.add(machine.machineId);
+                  return next;
+                });
+              }}
+              style={{
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                flexShrink: 0,
+                transition: "transform 0.15s",
+                transform: collapsedMachines.has(machine.machineId) ? "rotate(-90deg)" : "rotate(0deg)",
+              }}
+            >
+              <ChevronDown size={12} />
+            </span>
             {machineIndex < 9 && (
               <span className="shortcut-badge shortcut-badge-machine">{machineIndex + 1}</span>
             )}
@@ -270,7 +351,7 @@ export function Sidebar({
               </button>
             )}
           </div>
-          {machine.sessions.map((session, sessionIndex) => {
+          {!collapsedMachines.has(machine.machineId) && machine.sessions.map((session, sessionIndex) => {
             const isSelected =
               selectedMachine === machine.machineId &&
               selectedSession === session.id;
@@ -543,79 +624,6 @@ export function Sidebar({
         </div>
       ))}
       </div>
-      {themes && onThemeChange && (() => {
-        const [open, setOpen] = [themeOpen, setThemeOpen];
-        const current = themes.find((t) => t.id === currentTheme);
-        return (
-          <div style={{ padding: "4px 16px", borderTop: "1px solid var(--border)", position: "relative" }}>
-            <button
-              onClick={() => setOpen(!open)}
-              style={{
-                background: "none",
-                border: "none",
-                color: "var(--text-muted)",
-                cursor: "pointer",
-                fontSize: 11,
-                padding: "4px 0",
-                display: "flex",
-                alignItems: "center",
-                gap: 4,
-                width: "100%",
-              }}
-            >
-              <span style={{
-                width: 8, height: 8, borderRadius: "50%",
-                background: current?.accent ?? "var(--accent)",
-                display: "inline-block", flexShrink: 0,
-              }} />
-              <span>{current?.label ?? "Theme"}</span>
-              <span style={{ marginLeft: "auto", fontSize: 9 }}>{open ? "\u25B2" : "\u25BC"}</span>
-            </button>
-            {open && (
-              <div style={{
-                position: "absolute",
-                bottom: "100%",
-                left: 8,
-                right: 8,
-                background: "var(--bg-secondary)",
-                border: "1px solid var(--border)",
-                borderRadius: 6,
-                padding: 4,
-                zIndex: 50,
-                boxShadow: "0 -4px 12px rgba(0,0,0,0.3)",
-              }}>
-                {themes.map((t) => (
-                  <button
-                    key={t.id}
-                    onClick={() => { onThemeChange(t.id); setOpen(false); }}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                      width: "100%",
-                      padding: "6px 8px",
-                      background: currentTheme === t.id ? "var(--bg-tertiary)" : "transparent",
-                      border: "none",
-                      borderRadius: 4,
-                      color: currentTheme === t.id ? "var(--text)" : "var(--text-muted)",
-                      cursor: "pointer",
-                      fontSize: 12,
-                    }}
-                  >
-                    <span style={{
-                      width: 10, height: 10, borderRadius: "50%",
-                      background: `radial-gradient(circle at 30% 30%, ${t.accent}, ${t.bg})`,
-                      border: currentTheme === t.id ? `1.5px solid ${t.accent}` : "1.5px solid transparent",
-                      flexShrink: 0,
-                    }} />
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        );
-      })()}
       {agents && onAddAgent && onRemoveAgent && (
         <AgentManager agents={agents} onAdd={onAddAgent} onRemove={onRemoveAgent} />
       )}
