@@ -590,7 +590,7 @@ export function createServer(opts: ServerOptions) {
   return {
     port: server.port,
     connectToAgent,
-    stop: () => {
+    stop: (closeActiveConnections?: boolean) => {
       for (const entry of outboundAgents.values()) {
         entry.removed = true;
         if (entry.reconnectTimer) clearTimeout(entry.reconnectTimer);
@@ -599,7 +599,7 @@ export function createServer(opts: ServerOptions) {
         }
       }
       outboundAgents.clear();
-      server.stop();
+      server.stop(closeActiveConnections);
     },
   };
 }

@@ -210,10 +210,10 @@ html, body, #root {
   font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
 }
 .sidebar h2 {
-  font-family: "Cormorant Garamond", "EB Garamond", "Garamond", "Baskerville", "Libre Baskerville", "Palatino", serif;
+  font-family: "Playfair Display", "Georgia", serif;
+  font-style: normal;
   font-weight: 400;
   letter-spacing: 1px;
-  font-style: italic;
 }
 
 /* Drag-to-reorder handles */

@@ -292,6 +292,8 @@ async function main() {
       onRemoveSkills: handleRemoveSkills,
       onGetSettings: handleGetSettings,
       onUpdateSettings: handleUpdateSettings,
+      getSessions: () => [...autoSessions, ...manualSessions],
+      onReconnect: () => { prevLines.clear(); },
     });
     conn = connection;
     await connection.waitForOpen();

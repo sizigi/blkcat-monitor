@@ -68,6 +68,49 @@ describe("AgentConnection", () => {
     dash.close();
   });
 
+  it("reconnects after server restart and re-registers", async () => {
+    let reconnectCalled = false;
+    const sessions = [{ id: "s1", name: "dev", target: "local" as const }];
+
+    // Start a temporary server
+    let tmpServer = createServer({ port: 0 });
+    const port = tmpServer.port;
+
+    const conn = new AgentConnection({
+      serverUrl: `ws://localhost:${port}/ws/agent`,
+      machineId: "test-reconnect",
+      onInput: () => {},
+      getSessions: () => sessions,
+      onReconnect: () => { reconnectCalled = true; },
+    });
+
+    await conn.waitForOpen();
+    conn.register(sessions);
+    await Bun.sleep(50);
+
+    // Verify agent is registered
+    const resp1 = await fetch(`http://localhost:${port}/api/sessions`);
+    const data1 = await resp1.json() as any;
+    expect(data1.machines.find((m: any) => m.machineId === "test-reconnect")).toBeTruthy();
+
+    // Kill the server and close active connections — agent should get disconnected
+    tmpServer.stop(true);
+    await Bun.sleep(200);
+
+    // Restart server on the same port
+    tmpServer = createServer({ port });
+    await Bun.sleep(1500); // Wait for reconnect (1s delay + connection time)
+
+    // Verify agent re-registered and onReconnect was called
+    const resp2 = await fetch(`http://localhost:${port}/api/sessions`);
+    const data2 = await resp2.json() as any;
+    expect(data2.machines.find((m: any) => m.machineId === "test-reconnect")).toBeTruthy();
+    expect(reconnectCalled).toBe(true);
+
+    conn.close();
+    tmpServer.stop();
+  });
+
   it("receives start_session message with cwd", async () => {
     const received: { args?: string; cwd?: string }[] = [];
     const conn = new AgentConnection({
