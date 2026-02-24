@@ -59,6 +59,8 @@ async function main() {
   const allSessions = [...autoSessions, ...manualSessions];
   console.log(`Found ${allSessions.length} sessions to monitor`);
 
+  const prevLines = new Map<string, string[]>();
+
   function handleInput({ sessionId, text, key, data }: { sessionId: string; text?: string; key?: string; data?: string }) {
     const cap = captures.get(sessionId);
     if (!cap) return;
@@ -364,8 +366,6 @@ async function main() {
       }
     }
   }, 5000);
-
-  const prevLines = new Map<string, string[]>();
 
   // Detect if terminal output indicates Claude is waiting for user input.
   // Looks for common prompt patterns on the last non-empty line.
