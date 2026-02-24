@@ -6,8 +6,8 @@ import { discoverCliSessions } from "./discovery";
 import { hasChanged } from "./diff";
 import { HooksServer } from "./hooks-server";
 import { installHooks } from "./hooks-install";
-import type { SessionInfo } from "@blkcat/shared";
-import type { AgentHookEventMessage } from "@blkcat/shared";
+import type { SessionInfo, AgentHookEventMessage } from "@blkcat/shared";
+import { CLI_TOOLS } from "@blkcat/shared";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { readSettings, writeSettings, deploySkills, listDeployedSkills, removeSkills } from "./settings-handler";
@@ -16,7 +16,7 @@ async function main() {
   const config = await loadConfig();
 
   const captures = new Map<string, TmuxCapture>();
-  const claudeSessionIds = new Map<string, string>();
+  const sessionIds = new Map<string, string>();
   const manualSessions: SessionInfo[] = [];
 
   for (const target of config.targets) {
@@ -68,7 +68,7 @@ async function main() {
     cap.killPane(sessionId);
     captures.delete(sessionId);
     prevLines.delete(sessionId);
-    claudeSessionIds.delete(sessionId);
+    sessionIds.delete(sessionId);
     // Remove from manual sessions
     const manualIdx = manualSessions.findIndex((s) => s.id === sessionId);
     if (manualIdx >= 0) manualSessions.splice(manualIdx, 1);
@@ -97,36 +97,38 @@ async function main() {
   function handleReloadSession(sessionId: string, args?: string, resume?: boolean) {
     const cap = captures.get(sessionId);
     if (!cap) return;
-    const claudeId = claudeSessionIds.get(sessionId);
+    const allSessions = [...autoSessions, ...manualSessions];
+    const session = allSessions.find((s) => s.id === sessionId);
+    const tool = CLI_TOOLS[session?.cliTool ?? "claude"];
+    const toolSessionId = sessionIds.get(sessionId);
     const shouldResume = resume !== false; // default true
-    let cmd = "claude";
+    let cmd = tool.command;
     if (shouldResume) {
-      cmd += claudeId ? ` --resume ${claudeId}` : " --resume";
+      cmd += " " + tool.resumeFlag(toolSessionId);
     }
     if (args) cmd += ` ${args}`;
     cap.respawnPane(sessionId, cmd);
     prevLines.delete(sessionId);
     // Update stored args on the session so sidebar reflects the new flags
-    const allSessions = [...autoSessions, ...manualSessions];
-    const session = allSessions.find((s) => s.id === sessionId);
     if (session) session.args = args || undefined;
-    console.log(`Reloaded session: ${sessionId}${shouldResume && claudeId ? ` (claude session: ${claudeId})` : ""}${args ? ` (args: ${args})` : ""}${!shouldResume ? " (fresh)" : ""}`);
+    console.log(`Reloaded ${tool.command} session: ${sessionId}${shouldResume && toolSessionId ? ` (session: ${toolSessionId})` : ""}${args ? ` (args: ${args})` : ""}${!shouldResume ? " (fresh)" : ""}`);
   }
 
-  function handleStartSession(args?: string, cwd?: string, name?: string) {
+  function handleStartSession(args?: string, cwd?: string, name?: string, cliTool?: "claude" | "codex") {
+    const tool = cliTool ?? "claude";
     const localCap = new TmuxCapture(bunExec);
-    const paneId = localCap.startSession(args, cwd);
+    const paneId = localCap.startSession(args, cwd, tool);
     if (!paneId) {
       console.error("Failed to start new session");
       return;
     }
     captures.set(paneId, localCap);
-    const sessionName = name || `claude${args ? ` ${args}` : ""}`;
-    const session: SessionInfo = { id: paneId, name: sessionName, target: "local", args: args || undefined };
+    const sessionName = name || `${tool}${args ? ` ${args}` : ""}`;
+    const session: SessionInfo = { id: paneId, name: sessionName, target: "local", args: args || undefined, cliTool: tool };
     manualSessions.push(session);
     const all = [...autoSessions, ...manualSessions];
     conn.updateSessions(all);
-    console.log(`Started new session: ${paneId}`);
+    console.log(`Started new ${tool} session: ${paneId}`);
   }
 
   function handleListDirectory(requestId: string, path: string) {
@@ -261,7 +263,7 @@ async function main() {
       conn.sendHookEvent(event);
     },
     onClaudeSessionId: (paneId, claudeId) => {
-      claudeSessionIds.set(paneId, claudeId);
+      sessionIds.set(paneId, claudeId);
     },
     resolvePaneId: (tmuxPane) => {
       // Direct match (session:window.pane format)
