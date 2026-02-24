@@ -2,7 +2,7 @@ import { loadConfig } from "./config";
 import { AgentConnection } from "./connection";
 import { AgentListener } from "./listener";
 import { TmuxCapture, bunExec } from "./capture";
-import { discoverClaudeSessions } from "./discovery";
+import { discoverCliSessions } from "./discovery";
 import { hasChanged } from "./diff";
 import { HooksServer } from "./hooks-server";
 import { installHooks } from "./hooks-install";
@@ -45,7 +45,7 @@ async function main() {
   const hasAutoTarget = config.targets.some((t) => t.type === "auto");
   let autoSessions: SessionInfo[] = [];
   if (hasAutoTarget) {
-    autoSessions = discoverClaudeSessions();
+    autoSessions = discoverCliSessions();
     for (const s of autoSessions) {
       captures.set(s.id, new TmuxCapture(bunExec));
     }
@@ -94,14 +94,23 @@ async function main() {
     conn.sendScrollback(sessionId, lines);
   }
 
-  function handleReloadSession(sessionId: string) {
+  function handleReloadSession(sessionId: string, args?: string, resume?: boolean) {
     const cap = captures.get(sessionId);
     if (!cap) return;
     const claudeId = claudeSessionIds.get(sessionId);
-    const cmd = claudeId ? `claude --resume ${claudeId}` : "claude --resume";
+    const shouldResume = resume !== false; // default true
+    let cmd = "claude";
+    if (shouldResume) {
+      cmd += claudeId ? ` --resume ${claudeId}` : " --resume";
+    }
+    if (args) cmd += ` ${args}`;
     cap.respawnPane(sessionId, cmd);
     prevLines.delete(sessionId);
-    console.log(`Reloaded session: ${sessionId}${claudeId ? ` (claude session: ${claudeId})` : ""}`);
+    // Update stored args on the session so sidebar reflects the new flags
+    const allSessions = [...autoSessions, ...manualSessions];
+    const session = allSessions.find((s) => s.id === sessionId);
+    if (session) session.args = args || undefined;
+    console.log(`Reloaded session: ${sessionId}${shouldResume && claudeId ? ` (claude session: ${claudeId})` : ""}${args ? ` (args: ${args})` : ""}${!shouldResume ? " (fresh)" : ""}`);
   }
 
   function handleStartSession(args?: string, cwd?: string, name?: string) {
@@ -316,7 +325,7 @@ async function main() {
 
   if (hasAutoTarget) {
     setInterval(() => {
-      const fresh = discoverClaudeSessions();
+      const fresh = discoverCliSessions();
       const newSessions = fresh.filter((s) => !captures.has(s.id));
       const goneSessions = autoSessions.filter(
         (s) => !fresh.find((f) => f.id === s.id)
