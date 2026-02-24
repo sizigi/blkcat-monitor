@@ -120,6 +120,22 @@ describe("TmuxCapture", () => {
     expect(capture.startSession()).toBeNull();
   });
 
+  it("startSession uses codex command when cliTool is codex", () => {
+    const cmds: string[][] = [];
+    const exec: ExecFn = (cmd) => {
+      cmds.push([...cmd]);
+      if (cmd.some(c => c === "new-window")) {
+        return { success: true, stdout: "test:0.0\n" };
+      }
+      return { success: true, stdout: "" };
+    };
+    const cap = new TmuxCapture(exec);
+    cap.startSession("--full-auto", undefined, "codex");
+    const sendKeysCmd = cmds.find(c => c.includes("send-keys") && c.includes("-l"));
+    expect(sendKeysCmd).toBeDefined();
+    expect(sendKeysCmd!.join(" ")).toContain("codex --full-auto");
+  });
+
   it("lists directory entries", () => {
     const exec = mockExec({
       "ls -1 -p /home/user/projects": {

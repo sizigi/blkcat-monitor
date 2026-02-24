@@ -101,8 +101,9 @@ export class TmuxCapture {
     return this.exec(cmd).success;
   }
 
-  startSession(args?: string, cwd?: string): string | null {
-    const claudeCmd = args ? `claude ${args}` : "claude";
+  startSession(args?: string, cwd?: string, cliTool: "claude" | "codex" = "claude"): string | null {
+    const command = cliTool === "codex" ? "codex" : "claude";
+    const fullCmd = args ? `${command} ${args}` : command;
     // Resolve ~ since Bun.spawnSync doesn't invoke a shell for tilde expansion
     const resolvedCwd = cwd?.startsWith("~")
       ? cwd.replace("~", process.env.HOME ?? "/root")
@@ -114,8 +115,8 @@ export class TmuxCapture {
     const result = this.exec(cmd);
     if (!result.success) return null;
     const target = result.stdout.trim();
-    // Send the claude command to the interactive shell
-    this.sendText(target, claudeCmd);
+    // Send the command to the interactive shell
+    this.sendText(target, fullCmd);
     this.sendKey(target, "Enter");
     return target;
   }
