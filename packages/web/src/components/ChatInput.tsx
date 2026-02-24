@@ -30,21 +30,56 @@ const modifierActiveStyle: React.CSSProperties = {
   borderColor: "var(--accent)",
 };
 
-// --- D-Pad component: swipe-based directional pad ---
+// --- Haptic feedback helper ---
+function vibrate(ms = 10) {
+  try { navigator?.vibrate?.(ms); } catch {}
+}
+
+// --- D-Pad component: swipe-based directional pad with repeat and haptics ---
 
 const DPAD_SIZE = 32;
-const SWIPE_THRESHOLD = 12; // px to trigger a direction
+const SWIPE_THRESHOLD = 12;
+const REPEAT_DELAY = 400; // ms before repeat starts
+const REPEAT_INTERVAL = 80; // ms between repeats
 
 function DPad({ onDirection }: { onDirection: (dir: "Up" | "Down" | "Left" | "Right") => void }) {
   const startRef = useRef<{ x: number; y: number } | null>(null);
   const [activeDir, setActiveDir] = useState<string | null>(null);
+  const activeDirRef = useRef<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const repeatTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const repeatIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopRepeat = useCallback(() => {
+    if (repeatTimerRef.current) { clearTimeout(repeatTimerRef.current); repeatTimerRef.current = null; }
+    if (repeatIntervalRef.current) { clearInterval(repeatIntervalRef.current); repeatIntervalRef.current = null; }
+  }, []);
+
+  const startRepeat = useCallback((dir: "Up" | "Down" | "Left" | "Right") => {
+    stopRepeat();
+    repeatTimerRef.current = setTimeout(() => {
+      repeatIntervalRef.current = setInterval(() => {
+        onDirection(dir);
+        vibrate(8);
+      }, REPEAT_INTERVAL);
+    }, REPEAT_DELAY);
+  }, [onDirection, stopRepeat]);
+
+  const fireDirection = useCallback((dir: "Up" | "Down" | "Left" | "Right") => {
+    setActiveDir(dir);
+    activeDirRef.current = dir;
+    onDirection(dir);
+    vibrate(10);
+    startRepeat(dir);
+  }, [onDirection, startRepeat]);
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     const t = e.touches[0];
     startRef.current = { x: t.clientX, y: t.clientY };
     setActiveDir(null);
-  }, []);
+    activeDirRef.current = null;
+    stopRepeat();
+  }, [stopRepeat]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     if (!startRef.current) return;
@@ -63,29 +98,29 @@ function DPad({ onDirection }: { onDirection: (dir: "Up" | "Down" | "Left" | "Ri
       dir = dy > 0 ? "Down" : "Up";
     }
 
-    if (dir !== activeDir) {
-      setActiveDir(dir);
-      onDirection(dir);
-      // Reset start point so continuous swiping sends repeated keys
+    if (dir !== activeDirRef.current) {
+      fireDirection(dir);
       startRef.current = { x: t.clientX, y: t.clientY };
     }
-  }, [activeDir, onDirection]);
+  }, [fireDirection]);
 
   const handleTouchEnd = useCallback(() => {
     startRef.current = null;
+    stopRepeat();
     if (timerRef.current) clearTimeout(timerRef.current);
-    // Brief flash then clear
-    timerRef.current = setTimeout(() => setActiveDir(null), 150);
-  }, []);
+    timerRef.current = setTimeout(() => { setActiveDir(null); activeDirRef.current = null; }, 150);
+  }, [stopRepeat]);
 
-  // Also support mouse drag for desktop testing
+  // Also support mouse drag for desktop
   const mouseDownRef = useRef(false);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     mouseDownRef.current = true;
     startRef.current = { x: e.clientX, y: e.clientY };
     setActiveDir(null);
-  }, []);
+    activeDirRef.current = null;
+    stopRepeat();
+  }, [stopRepeat]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (!mouseDownRef.current || !startRef.current) return;
@@ -103,19 +138,19 @@ function DPad({ onDirection }: { onDirection: (dir: "Up" | "Down" | "Left" | "Ri
       dir = dy > 0 ? "Down" : "Up";
     }
 
-    if (dir !== activeDir) {
-      setActiveDir(dir);
-      onDirection(dir);
+    if (dir !== activeDirRef.current) {
+      fireDirection(dir);
       startRef.current = { x: e.clientX, y: e.clientY };
     }
-  }, [activeDir, onDirection]);
+  }, [fireDirection]);
 
   const handleMouseUp = useCallback(() => {
     mouseDownRef.current = false;
     startRef.current = null;
+    stopRepeat();
     if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => setActiveDir(null), 150);
-  }, []);
+    timerRef.current = setTimeout(() => { setActiveDir(null); activeDirRef.current = null; }, 150);
+  }, [stopRepeat]);
 
   // Arrow indicator colors based on active direction
   const arrowColor = (dir: string) => activeDir === dir ? "var(--accent)" : "currentColor";
@@ -226,6 +261,7 @@ export function ChatInput({ onSendText, onSendKey, onSendData }: ChatInputProps)
   }, [onSendData, onSendKey, clearModifiers]);
 
   function handleSend() {
+    vibrate(10);
     const trimmed = text.trim();
     if (!trimmed) return;
     onSendText(trimmed);
@@ -384,7 +420,7 @@ export function ChatInput({ onSendText, onSendKey, onSendData }: ChatInputProps)
       {onSendData && (
         <button
           type="button"
-          onClick={() => { setLiveMode((v) => { if (!v) { setText(SENTINEL); } else { setText(""); } return !v; }); }}
+          onClick={() => { vibrate(15); setLiveMode((v) => { if (!v) { setText(SENTINEL); } else { setText(""); } return !v; }); }}
           className={`live-toggle-mobile ${liveMode ? "live-toggle-on" : ""}`}
         >
           <span className="live-toggle-label">LIVE</span>
@@ -396,7 +432,7 @@ export function ChatInput({ onSendText, onSendKey, onSendData }: ChatInputProps)
         {onSendData && (
           <button
             type="button"
-            onClick={() => { setLiveMode((v) => { if (!v) { setText(SENTINEL); } else { setText(""); } return !v; }); }}
+            onClick={() => { vibrate(15); setLiveMode((v) => { if (!v) { setText(SENTINEL); } else { setText(""); } return !v; }); }}
             className={`live-toggle-desktop ${liveMode ? "live-toggle-on" : ""}`}
             style={keyBtnStyle}
           >
@@ -407,7 +443,7 @@ export function ChatInput({ onSendText, onSendKey, onSendData }: ChatInputProps)
           <button
             key={btn.label}
             type="button"
-            onClick={() => btn.keys.forEach((k) => sendKeyWithModifiers(k))}
+            onClick={() => { vibrate(10); btn.keys.forEach((k) => sendKeyWithModifiers(k)); }}
             style={keyBtnStyle}
           >
             {btn.label}
@@ -416,7 +452,7 @@ export function ChatInput({ onSendText, onSendKey, onSendData }: ChatInputProps)
         {/* Modifier toggle buttons */}
         <button
           type="button"
-          onClick={() => setCtrlActive((v) => !v)}
+          onClick={() => { vibrate(10); setCtrlActive((v) => !v); }}
           style={ctrlActive ? modifierActiveStyle : keyBtnStyle}
           title="Toggle Ctrl modifier for next key"
         >
@@ -424,7 +460,7 @@ export function ChatInput({ onSendText, onSendKey, onSendData }: ChatInputProps)
         </button>
         <button
           type="button"
-          onClick={() => setShiftActive((v) => !v)}
+          onClick={() => { vibrate(10); setShiftActive((v) => !v); }}
           style={shiftActive ? modifierActiveStyle : keyBtnStyle}
           title="Toggle Shift modifier for next key"
         >
@@ -435,6 +471,7 @@ export function ChatInput({ onSendText, onSendKey, onSendData }: ChatInputProps)
           <button
             type="button"
             onClick={async () => {
+              vibrate(10);
               try {
                 const text = await navigator.clipboard.readText();
                 if (text) onSendData(text);

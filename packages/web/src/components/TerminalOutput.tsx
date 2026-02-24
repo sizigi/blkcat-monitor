@@ -231,6 +231,26 @@ export function TerminalOutput({ sessionKey, lines, cursor, logMapRef, scrollbac
     termRef.current = term;
     fitRef.current = fit;
 
+    // When xterm's hidden textarea gets focus on mobile, the browser doesn't
+    // adjust the viewport (it's invisible). Fix: briefly focus the visible
+    // ChatInput textarea to trigger the browser's keyboard accommodation,
+    // then return focus to xterm.
+    const xtermTextarea = containerRef.current.querySelector(".xterm-helper-textarea") as HTMLElement;
+    let redirectingFocus = false;
+    const onXtermFocus = () => {
+      if (redirectingFocus) return; // prevent infinite loop
+      if (!("ontouchstart" in window)) return;
+      const chatTextarea = document.querySelector(".chat-input-textarea textarea") as HTMLElement;
+      if (!chatTextarea) return;
+      redirectingFocus = true;
+      chatTextarea.focus({ preventScroll: false });
+      setTimeout(() => {
+        xtermTextarea?.focus({ preventScroll: true });
+        setTimeout(() => { redirectingFocus = false; }, 100);
+      }, 50);
+    };
+    if (xtermTextarea) xtermTextarea.addEventListener("focus", onXtermFocus);
+
     const dataDisposable = term.onData((data) => { onDataRef.current?.(data); });
 
     const selDisposable = term.onSelectionChange(() => {
@@ -408,6 +428,7 @@ export function TerminalOutput({ sessionKey, lines, cursor, logMapRef, scrollbac
       dataDisposable.dispose();
       selDisposable.dispose();
       themeObserver.disconnect();
+      if (xtermTextarea) xtermTextarea.removeEventListener("focus", onXtermFocus);
       term.dispose();
     };
   }, []);
