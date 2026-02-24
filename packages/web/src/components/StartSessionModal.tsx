@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { CLI_TOOLS } from "@blkcat/shared";
+import type { CliTool } from "@blkcat/shared";
 
 interface StartSessionModalProps {
   machineId: string;
   machineName: string;
-  onStart: (machineId: string, args?: string, cwd?: string, name?: string) => void;
+  onStart: (machineId: string, args?: string, cwd?: string, name?: string, cliTool?: CliTool) => void;
   onClose: () => void;
   listDirectory: (
     machineId: string,
@@ -14,11 +16,6 @@ interface StartSessionModalProps {
     error?: string;
   }>;
 }
-
-const FLAG_OPTIONS = [
-  { flag: "--resume", color: "var(--accent)" },
-  { flag: "--dangerously-skip-permissions", color: "var(--red)" },
-] as const;
 
 export function StartSessionModal({
   machineId,
@@ -33,8 +30,14 @@ export function StartSessionModal({
   const [entries, setEntries] = useState<{ name: string; isDir: boolean }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedTool, setSelectedTool] = useState<CliTool>("claude");
   const [selectedFlags, setSelectedFlags] = useState<Set<string>>(new Set());
   const [extraArgs, setExtraArgs] = useState("");
+
+  const flagOptions = [
+    { flag: selectedTool === "claude" ? "--resume" : "resume", color: "var(--accent)" },
+    ...CLI_TOOLS[selectedTool].flags,
+  ];
 
   // Track the last fetched parent directory (resolved path) to avoid redundant fetches
   const lastFetchedParentRef = useRef<string>("");
@@ -150,18 +153,16 @@ export function StartSessionModal({
 
   function handleStart() {
     const parts: string[] = [];
-    for (const { flag } of FLAG_OPTIONS) {
+    for (const { flag } of flagOptions) {
       if (selectedFlags.has(flag)) {
         parts.push(flag);
       }
     }
     const trimmed = extraArgs.trim();
-    if (trimmed) {
-      parts.push(trimmed);
-    }
+    if (trimmed) parts.push(trimmed);
     const combinedArgs = parts.length > 0 ? parts.join(" ") : undefined;
     const finalName = sessionName.trim() || undefined;
-    onStart(machineId, combinedArgs, currentPath, finalName);
+    onStart(machineId, combinedArgs, currentPath, finalName, selectedTool);
     onClose();
   }
 
@@ -398,6 +399,38 @@ export function StartSessionModal({
             </div>
           </div>
 
+          {/* CLI Tool */}
+          <div>
+            <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>
+              CLI Tool
+            </label>
+            <div style={{ display: "flex", gap: 8 }}>
+              {(["claude", "codex"] as const).map((tool) => {
+                const isSelected = selectedTool === tool;
+                return (
+                  <button
+                    key={tool}
+                    type="button"
+                    onClick={() => { setSelectedTool(tool); setSelectedFlags(new Set()); }}
+                    style={{
+                      background: isSelected ? "var(--accent)" : "transparent",
+                      color: isSelected ? "#fff" : "var(--text-muted)",
+                      border: isSelected ? "1px solid var(--accent)" : "1px solid var(--border)",
+                      borderRadius: 16,
+                      padding: "4px 16px",
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      lineHeight: 1.4,
+                    }}
+                  >
+                    {tool.charAt(0).toUpperCase() + tool.slice(1)}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Flags */}
           <div>
             <label
@@ -412,7 +445,7 @@ export function StartSessionModal({
               Flags
             </label>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {FLAG_OPTIONS.map(({ flag, color }) => {
+              {flagOptions.map(({ flag, color }) => {
                 const isSelected = selectedFlags.has(flag);
                 return (
                   <button

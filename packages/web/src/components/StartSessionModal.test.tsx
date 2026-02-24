@@ -103,7 +103,7 @@ describe("StartSessionModal", () => {
     // Click Start
     fireEvent.click(screen.getByText("Start"));
 
-    expect(onStart).toHaveBeenCalledWith("m1", "--resume", "~", undefined);
+    expect(onStart).toHaveBeenCalledWith("m1", "--resume", "~", undefined, "claude");
   });
 
   it("calls onClose when backdrop clicked", () => {
@@ -134,5 +134,52 @@ describe("StartSessionModal", () => {
     );
     fireEvent.click(screen.getByTestId("modal-close"));
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it("shows tool selector with Claude and Codex", async () => {
+    render(
+      <StartSessionModal
+        machineId="m1"
+        machineName="m1"
+        onStart={vi.fn()}
+        onClose={vi.fn()}
+        listDirectory={mockListDir}
+      />,
+    );
+    expect(screen.getByText("Claude")).toBeInTheDocument();
+    expect(screen.getByText("Codex")).toBeInTheDocument();
+  });
+
+  it("shows --full-auto flag when Codex is selected", async () => {
+    render(
+      <StartSessionModal
+        machineId="m1"
+        machineName="m1"
+        onStart={vi.fn()}
+        onClose={vi.fn()}
+        listDirectory={mockListDir}
+      />,
+    );
+    expect(screen.getByText("--dangerously-skip-permissions")).toBeInTheDocument();
+    expect(screen.queryByText("--full-auto")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("Codex"));
+    expect(screen.getByText("--full-auto")).toBeInTheDocument();
+    expect(screen.queryByText("--dangerously-skip-permissions")).not.toBeInTheDocument();
+  });
+
+  it("passes cliTool to onStart", async () => {
+    const onStart = vi.fn();
+    render(
+      <StartSessionModal
+        machineId="m1"
+        machineName="m1"
+        onStart={onStart}
+        onClose={vi.fn()}
+        listDirectory={mockListDir}
+      />,
+    );
+    fireEvent.click(screen.getByText("Codex"));
+    fireEvent.click(screen.getByText("Start"));
+    expect(onStart).toHaveBeenCalledWith("m1", undefined, "~", undefined, "codex");
   });
 });
