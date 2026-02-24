@@ -6,10 +6,10 @@ export interface SessionInfo {
   target: "local" | "ssh";
   host?: string;
   args?: string;
-  cliTool?: "claude" | "codex";
+  cliTool?: CliTool;
 }
 
-export type CliTool = "claude" | "codex";
+export type CliTool = "claude" | "codex" | "gemini";
 
 export const CLI_TOOLS: Record<CliTool, {
   command: string;
@@ -32,6 +32,14 @@ export const CLI_TOOLS: Record<CliTool, {
       { flag: "--full-auto", color: "var(--red)" },
     ],
     configDir: "~/.codex",
+  },
+  gemini: {
+    command: "gemini",
+    resumeFlag: (id?: string) => id ? `--resume ${id}` : "--resume",
+    flags: [
+      { flag: "--yolo", color: "var(--red)" },
+    ],
+    configDir: "~/.gemini",
   },
 };
 
@@ -142,7 +150,7 @@ export interface ServerStartSessionMessage {
   args?: string;
   cwd?: string;
   name?: string;
-  cliTool?: "claude" | "codex";
+  cliTool?: CliTool;
 }
 
 export interface ServerCloseSessionMessage {
@@ -316,7 +324,7 @@ export interface DashboardStartSessionMessage {
   args?: string;
   cwd?: string;
   name?: string;
-  cliTool?: "claude" | "codex";
+  cliTool?: CliTool;
 }
 
 export interface DashboardCloseSessionMessage {
