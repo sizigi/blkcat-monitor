@@ -411,6 +411,7 @@ export function createServer(opts: ServerOptions) {
               if (msg.args) fwd.args = msg.args;
               if (msg.cwd) fwd.cwd = msg.cwd;
               if (msg.name) fwd.name = msg.name;
+              if (msg.cliTool) fwd.cliTool = msg.cliTool;
               machine.agent.send(JSON.stringify(fwd));
             }
           } else if (msg.type === "close_session") {
@@ -466,6 +467,8 @@ export function createServer(opts: ServerOptions) {
               machine.agent.send(JSON.stringify({
                 type: "reload_session",
                 sessionId: msg.sessionId,
+                args: msg.args,
+                resume: msg.resume,
               }));
             }
           } else if (msg.type === "list_directory") {
