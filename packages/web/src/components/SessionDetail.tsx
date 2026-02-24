@@ -44,6 +44,7 @@ export function SessionDetail({
           alignItems: "center",
           gap: 8,
           overflow: "hidden",
+          fontFamily: "'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace",
         }}
       >
         <span style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{sessionName}</span>
