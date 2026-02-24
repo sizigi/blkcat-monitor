@@ -122,8 +122,12 @@ export class TmuxCapture {
       ? cwd.replace("~", process.env.HOME ?? "/root")
       : cwd;
     // Create window with no command — starts an interactive shell that
-    // sources .bashrc/.zshrc so env vars are available regardless of shell
-    const cmd = [...this.sshPrefix, "tmux", "new-window", "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}"];
+    // sources .bashrc/.zshrc so env vars are available regardless of shell.
+    // If no tmux server is running, fall back to new-session which creates one.
+    const hasTmux = this.exec([...this.sshPrefix, "tmux", "has-session"]).success;
+    const tmuxCmd = hasTmux ? "new-window" : "new-session";
+    const cmd = [...this.sshPrefix, "tmux", tmuxCmd, "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}"];
+    if (!hasTmux) cmd.push("-d");
     if (resolvedCwd) cmd.push("-c", resolvedCwd);
     const result = this.exec(cmd);
     if (!result.success) return null;

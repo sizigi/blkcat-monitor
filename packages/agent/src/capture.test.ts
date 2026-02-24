@@ -74,6 +74,7 @@ describe("TmuxCapture", () => {
 
   it("starts a new session with args", () => {
     const exec = mockExec({
+      "tmux has-session": { success: true, stdout: "" },
       "tmux new-window -P -F #{session_name}:#{window_index}.#{pane_index}": {
         success: true,
         stdout: "dev:1.0\n",
@@ -88,6 +89,7 @@ describe("TmuxCapture", () => {
 
   it("starts a new session with cwd", () => {
     const exec = mockExec({
+      "tmux has-session": { success: true, stdout: "" },
       "tmux new-window -P -F #{session_name}:#{window_index}.#{pane_index} -c /home/user/project": {
         success: true,
         stdout: "dev:1.0\n",
@@ -102,6 +104,7 @@ describe("TmuxCapture", () => {
 
   it("starts a new session without args", () => {
     const exec = mockExec({
+      "tmux has-session": { success: true, stdout: "" },
       "tmux new-window -P -F #{session_name}:#{window_index}.#{pane_index}": {
         success: true,
         stdout: "dev:1.0\n",
@@ -114,8 +117,25 @@ describe("TmuxCapture", () => {
     expect(paneId).toBe("dev:1.0");
   });
 
+  it("falls back to new-session when no tmux server exists", () => {
+    const exec = mockExec({
+      "tmux has-session": { success: false, stdout: "" },
+      "tmux new-session -P -F #{session_name}:#{window_index}.#{pane_index} -d": {
+        success: true,
+        stdout: "0:0.0\n",
+      },
+      "tmux send-keys -l -t 0:0.0 claude": { success: true, stdout: "" },
+      "tmux send-keys -t 0:0.0 Enter": { success: true, stdout: "" },
+    });
+    const capture = new TmuxCapture(exec);
+    const paneId = capture.startSession();
+    expect(paneId).toBe("0:0.0");
+  });
+
   it("returns null when startSession fails", () => {
-    const exec = mockExec({});
+    const exec = mockExec({
+      "tmux has-session": { success: false, stdout: "" },
+    });
     const capture = new TmuxCapture(exec);
     expect(capture.startSession()).toBeNull();
   });
@@ -124,6 +144,9 @@ describe("TmuxCapture", () => {
     const cmds: string[][] = [];
     const exec: ExecFn = (cmd) => {
       cmds.push([...cmd]);
+      if (cmd.some(c => c === "has-session")) {
+        return { success: true, stdout: "" };
+      }
       if (cmd.some(c => c === "new-window")) {
         return { success: true, stdout: "test:0.0\n" };
       }
@@ -140,6 +163,9 @@ describe("TmuxCapture", () => {
     const cmds: string[][] = [];
     const exec: ExecFn = (cmd) => {
       cmds.push([...cmd]);
+      if (cmd.some(c => c === "has-session")) {
+        return { success: true, stdout: "" };
+      }
       if (cmd.some(c => c === "new-window")) {
         return { success: true, stdout: "test:0.0\n" };
       }
