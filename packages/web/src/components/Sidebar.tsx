@@ -737,9 +737,11 @@ export function Sidebar({
                             </div>
                             {group.panes.map((pane) => {
                               const idx = machine.sessions.indexOf(pane);
+                              // For panes in a group, show paneCommand as the name
+                              const groupedPane = { ...pane, windowName: pane.paneCommand ?? pane.windowName };
                               return (
                                 <div key={pane.id} style={{ paddingLeft: 12 }}>
-                                  {renderSession(pane, idx)}
+                                  {renderSession(groupedPane, idx)}
                                 </div>
                               );
                             })}

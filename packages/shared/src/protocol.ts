@@ -9,6 +9,7 @@ export interface SessionInfo {
   cliTool?: CliTool;
   windowId?: string;
   windowName?: string;
+  paneCommand?: string;
 }
 
 export type CliTool = "claude" | "codex" | "gemini";

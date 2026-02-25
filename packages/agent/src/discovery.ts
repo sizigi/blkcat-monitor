@@ -67,6 +67,7 @@ export function discoverAllSessions(exec: ExecFn = bunExec): SessionInfo[] {
       ...(cliTool ? { cliTool } : {}),
       ...(windowId ? { windowId } : {}),
       ...(windowName ? { windowName } : {}),
+      ...(cmd ? { paneCommand: cmd } : {}),
     });
   }
 
