@@ -36,6 +36,9 @@ function applyTheme(id: ThemeId) {
   } else {
     document.documentElement.dataset.theme = id;
   }
+  // Sync <meta name="theme-color"> for PWA status bar
+  const bg = THEMES.find((t) => t.id === id)?.bg ?? "#0d1117";
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", bg);
 }
 
 export function useTheme() {

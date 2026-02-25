@@ -6,5 +6,8 @@
     "dev:server": "bun run --filter @blkcat/server dev",
     "dev:web": "bun run --filter @blkcat/web dev",
     "test": "bun run --filter '@blkcat/*' test"
+  },
+  "devDependencies": {
+    "sharp": "^0.34.5"
   }
 }
