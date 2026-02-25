@@ -126,6 +126,13 @@ export class TmuxCapture {
     return ok;
   }
 
+  renameWindow(target: string, name: string): boolean {
+    // target is "session:window.pane" — extract "session:window" for rename
+    const window = target.replace(/\.\d+$/, "");
+    const cmd = [...this.sshPrefix, "tmux", "rename-window", "-t", window, name];
+    return this.exec(cmd).success;
+  }
+
   killPane(target: string): boolean {
     const cmd = [...this.sshPrefix, "tmux", "kill-pane", "-t", target];
     return this.exec(cmd).success;

@@ -15,6 +15,7 @@ interface AgentListenerOptions {
   onRemoveSkills?: (requestId: string, skillNames: string[]) => void;
   onGetSettings?: (requestId: string, scope: "global" | "project", projectPath?: string) => void;
   onUpdateSettings?: (requestId: string, scope: "global" | "project", settings: Record<string, unknown>, projectPath?: string) => void;
+  onRenameSession?: (sessionId: string, name: string) => void;
 }
 
 export class AgentListener {
@@ -75,6 +76,8 @@ export class AgentListener {
               this.opts.onGetSettings?.(msg.requestId, msg.scope, msg.projectPath);
             } else if (msg.type === "update_settings") {
               this.opts.onUpdateSettings?.(msg.requestId, msg.scope, msg.settings, msg.projectPath);
+            } else if (msg.type === "rename_session") {
+              this.opts.onRenameSession?.(msg.sessionId, msg.name);
             }
           } catch {}
         },

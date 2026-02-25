@@ -154,6 +154,7 @@ async function main() {
     }
     captures.set(paneId, localCap);
     const sessionName = name || (cliTool ? `${cliTool}${args ? ` ${args}` : ""}` : "shell");
+    if (name) localCap.renameWindow(paneId, name);
     const session: SessionInfo = { id: paneId, name: sessionName, target: "local", args: args || undefined, ...(cliTool ? { cliTool } : {}) };
     // Remove any existing entry with the same pane ID to prevent duplicates
     const existingIdx = manualSessions.findIndex((s) => s.id === paneId);
@@ -164,6 +165,16 @@ async function main() {
     const all = [...autoSessions, ...manualSessions];
     conn.updateSessions(all);
     console.log(`Started new ${cliTool ?? "terminal"} session: ${paneId}`);
+  }
+
+  function handleRenameSession(sessionId: string, name: string) {
+    const cap = captures.get(sessionId);
+    if (!cap) return;
+    cap.renameWindow(sessionId, name);
+    // Update session name in our lists so the next updateSessions reflects it
+    const allSess = [...autoSessions, ...manualSessions];
+    const sess = allSess.find((s) => s.id === sessionId);
+    if (sess) sess.name = name;
   }
 
   function handleListDirectory(requestId: string, path: string) {
@@ -273,6 +284,7 @@ async function main() {
       onRemoveSkills: handleRemoveSkills,
       onGetSettings: handleGetSettings,
       onUpdateSettings: handleUpdateSettings,
+      onRenameSession: handleRenameSession,
     });
     // When a new server connects, clear prevLines so the next poll cycle
     // re-sends the current pane content for all sessions.
@@ -296,6 +308,7 @@ async function main() {
       onRemoveSkills: handleRemoveSkills,
       onGetSettings: handleGetSettings,
       onUpdateSettings: handleUpdateSettings,
+      onRenameSession: handleRenameSession,
       getSessions: () => [...autoSessions, ...manualSessions],
       onReconnect: () => { prevLines.clear(); },
     });

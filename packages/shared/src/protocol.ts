@@ -235,7 +235,13 @@ export interface ServerCreateDirectoryMessage {
   path: string;
 }
 
-export type ServerToAgentMessage = ServerInputMessage | ServerStartSessionMessage | ServerCloseSessionMessage | ServerResizeMessage | ServerRequestScrollbackMessage | ServerReloadSessionMessage | ServerListDirectoryMessage | ServerDeploySkillsMessage | ServerGetSettingsMessage | ServerUpdateSettingsMessage | ServerRemoveSkillsMessage | ServerCreateDirectoryMessage;
+export interface ServerRenameSessionMessage {
+  type: "rename_session";
+  sessionId: string;
+  name: string;
+}
+
+export type ServerToAgentMessage = ServerInputMessage | ServerStartSessionMessage | ServerCloseSessionMessage | ServerResizeMessage | ServerRequestScrollbackMessage | ServerReloadSessionMessage | ServerListDirectoryMessage | ServerDeploySkillsMessage | ServerGetSettingsMessage | ServerUpdateSettingsMessage | ServerRemoveSkillsMessage | ServerCreateDirectoryMessage | ServerRenameSessionMessage;
 
 // --- Server -> Dashboard messages ---
 

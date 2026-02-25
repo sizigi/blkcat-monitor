@@ -546,6 +546,15 @@ export function createServer(opts: ServerOptions) {
               } else {
                 delete displayNames.sessions[key];
               }
+              // Forward rename to the agent so it can rename the tmux window
+              const machine = machines.get(msg.machineId);
+              if (machine && msg.name) {
+                machine.agent.send(JSON.stringify({
+                  type: "rename_session",
+                  sessionId: msg.sessionId,
+                  name: msg.name,
+                }));
+              }
             }
             broadcastToDashboards({
               type: "display_name_update",
