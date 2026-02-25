@@ -167,6 +167,8 @@ Open http://localhost:5173 — select a session from the sidebar to view termina
 | `BLKCAT_AGENTS` | — | Comma-separated `host:port` list of agents in listener mode to connect to |
 | `BLKCAT_NOTIFY_CMD` | — | Shell command to run when Claude is waiting for input (triggered by Stop, Notification, PermissionRequest hook events) |
 | `BLKCAT_SKILLS_DIR` | — | Directory containing skill subdirectories to make available for deployment to agents |
+| `BLKCAT_TLS_CERT` | auto-detect | Path to TLS certificate file (PEM). See [HTTPS / TLS](#https--tls-optional) |
+| `BLKCAT_TLS_KEY` | auto-detect | Path to TLS private key file (PEM) |
 
 Server options can also be set in `~/.blkcat/server.json` (environment variables take precedence):
 
@@ -176,7 +178,9 @@ Server options can also be set in `~/.blkcat/server.json` (environment variables
   "hostname": "0.0.0.0",
   "staticDir": "packages/web/dist",
   "agents": ["host1:4000", "host2:4000"],
-  "skillsDir": "/path/to/skills"
+  "skillsDir": "/path/to/skills",
+  "tlsCert": "/path/to/server.crt",
+  "tlsKey": "/path/to/server.key"
 }
 ```
 
@@ -383,6 +387,79 @@ Fix: unset the variable before launching:
 
 ```bash
 unset CLAUDECODE && claude
+```
+
+## HTTPS / TLS (optional)
+
+Enabling HTTPS allows PWA installation on desktop browsers (Chrome/Edge "Install app" button) and provides encrypted connections. This is optional — the dashboard works fine over plain HTTP, and Tailscale already encrypts traffic between nodes.
+
+### Setup with Tailscale
+
+Tailscale can issue free TLS certificates for your machine's `*.ts.net` domain via Let's Encrypt.
+
+**1. Generate a certificate**
+
+```bash
+sudo mkdir -p ~/.blkcat/certs
+sudo tailscale cert \
+  --cert-file ~/.blkcat/certs/server.crt \
+  --key-file ~/.blkcat/certs/server.key \
+  $(tailscale status --json | jq -r '.Self.DNSName | rtrimstr(".")')
+sudo chown $USER ~/.blkcat/certs/server.{crt,key}
+chmod 600 ~/.blkcat/certs/server.key
+```
+
+**2. Restart the server**
+
+The server auto-detects certificates in `~/.blkcat/certs/`. No extra configuration needed — just restart:
+
+```bash
+BLKCAT_STATIC_DIR=packages/web/dist bun packages/server/src/index.ts
+# Output: blkcat-monitor server listening on https://100.x.x.x:3000
+```
+
+Access the dashboard at `https://<machine-name>.<tailnet>.ts.net:3000`.
+
+**3. Auto-renew (optional)**
+
+Tailscale certificates expire after 90 days. Add a monthly cron job to auto-renew:
+
+```bash
+sudo crontab -e
+```
+
+Add:
+
+```
+0 3 1 * * tailscale cert --cert-file /home/<user>/.blkcat/certs/server.crt --key-file /home/<user>/.blkcat/certs/server.key <machine-name>.<tailnet>.ts.net && chown <user> /home/<user>/.blkcat/certs/server.{crt,key}
+```
+
+If the certificate expires, the dashboard still works but browsers show a security warning and the PWA install button disappears. Re-run the `tailscale cert` command to fix.
+
+### Custom certificates
+
+To use your own certificates (e.g. from Let's Encrypt, a corporate CA, or self-signed):
+
+```bash
+BLKCAT_TLS_CERT=/path/to/cert.pem BLKCAT_TLS_KEY=/path/to/key.pem \
+  bun packages/server/src/index.ts
+```
+
+Or in `~/.blkcat/server.json`:
+
+```json
+{
+  "tlsCert": "/path/to/cert.pem",
+  "tlsKey": "/path/to/key.pem"
+}
+```
+
+### Disabling TLS
+
+If certificates exist in `~/.blkcat/certs/` but you want to run without TLS, set the env vars to empty:
+
+```bash
+BLKCAT_TLS_CERT= BLKCAT_TLS_KEY= bun packages/server/src/index.ts
 ```
 
 ## Troubleshooting
