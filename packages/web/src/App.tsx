@@ -12,6 +12,7 @@ import { NotificationList } from "./components/NotificationList";
 import { SkillsMatrix } from "./components/SkillsMatrix";
 import { HealthPanel } from "./components/HealthPanel";
 import { ProjectSettingsModal } from "./components/ProjectSettingsModal";
+import { PWAPrompt } from "./components/PWAPrompt";
 import { useHealth } from "./hooks/useHealth";
 import { Menu, Pencil, ClipboardList, Bell, Settings, ChevronUp } from "./components/Icons";
 
@@ -668,6 +669,7 @@ export default function App() {
           />
         );
       })()}
+      <PWAPrompt />
     </div>
   );
 }
