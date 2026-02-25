@@ -206,11 +206,15 @@ export default function App() {
     return () => document.removeEventListener("keydown", handleKeyDown, true);
   }, [clearNotifications, sendInput]); // stable deps — registers once
 
+  const selectedSessionData = useMemo(() => {
+    if (!selectedMachine || !selectedSession) return undefined;
+    const machine = machines.find((m) => m.machineId === selectedMachine);
+    return machine?.sessions.find((s) => s.id === selectedSession);
+  }, [machines, selectedMachine, selectedSession]);
+
   const selectedSessionName = useMemo(() => {
     if (!selectedMachine || !selectedSession) return "";
-    const machine = machines.find((m) => m.machineId === selectedMachine);
-    const session = machine?.sessions.find((s) => s.id === selectedSession);
-    const defaultName = session?.name ?? selectedSession;
+    const defaultName = selectedSessionData?.name ?? selectedSession;
     return getSessionName(selectedMachine, selectedSession, defaultName);
   }, [machines, selectedMachine, selectedSession, getSessionName]);
 
@@ -475,6 +479,7 @@ export default function App() {
             machineId={selectedMachine}
             sessionId={selectedSession}
             sessionName={selectedSessionName}
+            cwd={selectedSessionData?.cwd}
             lines={sessionOutput.lines}
             cursor={sessionOutput.cursor}
             logMapRef={logMapRef}

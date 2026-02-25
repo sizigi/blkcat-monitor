@@ -1,11 +1,13 @@
 import React from "react";
 import { TerminalOutput } from "./TerminalOutput";
 import { ChatInput } from "./ChatInput";
+import { Folder } from "./Icons";
 
 interface SessionDetailProps {
   machineId: string;
   sessionId: string;
   sessionName: string;
+  cwd?: string;
   lines: string[];
   cursor?: { x: number; y: number };
   logMapRef?: React.RefObject<Map<string, string[]>>;
@@ -22,6 +24,7 @@ export function SessionDetail({
   machineId,
   sessionId,
   sessionName,
+  cwd,
   lines,
   cursor,
   logMapRef,
@@ -33,6 +36,9 @@ export function SessionDetail({
   onSendData,
   onResize,
 }: SessionDetailProps) {
+  // Shorten home dir prefix for display
+  const displayCwd = cwd?.replace(/^\/home\/[^/]+/, "~")?.replace(/^\/root/, "~");
+
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
       <div
@@ -51,6 +57,15 @@ export function SessionDetail({
         <span style={{ color: "var(--text-muted)", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {machineId} / {sessionId}
         </span>
+        {displayCwd && (
+          <>
+            <span style={{ color: "var(--border)", fontSize: 12 }}>|</span>
+            <span style={{ color: "var(--text-muted)", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
+              <Folder size={12} />
+              {displayCwd}
+            </span>
+          </>
+        )}
       </div>
       <TerminalOutput sessionKey={`${machineId}:${sessionId}`} lines={lines} cursor={cursor} logMapRef={logMapRef} scrollbackMapRef={scrollbackMapRef} subscribeScrollback={subscribeScrollback} onRequestScrollback={onRequestScrollback} onData={onSendData} onResize={onResize} />
       <div style={{ borderTop: "1px solid var(--border)", flexShrink: 0, overflowY: "auto", maxHeight: "40vh" }}>

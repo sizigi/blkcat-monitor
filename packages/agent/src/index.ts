@@ -402,7 +402,8 @@ async function main() {
 
   if (hasAutoTarget) {
     setInterval(() => {
-      const fresh = discoverCliSessions();
+      const manualIds = new Set(manualSessions.map((s) => s.id));
+      const fresh = discoverCliSessions(bunExec, manualIds);
       const newSessions = fresh.filter((s) => !captures.has(s.id));
       // Expire old grace entries
       const now = Date.now();
@@ -414,15 +415,23 @@ async function main() {
         (s) => !fresh.find((f) => f.id === s.id) && !reloadGracePanes.has(s.id)
       );
 
-      if (newSessions.length > 0 || goneSessions.length > 0) {
+      // Check if cwd changed for any existing auto session
+      let cwdChanged = false;
+      for (const f of fresh) {
+        const existing = autoSessions.find((s) => s.id === f.id);
+        if (existing && existing.cwd !== f.cwd) { cwdChanged = true; break; }
+      }
+
+      if (newSessions.length > 0 || goneSessions.length > 0 || cwdChanged) {
         for (const s of newSessions) captures.set(s.id, new TmuxCapture(bunExec));
         for (const s of goneSessions) { captures.delete(s.id); prevLines.delete(s.id); }
         // Exclude manually started sessions so auto-discovery doesn't overwrite their names
-        const manualIds = new Set(manualSessions.map((s) => s.id));
         autoSessions = fresh.filter((s) => !manualIds.has(s.id));
         const all = [...autoSessions, ...manualSessions];
         conn.updateSessions(all);
-        console.log(`Sessions updated: ${all.length} total`);
+        if (newSessions.length > 0 || goneSessions.length > 0) {
+          console.log(`Sessions updated: ${all.length} total`);
+        }
       }
     }, 30000);
   }

@@ -26,30 +26,79 @@ function resolveNodeCliTool(panePid: string, exec: ExecFn): CliTool | null {
   return null;
 }
 
-export function discoverCliSessions(exec: ExecFn = bunExec): SessionInfo[] {
+/** Flags that affect how sessions are displayed (e.g. red indicator for skip-permissions). */
+const NOTABLE_FLAGS = ["--dangerously-skip-permissions", "--full-auto", "--yolo"];
+
+/**
+ * Inspect the pane process (and its children) to extract notable CLI flags.
+ * Returns a space-joined string of matched flags, or undefined if none found.
+ */
+function resolveCliArgs(panePid: string, cliTool: CliTool, exec: ExecFn): string | undefined {
+  const lines: string[] = [];
+
+  // Check the pane process itself (pane_pid may be the CLI process directly)
+  const self = exec(["ps", "-p", panePid, "-o", "args", "--no-headers"]);
+  if (self.success) lines.push(self.stdout.trim());
+
+  // Check child processes (pane_pid is a shell, CLI is a child)
+  const children = exec(["ps", "--ppid", panePid, "-o", "args", "--no-headers"]);
+  if (children.success) lines.push(...children.stdout.trim().split("\n"));
+
+  for (const line of lines) {
+    if (!line) continue;
+    // Only inspect lines that contain the CLI tool name
+    if (!line.includes(`/${cliTool}`) && !line.startsWith(`${cliTool} `) && line !== cliTool) continue;
+    const flags = NOTABLE_FLAGS.filter(f => line.includes(f));
+    if (flags.length > 0) return flags.join(" ");
+  }
+  return undefined;
+}
+
+/**
+ * @param excludeIds — session IDs already tracked (e.g. manual sessions).
+ *   Any physical pane that maps to an excluded ID is pre-seeded in the
+ *   dedup set so auto-discovery won't return a duplicate under a different
+ *   grouped-session name.
+ */
+export function discoverCliSessions(exec: ExecFn = bunExec, excludeIds?: Set<string>): SessionInfo[] {
   const result = exec([
     "tmux", "list-panes", "-a",
-    "-F", "#{session_name}:#{window_index}.#{pane_index}\t#{session_name}\t#{pane_current_command}\t#{pane_pid}\t#{pane_id}",
+    "-F", "#{session_name}:#{window_index}.#{pane_index}\t#{session_name}\t#{pane_current_command}\t#{pane_pid}\t#{pane_id}\t#{pane_current_path}",
   ]);
   if (!result.success) return [];
 
+  const lines = result.stdout.trim().split("\n");
   const found: SessionInfo[] = [];
   const seenPaneIds = new Set<string>();
-  for (const line of result.stdout.trim().split("\n")) {
+
+  // Pre-seed: if a manually-tracked session maps to a physical pane,
+  // mark that pane as seen so auto-discovery skips its grouped aliases.
+  if (excludeIds) {
+    for (const line of lines) {
+      if (!line) continue;
+      const parts = line.split("\t");
+      if (excludeIds.has(parts[0]) && parts[4]) seenPaneIds.add(parts[4]);
+    }
+  }
+
+  for (const line of lines) {
     if (!line) continue;
-    const [paneId, sessionName, cmd, panePid, tmuxPaneId] = line.split("\t");
+    const [paneId, sessionName, cmd, panePid, tmuxPaneId, paneCwd] = line.split("\t");
     // Deduplicate: tmux grouped sessions list the same physical pane
     // under multiple session names (e.g., "1:2.0" and "1-2:2.0").
     // #{pane_id} (e.g., %0) is unique per physical pane.
     if (tmuxPaneId && seenPaneIds.has(tmuxPaneId)) continue;
     if (tmuxPaneId) seenPaneIds.add(tmuxPaneId);
+    const cwd = paneCwd || undefined;
     if (CLI_COMMANDS.has(cmd)) {
-      found.push({ id: paneId, name: sessionName, target: "local", cliTool: cmd as CliTool });
+      const args = panePid ? resolveCliArgs(panePid, cmd as CliTool, exec) : undefined;
+      found.push({ id: paneId, name: sessionName, target: "local", args, cwd, cliTool: cmd as CliTool });
     } else if (HOST_RUNTIMES.has(cmd) && panePid) {
       // Node-based CLIs (codex, gemini) show as "node" in pane_current_command
       const tool = resolveNodeCliTool(panePid, exec);
       if (tool) {
-        found.push({ id: paneId, name: sessionName, target: "local", cliTool: tool });
+        const args = resolveCliArgs(panePid, tool, exec);
+        found.push({ id: paneId, name: sessionName, target: "local", args, cwd, cliTool: tool });
       }
     }
   }

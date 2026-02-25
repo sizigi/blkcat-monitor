@@ -6,6 +6,7 @@ export interface SessionInfo {
   target: "local" | "ssh";
   host?: string;
   args?: string;
+  cwd?: string;
   cliTool?: CliTool;
 }
 
