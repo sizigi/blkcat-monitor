@@ -494,7 +494,7 @@ export function Sidebar({
                         onClick={(e) => e.stopPropagation()}
                         onBlur={() => {
                           const currentName = getSessionName
-                            ? getSessionName(machine.machineId, session.id, session.name)
+                            ? getSessionName(machine.machineId, session.id, session.windowName ?? session.name)
                             : session.name;
                           const trimmed = editValue.trim();
                           if (trimmed && trimmed !== currentName) {
@@ -528,12 +528,12 @@ export function Sidebar({
                           e.stopPropagation();
                           setEditingId(`session:${session.id}`);
                           setEditValue(
-                            getSessionName ? getSessionName(machine.machineId, session.id, session.name) : session.name,
+                            getSessionName ? getSessionName(machine.machineId, session.id, session.windowName ?? session.name) : (session.windowName ?? session.name),
                           );
                         }}
                         title="Double-click to rename"
                       >
-                        {getSessionName ? getSessionName(machine.machineId, session.id, session.name) : session.name}
+                        {getSessionName ? getSessionName(machine.machineId, session.id, session.windowName ?? session.name) : (session.windowName ?? session.name)}
                         {session.target === "ssh" && (
                           <span style={{ color: "var(--text-muted)", marginLeft: 4 }}>
                             (ssh)
@@ -774,8 +774,8 @@ export function Sidebar({
       {reloadTarget && onReloadSession && (
         <ReloadSessionModal
           sessionName={getSessionName
-            ? getSessionName(reloadTarget.machineId, reloadTarget.session.id, reloadTarget.session.name)
-            : reloadTarget.session.name}
+            ? getSessionName(reloadTarget.machineId, reloadTarget.session.id, reloadTarget.session.windowName ?? reloadTarget.session.name)
+            : (reloadTarget.session.windowName ?? reloadTarget.session.name)}
           currentArgs={reloadTarget.session.args}
           cliTool={reloadTarget.session.cliTool}
           onReload={(args, resume) => {
