@@ -466,25 +466,15 @@ export function ChatInput({ onSendText, onSendKey, onSendData }: ChatInputProps)
         >
           Shift
         </button>
-        {/* Paste: read clipboard and send as data */}
-        {onSendData && (
+        {/* Enter: send Enter key */}
+        {onSendKey && (
           <button
             type="button"
-            onClick={async () => {
-              vibrate(10);
-              try {
-                const text = await navigator.clipboard.readText();
-                if (text) onSendData(text);
-              } catch {
-                // Fallback: prompt user
-                const text = prompt("Paste text:");
-                if (text) onSendData(text);
-              }
-            }}
+            onClick={() => { vibrate(10); onSendKey("Enter"); }}
             style={keyBtnStyle}
-            title="Paste clipboard"
+            title="Send Enter key"
           >
-            Paste
+            Enter
           </button>
         )}
         {/* D-Pad: swipe for arrow keys */}

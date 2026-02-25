@@ -9,6 +9,7 @@ import {
   NOTIFY_HOOK_EVENTS,
 } from "@blkcat/shared";
 import type { DisplayNames } from "./display-names-store";
+import { cpus, totalmem, freemem } from "os";
 
 interface ServerOptions {
   port: number;
@@ -102,6 +103,27 @@ export function createServer(opts: ServerOptions) {
   const displayNames: DisplayNames = opts.displayNames
     ? { machines: { ...opts.displayNames.machines }, sessions: { ...opts.displayNames.sessions } }
     : { machines: {}, sessions: {} };
+
+  // --- Health monitoring: CPU snapshot for delta computation ---
+  function cpuSnapshot() {
+    let idle = 0, total = 0;
+    for (const cpu of cpus()) {
+      const t = cpu.times;
+      idle += t.idle;
+      total += t.user + t.nice + t.sys + t.irq + t.idle;
+    }
+    return { idle, total };
+  }
+  let prevCpu = cpuSnapshot();
+
+  function getCpuUsage(): number {
+    const cur = cpuSnapshot();
+    const dIdle = cur.idle - prevCpu.idle;
+    const dTotal = cur.total - prevCpu.total;
+    prevCpu = cur;
+    if (dTotal === 0) return 0;
+    return Math.round((1 - dIdle / dTotal) * 1000) / 10; // one decimal %
+  }
 
   function broadcastToDashboards(msg: object) {
     const data = JSON.stringify(msg);
@@ -299,6 +321,21 @@ export function createServer(opts: ServerOptions) {
           data: { role: "dashboard", dashboardId: `dash-${dashboardCounter++}` } as WsData,
         });
         return ok ? undefined : new Response("Upgrade failed", { status: 500 });
+      }
+
+      if (url.pathname === "/api/health" && req.method === "GET") {
+        const mem = process.memoryUsage();
+        const total = totalmem();
+        const free = freemem();
+        return Response.json({
+          cpuUsage: getCpuUsage(),
+          memoryUsed: total - free,
+          memoryTotal: total,
+          processRss: mem.rss,
+          uptime: Math.floor(process.uptime()),
+          agentCount: machines.size,
+          dashboardCount: dashboards.size,
+        });
       }
 
       if (url.pathname === "/api/sessions") {

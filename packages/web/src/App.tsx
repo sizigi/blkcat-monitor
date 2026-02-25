@@ -10,7 +10,9 @@ import { SessionDetail } from "./components/SessionDetail";
 import { EventFeed } from "./components/EventFeed";
 import { NotificationList } from "./components/NotificationList";
 import { SkillsMatrix } from "./components/SkillsMatrix";
+import { HealthPanel } from "./components/HealthPanel";
 import { ProjectSettingsModal } from "./components/ProjectSettingsModal";
+import { useHealth } from "./hooks/useHealth";
 import { Menu, Pencil, ClipboardList, Bell, Settings, ChevronUp } from "./components/Icons";
 
 const WS_URL =
@@ -88,7 +90,8 @@ export default function App() {
   const [selectedSession, setSelectedSession] = useState<string>();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
-  const [panelTab, setPanelTab] = useState<"events" | "notifications" | "skills" | null>(null);
+  const [panelTab, setPanelTab] = useState<"events" | "notifications" | "skills" | "health" | null>(null);
+  const health = useHealth(panelTab === "health");
   const [settingsSession, setSettingsSession] = useState<{ machineId: string; sessionId: string } | null>(null);
   const [editingTopbarName, setEditingTopbarName] = useState(false);
   const [topbarEditValue, setTopbarEditValue] = useState("");
@@ -399,7 +402,7 @@ export default function App() {
             title="Rename session"
           ><Pencil size={14} /></button>
         )}
-        {(["events", "notifications", "skills"] as const).map((tab) => (
+        {(["events", "notifications", "skills", "health"] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setPanelTab((v) => v === tab ? null : tab)}
@@ -419,7 +422,7 @@ export default function App() {
               let total = 0;
               for (const c of notificationCounts.values()) total += c;
               return <><Bell size={16} />{total > 0 && <span style={{ fontSize: 11, fontWeight: 600 }}>{total}</span>}</>;
-            })() : <Settings size={16} />}
+            })() : tab === "health" ? <span style={{ fontSize: 13 }}>&#9829;</span> : <Settings size={16} />}
           </button>
         ))}
       </div>
@@ -549,7 +552,7 @@ export default function App() {
             justifyContent: "flex-end",
             pointerEvents: "auto",
           }}>
-            {(["events", "notifications", "skills"] as const).map((tab, i, arr) => (
+            {(["events", "notifications", "skills", "health"] as const).map((tab, i, arr) => (
               <button
                 key={tab}
                 onClick={() => setPanelTab((v) => v === tab ? null : tab)}
@@ -564,7 +567,7 @@ export default function App() {
                   borderRadius: i === 0 ? "4px 0 0 0" : i === arr.length - 1 ? "0 4px 0 0" : "0",
                 }}
               >
-                {tab === "events" ? "Events" : tab === "notifications" ? "Notifications" : "Skills"}
+                {tab === "events" ? "Events" : tab === "notifications" ? "Notifications" : tab === "health" ? "Health" : "Skills"}
                 {tab === "notifications" && (() => {
                   let total = 0;
                   for (const c of notificationCounts.values()) total += c;
@@ -586,6 +589,11 @@ export default function App() {
                 <EventFeed
                   hookEventsRef={hookEventsRef}
                   subscribeHookEvents={subscribeHookEvents}
+                  onClose={() => setPanelTab(null)}
+                />
+              ) : panelTab === "health" ? (
+                <HealthPanel
+                  health={health}
                   onClose={() => setPanelTab(null)}
                 />
               ) : (
@@ -615,6 +623,11 @@ export default function App() {
             <EventFeed
               hookEventsRef={hookEventsRef}
               subscribeHookEvents={subscribeHookEvents}
+              onClose={() => setPanelTab(null)}
+            />
+          ) : panelTab === "health" ? (
+            <HealthPanel
+              health={health}
               onClose={() => setPanelTab(null)}
             />
           ) : (
