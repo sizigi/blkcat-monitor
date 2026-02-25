@@ -18,6 +18,8 @@ const server = createServer({
   notifyEnv: config.notifyEnv,
   displayNames,
   onDisplayNamesSaved: (names) => { saveDisplayNames(names); },
+  tlsCert: config.tlsCert,
+  tlsKey: config.tlsKey,
 });
 
 // Connect saved agents (as "api" source so they continue to be persisted)
@@ -25,7 +27,8 @@ for (const address of savedAgents) {
   server.connectToAgent(address, "api");
 }
 
-console.log(`blkcat-monitor server listening on ${config.hostname}:${server.port}`);
+const proto = config.tlsCert ? "https" : "http";
+console.log(`blkcat-monitor server listening on ${proto}://${config.hostname}:${server.port}`);
 if (config.agents?.length) {
   console.log(`Connecting to agents: ${config.agents.join(", ")}`);
 }

@@ -3,6 +3,8 @@ import path from "path";
 
 const CONFIG_DIR = path.join(os.homedir(), ".blkcat");
 const CONFIG_PATH = path.join(CONFIG_DIR, "server.json");
+const DEFAULT_CERT = path.join(CONFIG_DIR, "certs", "server.crt");
+const DEFAULT_KEY = path.join(CONFIG_DIR, "certs", "server.key");
 
 /** Tailscale IP if available, otherwise 127.0.0.1. Never 0.0.0.0. */
 function defaultHostname(): string {
@@ -22,6 +24,8 @@ export interface ServerConfig {
   agents?: string[];
   notifyCommand?: string;
   notifyEnv?: Record<string, string>;
+  tlsCert?: string;
+  tlsKey?: string;
 }
 
 export async function loadServerConfig(): Promise<ServerConfig> {
@@ -45,7 +49,21 @@ export async function loadServerConfig(): Promise<ServerConfig> {
     skillsDir: env("BLKCAT_SKILLS_DIR") ?? str(file.skillsDir) ?? new URL("../../../skills", import.meta.url).pathname,
     notifyCommand: env("BLKCAT_NOTIFY_CMD") ?? str(file.notifyCommand),
     notifyEnv: strRecord(file.notifyEnv),
+    tlsCert: env("BLKCAT_TLS_CERT") ?? str(file.tlsCert) ?? autoDetectCert(),
+    tlsKey: env("BLKCAT_TLS_KEY") ?? str(file.tlsKey) ?? autoDetectKey(),
   };
+}
+
+import fs from "fs";
+
+/** Auto-detect TLS cert in ~/.blkcat/certs/ if both files exist */
+function autoDetectCert(): string | undefined {
+  try { if (fs.existsSync(DEFAULT_CERT) && fs.existsSync(DEFAULT_KEY)) return DEFAULT_CERT; } catch {}
+  return undefined;
+}
+function autoDetectKey(): string | undefined {
+  try { if (fs.existsSync(DEFAULT_CERT) && fs.existsSync(DEFAULT_KEY)) return DEFAULT_KEY; } catch {}
+  return undefined;
 }
 
 function env(key: string): string | undefined {

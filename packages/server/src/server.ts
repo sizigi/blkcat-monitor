@@ -24,6 +24,8 @@ interface ServerOptions {
   notifyEnv?: Record<string, string>;
   displayNames?: DisplayNames;
   onDisplayNamesSaved?: (names: DisplayNames) => void;
+  tlsCert?: string;
+  tlsKey?: string;
 }
 
 interface WsData {
@@ -304,9 +306,14 @@ export function createServer(opts: ServerOptions) {
     return true;
   }
 
+  const tls = opts.tlsCert && opts.tlsKey
+    ? { cert: Bun.file(opts.tlsCert), key: Bun.file(opts.tlsKey) }
+    : undefined;
+
   const server = Bun.serve({
     port: opts.port,
     hostname: opts.hostname,
+    tls,
     async fetch(req, server) {
       const url = new URL(req.url);
       if (url.pathname === "/ws/agent") {
