@@ -43,7 +43,7 @@ describe("ChatInput", () => {
     fireEvent.click(screen.getByText("Esc"));
     expect(onSendKey).toHaveBeenCalledWith("Escape");
 
-    fireEvent.click(screen.getByText("Up"));
-    expect(onSendKey).toHaveBeenCalledWith("Up");
+    fireEvent.click(screen.getByText("Tab"));
+    expect(onSendKey).toHaveBeenCalledWith("Tab");
   });
 });

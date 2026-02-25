@@ -104,13 +104,24 @@ export class TmuxCapture {
   resizePane(target: string, cols: number, rows: number): boolean {
     // Extract window target from pane target (e.g., "sess:0.0" → "sess:0")
     const window = target.replace(/\.\d+$/, "");
+    const session = window.replace(/:.*$/, "");
     const ok = this.exec([...this.sshPrefix, "tmux", "resize-window", "-x", String(cols), "-y", String(rows), "-t", window]).success;
     if (ok) {
+      // Verify resize took effect — attached clients can constrain window size
+      const sizeResult = this.exec([...this.sshPrefix, "tmux", "display-message", "-p", "-t", target, "#{pane_width},#{pane_height}"]);
+      if (sizeResult.success) {
+        const [w, h] = sizeResult.stdout.trim().split(",").map(Number);
+        if (w !== cols || h !== rows) {
+          // Resize was overridden by client constraint — set window-size manual and retry
+          this.exec([...this.sshPrefix, "tmux", "set-option", "-t", session, "window-size", "manual"]);
+          this.exec([...this.sshPrefix, "tmux", "resize-window", "-x", String(cols), "-y", String(rows), "-t", window]);
+        }
+      }
       // Force tmux to deliver SIGWINCH to processes in background windows
       // by briefly selecting the target window then switching back.
       // Without this, pty dimensions stay stale for non-active windows.
       this.exec([...this.sshPrefix, "tmux", "select-window", "-t", window]);
-      this.exec([...this.sshPrefix, "tmux", "last-window", "-t", window.replace(/:.*$/, "")]);
+      this.exec([...this.sshPrefix, "tmux", "last-window", "-t", session]);
     }
     return ok;
   }

@@ -76,6 +76,14 @@ export default function App() {
     }, 500);
     return () => { clearTimeout(timer1); clearTimeout(timer2); };
   }, [isMobile]);
+
+  // Re-send terminal dimensions when WebSocket (re)connects — handles the race
+  // where the initial fit.fit() fires before the socket is open.
+  useEffect(() => {
+    if (!connected) return;
+    const timer = setTimeout(() => window.dispatchEvent(new Event("resize")), 300);
+    return () => clearTimeout(timer);
+  }, [connected]);
   const [selectedMachine, setSelectedMachine] = useState<string>();
   const [selectedSession, setSelectedSession] = useState<string>();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);

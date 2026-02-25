@@ -21,29 +21,31 @@ Use the `remote` skill's host resolution logic:
 
 Extract the **alias** (the argument), **hostname** (IP/DNS), and **user**.
 
+**Important:** All `ssh` commands in this guide MUST use `-A` (agent forwarding) so the remote machine can authenticate with GitHub using the local SSH key. This is critical for machines that don't have their own GitHub SSH key configured.
+
 ### 2. Ensure tmux session exists on remote
 
 ```
-ssh <alias> "tmux has-session -t claude 2>/dev/null || tmux new-session -d -s claude"
+ssh -A <alias> "tmux has-session -t claude 2>/dev/null || tmux new-session -d -s claude"
 ```
 
 ### 3. Install bun if missing
 
 Check if bun is installed:
 ```
-ssh <alias> "which bun 2>/dev/null || ~/.bun/bin/bun --version 2>/dev/null"
+ssh -A <alias> "which bun 2>/dev/null || ~/.bun/bin/bun --version 2>/dev/null"
 ```
 
 If not found, install via tmux:
 ```
-ssh <alias> 'tmux send-keys -t claude "curl -fsSL https://bun.sh/install | bash" Enter'
+ssh -A <alias> 'tmux send-keys -t claude "curl -fsSL https://bun.sh/install | bash" Enter'
 ```
 Wait ~15 seconds, then capture output to confirm installation succeeded.
 
 ### 4. Pull latest code and install dependencies
 
 ```
-ssh <alias> 'tmux send-keys -t claude "cd ~/blkcat-monitor && git pull && ~/.bun/bin/bun install" Enter'
+ssh -A <alias> 'tmux send-keys -t claude "cd ~/blkcat-monitor && git pull && ~/.bun/bin/bun install" Enter'
 ```
 Wait ~15 seconds, then capture output to confirm success.
 
@@ -51,18 +53,18 @@ Wait ~15 seconds, then capture output to confirm success.
 
 Send Ctrl-C to stop any running agent process:
 ```
-ssh <alias> 'tmux send-keys -t claude C-c'
+ssh -A <alias> 'tmux send-keys -t claude C-c'
 ```
 Wait 1 second.
 
 ### 6. Start agent in listener mode
 
 ```
-ssh <alias> 'tmux send-keys -t claude "BLKCAT_LISTEN_PORT=<port> ~/.bun/bin/bun packages/agent/src/index.ts" Enter'
+ssh -A <alias> 'tmux send-keys -t claude "BLKCAT_LISTEN_PORT=<port> ~/.bun/bin/bun packages/agent/src/index.ts" Enter'
 ```
 Wait ~3 seconds, then capture output:
 ```
-ssh <alias> 'tmux capture-pane -t claude -p -S -5'
+ssh -A <alias> 'tmux capture-pane -t claude -p -S -5'
 ```
 
 Verify the output contains `Listening on port <port>`. If it shows `EADDRINUSE`, increment the port by 1 and retry (up to 3 attempts).
