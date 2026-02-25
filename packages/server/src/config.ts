@@ -4,6 +4,16 @@ import path from "path";
 const CONFIG_DIR = path.join(os.homedir(), ".blkcat");
 const CONFIG_PATH = path.join(CONFIG_DIR, "server.json");
 
+/** Tailscale IP if available, otherwise 127.0.0.1. Never 0.0.0.0. */
+function defaultHostname(): string {
+  try {
+    const result = Bun.spawnSync(["tailscale", "ip", "-4"]);
+    const ip = result.stdout.toString().trim();
+    if (ip && /^\d+\.\d+\.\d+\.\d+$/.test(ip)) return ip;
+  } catch {}
+  return "127.0.0.1";
+}
+
 export interface ServerConfig {
   port: number;
   hostname?: string;
@@ -27,7 +37,7 @@ export async function loadServerConfig(): Promise<ServerConfig> {
 
   return {
     port: parseInt(env("BLKCAT_PORT") ?? str(file.port) ?? "3000"),
-    hostname: env("BLKCAT_HOST") ?? str(file.hostname),
+    hostname: env("BLKCAT_HOST") ?? str(file.hostname) ?? defaultHostname(),
     staticDir: env("BLKCAT_STATIC_DIR") ?? str(file.staticDir) ?? defaultStaticDir,
     agents: env("BLKCAT_AGENTS")
       ? env("BLKCAT_AGENTS")!.split(",").map((s) => s.trim()).filter(Boolean)

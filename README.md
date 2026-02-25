@@ -75,7 +75,7 @@ cd packages/web && bunx vite build && cd ../..
 BLKCAT_STATIC_DIR=packages/web/dist bun packages/server/src/index.ts
 ```
 
-The server listens on `0.0.0.0:3000` by default. Use `BLKCAT_HOST` and `BLKCAT_PORT` to change.
+The server binds to the Tailscale IP by default (via `tailscale ip -4`), or `127.0.0.1` if Tailscale is not available. It never binds to `0.0.0.0` unless explicitly set. Use `BLKCAT_HOST` and `BLKCAT_PORT` to override.
 
 #### Running persistently with tmux
 
@@ -162,7 +162,7 @@ Open http://localhost:5173 — select a session from the sidebar to view termina
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `BLKCAT_PORT` | `3000` | Server listen port |
-| `BLKCAT_HOST` | `0.0.0.0` | Server bind address |
+| `BLKCAT_HOST` | Tailscale IP or `127.0.0.1` | Server bind address |
 | `BLKCAT_STATIC_DIR` | — | Serve static files from this directory |
 | `BLKCAT_AGENTS` | — | Comma-separated `host:port` list of agents in listener mode to connect to |
 | `BLKCAT_NOTIFY_CMD` | — | Shell command to run when Claude is waiting for input (triggered by Stop, Notification, PermissionRequest hook events) |

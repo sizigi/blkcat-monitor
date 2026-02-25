@@ -25,7 +25,7 @@ for (const address of savedAgents) {
   server.connectToAgent(address, "api");
 }
 
-console.log(`blkcat-monitor server listening on ${config.hostname ?? "0.0.0.0"}:${server.port}`);
+console.log(`blkcat-monitor server listening on ${config.hostname}:${server.port}`);
 if (config.agents?.length) {
   console.log(`Connecting to agents: ${config.agents.join(", ")}`);
 }
