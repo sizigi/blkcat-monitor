@@ -251,11 +251,13 @@ export function TerminalOutput({ sessionKey, lines, cursor, logMapRef, scrollbac
     };
     if (xtermTextarea) xtermTextarea.addEventListener("focus", onXtermFocus);
 
-    // Prevent xterm's native paste handler — we handle Ctrl+V/Cmd+V ourselves
-    // in attachCustomKeyEventHandler via clipboard.readText(). Without this,
-    // the browser paste event fires on xterm's hidden textarea, causing a
-    // duplicate send.
-    const onPaste = (e: Event) => { e.preventDefault(); };
+    // Prevent duplicate paste: our Ctrl+V handler reads clipboard manually,
+    // but the browser also fires a native paste event on xterm's textarea.
+    // Track when our handler fires and suppress only that paste event.
+    let suppressNextPaste = false;
+    const onPaste = (e: Event) => {
+      if (suppressNextPaste) { e.preventDefault(); suppressNextPaste = false; }
+    };
     if (xtermTextarea) xtermTextarea.addEventListener("paste", onPaste);
 
     const dataDisposable = term.onData((data) => { if (!scrollModeRef.current) onDataRef.current?.(data); });
@@ -289,7 +291,9 @@ export function TerminalOutput({ sessionKey, lines, cursor, logMapRef, scrollbac
       // Intercept Ctrl+V / Cmd+V: read clipboard ourselves and send as data.
       // Without this, xterm sends raw \x16 which Claude Code interprets as
       // "paste image" rather than receiving the actual clipboard text.
+      // Set suppressNextPaste so the native paste event doesn't double-send.
       if ((event.ctrlKey || event.metaKey) && event.key === "v") {
+        suppressNextPaste = true;
         navigator.clipboard.readText().then((text) => {
           if (text) onDataRef.current?.(text);
         }).catch(() => {});
