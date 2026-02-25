@@ -205,10 +205,14 @@ html, body, #root {
   opacity: 0.6;
 }
 
-/* Idle screen: single diagonal layer with background-position scroll */
+/* Idle screen: two layers for brick-pattern stagger (even/odd rows offset by half tile) */
 @keyframes idle-scroll {
   from { background-position: 0 0; }
   to { background-position: -100px 0; }
+}
+@keyframes idle-scroll-reverse {
+  from { background-position: 0 0; }
+  to { background-position: 100px 0; }
 }
 .idle-layer {
   position: absolute;
@@ -221,8 +225,33 @@ html, body, #root {
   mix-blend-mode: multiply;
   opacity: 0.65;
 }
-.idle-layer-up {
+/* Even rows: mask out odd rows with a repeating gradient */
+.idle-layer-even {
   animation: idle-scroll 3s linear infinite;
+  mask-image: repeating-linear-gradient(
+    to bottom,
+    black 0px, black 100px,
+    transparent 100px, transparent 200px
+  );
+  -webkit-mask-image: repeating-linear-gradient(
+    to bottom,
+    black 0px, black 100px,
+    transparent 100px, transparent 200px
+  );
+}
+/* Odd rows: offset by half tile, mask out even rows */
+.idle-layer-odd {
+  animation: idle-scroll-reverse 3s linear infinite;
+  mask-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0px, transparent 100px,
+    black 100px, black 200px
+  );
+  -webkit-mask-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0px, transparent 100px,
+    black 100px, black 200px
+  );
 }
 /* Light themes: lower opacity */
 [data-theme="github-light"] .idle-layer,
@@ -359,7 +388,8 @@ html, body, #root {
   .active-indicator,
   .live-border-wrap,
   .live-toggle-on,
-  .idle-layer {
+  .idle-layer-even,
+  .idle-layer-odd {
     animation: none !important;
   }
 }

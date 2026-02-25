@@ -495,7 +495,8 @@ export default function App() {
               position: "relative",
             }}
           >
-            <div className="idle-layer idle-layer-up" />
+            <div className="idle-layer idle-layer-even" />
+            <div className="idle-layer idle-layer-odd" />
           </div>
         )}
       </main>
