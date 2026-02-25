@@ -138,6 +138,20 @@ export class TmuxCapture {
     return this.exec(cmd).success;
   }
 
+  startPlainSession(cwd?: string): string | null {
+    const resolvedCwd = cwd?.startsWith("~")
+      ? cwd.replace("~", process.env.HOME ?? "/root")
+      : cwd;
+    const hasTmux = this.exec([...this.sshPrefix, "tmux", "has-session"]).success;
+    const tmuxCmd = hasTmux ? "new-window" : "new-session";
+    const cmd = [...this.sshPrefix, "tmux", tmuxCmd, "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}"];
+    if (!hasTmux) cmd.push("-d");
+    if (resolvedCwd) cmd.push("-c", resolvedCwd);
+    const result = this.exec(cmd);
+    if (!result.success) return null;
+    return result.stdout.trim();
+  }
+
   startSession(args?: string, cwd?: string, cliTool: CliTool = "claude"): string | null {
     const command = cliTool;
     const fullCmd = args ? `${command} ${args}` : command;

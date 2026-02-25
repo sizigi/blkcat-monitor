@@ -2,7 +2,7 @@ import { loadConfig } from "./config";
 import { AgentConnection } from "./connection";
 import { AgentListener } from "./listener";
 import { TmuxCapture, bunExec } from "./capture";
-import { discoverCliSessions } from "./discovery";
+import { discoverAllSessions } from "./discovery";
 import { hasChanged } from "./diff";
 import { HooksServer } from "./hooks-server";
 import { installHooks } from "./hooks-install";
@@ -50,7 +50,7 @@ async function main() {
   const hasAutoTarget = config.targets.some((t) => t.type === "auto");
   let autoSessions: SessionInfo[] = [];
   if (hasAutoTarget) {
-    autoSessions = discoverCliSessions();
+    autoSessions = discoverAllSessions();
     for (const s of autoSessions) {
       captures.set(s.id, new TmuxCapture(bunExec));
     }
@@ -141,16 +141,20 @@ async function main() {
   }
 
   function handleStartSession(args?: string, cwd?: string, name?: string, cliTool?: CliTool) {
-    const tool = cliTool ?? "claude";
     const localCap = new TmuxCapture(bunExec);
-    const paneId = localCap.startSession(args, cwd, tool);
+    let paneId: string | null;
+    if (cliTool) {
+      paneId = localCap.startSession(args, cwd, cliTool);
+    } else {
+      paneId = localCap.startPlainSession(cwd);
+    }
     if (!paneId) {
       console.error("Failed to start new session");
       return;
     }
     captures.set(paneId, localCap);
-    const sessionName = name || `${tool}${args ? ` ${args}` : ""}`;
-    const session: SessionInfo = { id: paneId, name: sessionName, target: "local", args: args || undefined, cliTool: tool };
+    const sessionName = name || (cliTool ? `${cliTool}${args ? ` ${args}` : ""}` : "shell");
+    const session: SessionInfo = { id: paneId, name: sessionName, target: "local", args: args || undefined, ...(cliTool ? { cliTool } : {}) };
     // Remove any existing entry with the same pane ID to prevent duplicates
     const existingIdx = manualSessions.findIndex((s) => s.id === paneId);
     if (existingIdx >= 0) manualSessions.splice(existingIdx, 1);
@@ -159,7 +163,7 @@ async function main() {
     manualSessions.push(session);
     const all = [...autoSessions, ...manualSessions];
     conn.updateSessions(all);
-    console.log(`Started new ${tool} session: ${paneId}`);
+    console.log(`Started new ${cliTool ?? "terminal"} session: ${paneId}`);
   }
 
   function handleListDirectory(requestId: string, path: string) {
@@ -392,7 +396,10 @@ async function main() {
       const lines = cap.capturePane(paneId);
       const prev = prevLines.get(paneId) ?? [];
       if (hasChanged(prev, lines)) {
-        const waitingForInput = detectWaitingForInput(lines);
+        // Only detect waiting-for-input for CLI tool sessions
+        const allSess = [...autoSessions, ...manualSessions];
+        const sess = allSess.find((s) => s.id === paneId);
+        const waitingForInput = sess?.cliTool ? detectWaitingForInput(lines) : false;
         const cursor = cap.getCursorPos(paneId);
         conn.sendOutput(paneId, lines, waitingForInput, cursor ?? undefined);
         prevLines.set(paneId, lines);
@@ -402,7 +409,7 @@ async function main() {
 
   if (hasAutoTarget) {
     setInterval(() => {
-      const fresh = discoverCliSessions();
+      const fresh = discoverAllSessions();
       const newSessions = fresh.filter((s) => !captures.has(s.id));
       // Expire old grace entries
       const now = Date.now();

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { discoverCliSessions } from "./discovery";
+import { discoverCliSessions, discoverAllSessions } from "./discovery";
 import type { ExecFn } from "./capture";
 
 describe("discoverCliSessions", () => {
@@ -89,5 +89,59 @@ describe("discoverCliSessions", () => {
   it("returns empty array when list-panes fails", () => {
     const exec: ExecFn = () => ({ success: false, stdout: "" });
     expect(discoverCliSessions(exec)).toEqual([]);
+  });
+});
+
+describe("discoverAllSessions", () => {
+  it("returns all panes including non-CLI ones", () => {
+    const exec: ExecFn = (cmd) => {
+      const joined = cmd.join(" ");
+      if (joined.includes("list-panes")) {
+        return {
+          success: true,
+          stdout: [
+            "dev:0.0\tdev\tclaude\t1000\t%0",
+            "dev:1.0\tdev\tvim\t1001\t%1",
+            "build:0.0\tbuild\tbash\t1002\t%2",
+            "web:0.0\tweb\tclaude\t1003\t%3",
+          ].join("\n") + "\n",
+        };
+      }
+      return { success: false, stdout: "" };
+    };
+
+    const sessions = discoverAllSessions(exec);
+    expect(sessions).toHaveLength(4);
+    expect(sessions[0]).toEqual({ id: "dev:0.0", name: "dev", target: "local", cliTool: "claude" });
+    expect(sessions[1]).toEqual({ id: "dev:1.0", name: "dev", target: "local" });
+    expect(sessions[2]).toEqual({ id: "build:0.0", name: "build", target: "local" });
+    expect(sessions[3]).toEqual({ id: "web:0.0", name: "web", target: "local", cliTool: "claude" });
+  });
+
+  it("deduplicates grouped tmux sessions", () => {
+    const exec: ExecFn = (cmd) => {
+      const joined = cmd.join(" ");
+      if (joined.includes("list-panes")) {
+        return {
+          success: true,
+          stdout: [
+            "1:0.0\t1\tbash\t1000\t%0",
+            "1-2:0.0\t1-2\tbash\t1000\t%0",
+            "1:1.0\t1\tclaude\t2000\t%1",
+          ].join("\n") + "\n",
+        };
+      }
+      return { success: false, stdout: "" };
+    };
+
+    const sessions = discoverAllSessions(exec);
+    expect(sessions).toHaveLength(2);
+    expect(sessions[0]).toEqual({ id: "1:0.0", name: "1", target: "local" });
+    expect(sessions[1]).toEqual({ id: "1:1.0", name: "1", target: "local", cliTool: "claude" });
+  });
+
+  it("returns empty array when list-panes fails", () => {
+    const exec: ExecFn = () => ({ success: false, stdout: "" });
+    expect(discoverAllSessions(exec)).toEqual([]);
   });
 });

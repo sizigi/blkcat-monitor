@@ -93,6 +93,16 @@ export default function App() {
   const [editingTopbarName, setEditingTopbarName] = useState(false);
   const [topbarEditValue, setTopbarEditValue] = useState("");
   const [navMode, setNavMode] = useState(false);
+  const [hideTmuxSessions, setHideTmuxSessions] = useState(() => {
+    try { return localStorage.getItem("blkcat:hideTmux") === "true"; } catch { return false; }
+  });
+  const toggleHideTmux = useCallback(() => {
+    setHideTmuxSessions((prev) => {
+      const next = !prev;
+      try { localStorage.setItem("blkcat:hideTmux", String(next)); } catch {}
+      return next;
+    });
+  }, []);
   const resizing = useRef(false);
   // Refs for values used in stable effects (avoids re-registering document listeners)
   const selectedMachineRef = useRef(selectedMachine);
@@ -270,6 +280,8 @@ export default function App() {
     onThemeChange: setTheme,
     themes,
     onDeselect: () => { setSelectedMachine(undefined); setSelectedSession(undefined); },
+    hideTmuxSessions,
+    onToggleHideTmux: toggleHideTmux,
   };
 
   return (

@@ -27,6 +27,10 @@ function resolveNodeCliTool(panePid: string, exec: ExecFn): CliTool | null {
 }
 
 export function discoverCliSessions(exec: ExecFn = bunExec): SessionInfo[] {
+  return discoverAllSessions(exec).filter((s) => !!s.cliTool);
+}
+
+export function discoverAllSessions(exec: ExecFn = bunExec): SessionInfo[] {
   const result = exec([
     "tmux", "list-panes", "-a",
     "-F", "#{session_name}:#{window_index}.#{pane_index}\t#{session_name}\t#{pane_current_command}\t#{pane_pid}\t#{pane_id}",
@@ -43,15 +47,16 @@ export function discoverCliSessions(exec: ExecFn = bunExec): SessionInfo[] {
     // #{pane_id} (e.g., %0) is unique per physical pane.
     if (tmuxPaneId && seenPaneIds.has(tmuxPaneId)) continue;
     if (tmuxPaneId) seenPaneIds.add(tmuxPaneId);
+
+    let cliTool: CliTool | undefined;
     if (CLI_COMMANDS.has(cmd)) {
-      found.push({ id: paneId, name: sessionName, target: "local", cliTool: cmd as CliTool });
+      cliTool = cmd as CliTool;
     } else if (HOST_RUNTIMES.has(cmd) && panePid) {
       // Node-based CLIs (codex, gemini) show as "node" in pane_current_command
-      const tool = resolveNodeCliTool(panePid, exec);
-      if (tool) {
-        found.push({ id: paneId, name: sessionName, target: "local", cliTool: tool });
-      }
+      cliTool = resolveNodeCliTool(panePid, exec) ?? undefined;
     }
+
+    found.push({ id: paneId, name: sessionName, target: "local", ...(cliTool ? { cliTool } : {}) });
   }
 
   return found;

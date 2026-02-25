@@ -178,6 +178,43 @@ describe("TmuxCapture", () => {
     expect(sendKeysCmd!.join(" ")).toContain("gemini --yolo");
   });
 
+  it("starts a plain session without sending any command", () => {
+    const cmds: string[][] = [];
+    const exec: ExecFn = (cmd) => {
+      cmds.push([...cmd]);
+      if (cmd.some(c => c === "has-session")) return { success: true, stdout: "" };
+      if (cmd.some(c => c === "new-window")) return { success: true, stdout: "dev:2.0\n" };
+      return { success: true, stdout: "" };
+    };
+    const capture = new TmuxCapture(exec);
+    const paneId = capture.startPlainSession();
+    expect(paneId).toBe("dev:2.0");
+    // Should NOT have any send-keys calls
+    const sendKeysCmds = cmds.filter(c => c.includes("send-keys"));
+    expect(sendKeysCmds).toHaveLength(0);
+  });
+
+  it("starts a plain session with cwd", () => {
+    const exec = mockExec({
+      "tmux has-session": { success: true, stdout: "" },
+      "tmux new-window -P -F #{session_name}:#{window_index}.#{pane_index} -c /home/user/project": {
+        success: true,
+        stdout: "dev:2.0\n",
+      },
+    });
+    const capture = new TmuxCapture(exec);
+    const paneId = capture.startPlainSession("/home/user/project");
+    expect(paneId).toBe("dev:2.0");
+  });
+
+  it("returns null when startPlainSession fails", () => {
+    const exec = mockExec({
+      "tmux has-session": { success: false, stdout: "" },
+    });
+    const capture = new TmuxCapture(exec);
+    expect(capture.startPlainSession()).toBeNull();
+  });
+
   it("lists directory entries", () => {
     const exec = mockExec({
       "ls -1 -p /home/user/projects": {
