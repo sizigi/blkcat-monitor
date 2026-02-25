@@ -24,10 +24,10 @@ describe("discoverCliSessions", () => {
 
     const sessions = discoverCliSessions(exec);
     expect(sessions).toHaveLength(4);
-    expect(sessions[0]).toEqual({ id: "dev:0.0", name: "dev", target: "local", cliTool: "claude", windowId: "dev:0", windowName: "claude" });
-    expect(sessions[1]).toEqual({ id: "web:0.0", name: "web", target: "local", cliTool: "claude", windowId: "web:0", windowName: "claude" });
-    expect(sessions[2]).toEqual({ id: "codex:0.0", name: "codex", target: "local", cliTool: "codex", windowId: "codex:0", windowName: "codex" });
-    expect(sessions[3]).toEqual({ id: "gemini:0.0", name: "gemini", target: "local", cliTool: "gemini", windowId: "gemini:0", windowName: "gemini" });
+    expect(sessions[0]).toEqual({ id: "dev:0.0", name: "dev", target: "local", cliTool: "claude", windowId: "dev:0", windowName: "claude", paneCommand: "claude" });
+    expect(sessions[1]).toEqual({ id: "web:0.0", name: "web", target: "local", cliTool: "claude", windowId: "web:0", windowName: "claude", paneCommand: "claude" });
+    expect(sessions[2]).toEqual({ id: "codex:0.0", name: "codex", target: "local", cliTool: "codex", windowId: "codex:0", windowName: "codex", paneCommand: "codex" });
+    expect(sessions[3]).toEqual({ id: "gemini:0.0", name: "gemini", target: "local", cliTool: "gemini", windowId: "gemini:0", windowName: "gemini", paneCommand: "gemini" });
   });
 
   it("detects node-based CLI tools via child process inspection", () => {
@@ -59,9 +59,9 @@ describe("discoverCliSessions", () => {
 
     const sessions = discoverCliSessions(exec);
     expect(sessions).toHaveLength(3);
-    expect(sessions[0]).toEqual({ id: "dev:0.0", name: "dev", target: "local", cliTool: "claude", windowId: "dev:0", windowName: "claude" });
-    expect(sessions[1]).toEqual({ id: "work:0.0", name: "work", target: "local", cliTool: "codex", windowId: "work:0", windowName: "node" });
-    expect(sessions[2]).toEqual({ id: "ai:0.0", name: "ai", target: "local", cliTool: "gemini", windowId: "ai:0", windowName: "node" });
+    expect(sessions[0]).toEqual({ id: "dev:0.0", name: "dev", target: "local", cliTool: "claude", windowId: "dev:0", windowName: "claude", paneCommand: "claude" });
+    expect(sessions[1]).toEqual({ id: "work:0.0", name: "work", target: "local", cliTool: "codex", windowId: "work:0", windowName: "node", paneCommand: "node" });
+    expect(sessions[2]).toEqual({ id: "ai:0.0", name: "ai", target: "local", cliTool: "gemini", windowId: "ai:0", windowName: "node", paneCommand: "node" });
   });
 
   it("deduplicates grouped tmux sessions sharing the same physical pane", () => {
@@ -81,7 +81,7 @@ describe("discoverCliSessions", () => {
 
     const sessions = discoverCliSessions(exec);
     expect(sessions).toHaveLength(1);
-    expect(sessions[0]).toEqual({ id: "1:2.0", name: "1", target: "local", cliTool: "claude", windowId: "1:2", windowName: "claude" });
+    expect(sessions[0]).toEqual({ id: "1:2.0", name: "1", target: "local", cliTool: "claude", windowId: "1:2", windowName: "claude", paneCommand: "claude" });
   });
 
   it("returns empty array when list-panes fails", () => {
@@ -110,10 +110,10 @@ describe("discoverAllSessions", () => {
 
     const sessions = discoverAllSessions(exec);
     expect(sessions).toHaveLength(4);
-    expect(sessions[0]).toEqual({ id: "dev:0.0", name: "dev", target: "local", cliTool: "claude", windowId: "dev:0", windowName: "claude" });
-    expect(sessions[1]).toEqual({ id: "dev:1.0", name: "dev", target: "local", windowId: "dev:1", windowName: "vim" });
-    expect(sessions[2]).toEqual({ id: "build:0.0", name: "build", target: "local", windowId: "build:0", windowName: "bash" });
-    expect(sessions[3]).toEqual({ id: "web:0.0", name: "web", target: "local", cliTool: "claude", windowId: "web:0", windowName: "claude" });
+    expect(sessions[0]).toEqual({ id: "dev:0.0", name: "dev", target: "local", cliTool: "claude", windowId: "dev:0", windowName: "claude", paneCommand: "claude" });
+    expect(sessions[1]).toEqual({ id: "dev:1.0", name: "dev", target: "local", windowId: "dev:1", windowName: "vim", paneCommand: "vim" });
+    expect(sessions[2]).toEqual({ id: "build:0.0", name: "build", target: "local", windowId: "build:0", windowName: "bash", paneCommand: "bash" });
+    expect(sessions[3]).toEqual({ id: "web:0.0", name: "web", target: "local", cliTool: "claude", windowId: "web:0", windowName: "claude", paneCommand: "claude" });
   });
 
   it("groups panes in the same window by windowId", () => {
@@ -162,8 +162,8 @@ describe("discoverAllSessions", () => {
 
     const sessions = discoverAllSessions(exec);
     expect(sessions).toHaveLength(2);
-    expect(sessions[0]).toEqual({ id: "1:0.0", name: "1", target: "local", windowId: "1:0", windowName: "bash" });
-    expect(sessions[1]).toEqual({ id: "1:1.0", name: "1", target: "local", cliTool: "claude", windowId: "1:1", windowName: "claude" });
+    expect(sessions[0]).toEqual({ id: "1:0.0", name: "1", target: "local", windowId: "1:0", windowName: "bash", paneCommand: "bash" });
+    expect(sessions[1]).toEqual({ id: "1:1.0", name: "1", target: "local", cliTool: "claude", windowId: "1:1", windowName: "claude", paneCommand: "claude" });
   });
 
   it("returns empty array when list-panes fails", () => {
