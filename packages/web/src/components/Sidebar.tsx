@@ -412,6 +412,7 @@ export function Sidebar({
                   className="sidebar-session-row"
                   draggable={!!onReorderSession || !!onJoinPane}
                   onDragStart={(e) => {
+                    e.stopPropagation();
                     dragSessionRef.current = {
                       machineId: machine.machineId,
                       index: sessionIndex,
@@ -460,9 +461,11 @@ export function Sidebar({
                     display: "flex",
                     alignItems: "center",
                     background: isSelected ? "var(--bg-tertiary)" : "transparent",
+                    userSelect: "none",
                   }}
                 >
                   <button
+                    draggable={false}
                     onClick={() => onSelectSession(machine.machineId, session.id)}
                     data-testid={`session-${session.id}`}
                     style={{
@@ -485,7 +488,7 @@ export function Sidebar({
                     {sessionIndex < 9 && (
                       <span className="shortcut-badge shortcut-badge-session">{sessionIndex + 1}</span>
                     )}
-                    {onReorderSession && (
+                    {(onReorderSession || onJoinPane) && (
                       <span className="drag-handle" style={{ lineHeight: 1, userSelect: "none", flexShrink: 0 }}>
                         <GripDots size={10} />
                       </span>
@@ -592,6 +595,7 @@ export function Sidebar({
                   </button>
                   {isCli && onSessionSettings && (
                     <button
+                      draggable={false}
                       onClick={(e) => {
                         e.stopPropagation();
                         onSessionSettings(machine.machineId, session.id);
@@ -631,6 +635,7 @@ export function Sidebar({
                     }
                     return (
                       <button
+                        draggable={false}
                         onClick={(e) => {
                           e.stopPropagation();
                           setReloadTarget({ machineId: machine.machineId, session });
@@ -654,6 +659,7 @@ export function Sidebar({
                   })()}
                   {onCloseSession && (
                     <button
+                      draggable={false}
                       data-testid={`close-session-${session.id}`}
                       onClick={(e) => {
                         e.stopPropagation();
