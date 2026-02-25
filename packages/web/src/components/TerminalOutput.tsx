@@ -268,6 +268,17 @@ export function TerminalOutput({ sessionKey, lines, cursor, logMapRef, scrollbac
     term.attachCustomKeyEventHandler((event) => {
       if (event.type !== "keydown") return true;
 
+      // Ctrl+C / Cmd+C: copy selected text if there's a selection,
+      // otherwise let it through as terminal interrupt (SIGINT)
+      if ((event.ctrlKey || event.metaKey) && event.key === "c") {
+        if (term.hasSelection()) {
+          navigator.clipboard.writeText(term.getSelection()).catch(() => {});
+          term.clearSelection();
+          return false;
+        }
+        return true; // no selection → send ^C to terminal
+      }
+
       // Intercept Ctrl+V / Cmd+V: read clipboard ourselves and send as data.
       // Without this, xterm sends raw \x16 which Claude Code interprets as
       // "paste image" rather than receiving the actual clipboard text.

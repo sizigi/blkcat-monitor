@@ -124,10 +124,13 @@ export function Sidebar({
         flexShrink: 0,
       }}
     >
-      <div style={{ flex: 1, overflowY: "auto" }} onClick={(e) => { if (e.target === e.currentTarget && onDeselect) onDeselect(); }}>
+      <div style={{ flex: 1, overflowY: "auto" }}>
       <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <h2 style={{ fontSize: 14, fontWeight: 600, fontFamily: "sans-serif", letterSpacing: "0.02em" }}>BLKCAT Monitor</h2>
+          <h2
+            onClick={() => onDeselect?.()}
+            style={{ fontSize: 14, fontWeight: 600, fontFamily: "sans-serif", letterSpacing: "0.02em", cursor: "pointer" }}
+          >BLKCAT Monitor</h2>
           {themes && onThemeChange && (
             <span style={{ position: "relative" }}>
               <button
