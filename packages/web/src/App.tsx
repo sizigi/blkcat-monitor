@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
-import { useSocket, type OutputLine } from "./hooks/useSocket";
+import { useSocket } from "./hooks/useSocket";
+import { useSessionOutput } from "./hooks/useSessionOutput";
 import { useAgents } from "./hooks/useAgents";
 import { useDisplayNames } from "./hooks/useDisplayNames";
 import { useIsMobile } from "./hooks/useIsMobile";
@@ -7,11 +8,13 @@ import { useSidebarOrder } from "./hooks/useSidebarOrder";
 import { useTheme } from "./hooks/useTheme";
 import { Sidebar } from "./components/Sidebar";
 import { SessionDetail } from "./components/SessionDetail";
+import { SplitView } from "./components/SplitView";
 import { EventFeed } from "./components/EventFeed";
 import { NotificationList } from "./components/NotificationList";
 import { SkillsMatrix } from "./components/SkillsMatrix";
 import { ProjectSettingsModal } from "./components/ProjectSettingsModal";
 import { Menu, Pencil, ClipboardList, Bell, Settings, ChevronUp } from "./components/Icons";
+import type { SessionInfo } from "@blkcat/shared";
 
 const WS_URL =
   (import.meta as any).env?.VITE_WS_URL ??
@@ -21,37 +24,8 @@ const DEFAULT_SIDEBAR_WIDTH = 250;
 const MIN_SIDEBAR_WIDTH = 160;
 const MAX_SIDEBAR_WIDTH = 500;
 
-/** Subscribe to output changes for a specific session. Only triggers a
- *  re-render when the selected session's output changes — not when any
- *  other session receives new data. */
-function useSessionOutput(
-  outputMapRef: React.RefObject<Map<string, OutputLine>>,
-  subscribeOutput: (cb: (key: string) => void) => () => void,
-  machineId?: string,
-  sessionId?: string,
-): { lines: string[]; cursor?: { x: number; y: number } } {
-  const [output, setOutput] = useState<{ lines: string[]; cursor?: { x: number; y: number } }>({ lines: [] });
-  const targetKey = machineId && sessionId ? `${machineId}:${sessionId}` : "";
-
-  useEffect(() => {
-    if (!targetKey) { setOutput({ lines: [] }); return; }
-
-    const current = outputMapRef.current?.get(targetKey);
-    if (current) setOutput({ lines: current.lines, cursor: current.cursor });
-
-    return subscribeOutput((key) => {
-      if (key === targetKey) {
-        const o = outputMapRef.current?.get(key);
-        if (o) setOutput({ lines: o.lines, cursor: o.cursor });
-      }
-    });
-  }, [targetKey, outputMapRef, subscribeOutput]);
-
-  return output;
-}
-
 export default function App() {
-  const { connected, machines, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory, createDirectory, deploySkills, removeSkills, getSettings, updateSettings, subscribeDeployResult, subscribeSettingsSnapshot, subscribeSettingsResult, setDisplayName, subscribeDisplayNames, subscribeReloadResult } = useSocket(WS_URL);
+  const { connected, machines, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory, createDirectory, deploySkills, removeSkills, getSettings, updateSettings, subscribeDeployResult, subscribeSettingsSnapshot, subscribeSettingsResult, setDisplayName, subscribeDisplayNames, subscribeReloadResult, joinPane, breakPane, swapPane } = useSocket(WS_URL);
   const { agents, addAgent, removeAgent } = useAgents();
   const { getMachineName, getSessionName, setMachineName, setSessionName } = useDisplayNames({
     sendDisplayName: setDisplayName,
@@ -86,6 +60,7 @@ export default function App() {
   }, [connected]);
   const [selectedMachine, setSelectedMachine] = useState<string>();
   const [selectedSession, setSelectedSession] = useState<string>();
+  const [selectedGroup, setSelectedGroup] = useState<string>();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
   const [panelTab, setPanelTab] = useState<"events" | "notifications" | "skills" | null>(null);
@@ -111,6 +86,14 @@ export default function App() {
   selectedSessionRef.current = selectedSession;
 
   const sessionOutput = useSessionOutput(outputMapRef, subscribeOutput, selectedMachine, selectedSession);
+
+  // Compute panes for split view when a group is selected
+  const selectedGroupPanes = useMemo<SessionInfo[]>(() => {
+    if (!selectedMachine || !selectedGroup) return [];
+    const machine = machines.find((m) => m.machineId === selectedMachine);
+    if (!machine) return [];
+    return machine.sessions.filter((s) => s.windowId === selectedGroup);
+  }, [machines, selectedMachine, selectedGroup]);
 
   // Keep sidebar order in sync with server-provided machines
   const orderedMachines = useMemo(() => applyOrder(machines), [applyOrder, machines]);
@@ -282,6 +265,14 @@ export default function App() {
     onDeselect: () => { setSelectedMachine(undefined); setSelectedSession(undefined); },
     hideTmuxSessions,
     onToggleHideTmux: toggleHideTmux,
+    selectedGroup,
+    onSelectGroup: (machineId: string, windowId: string) => {
+      setSelectedMachine(machineId);
+      setSelectedSession(undefined);
+      setSelectedGroup(windowId);
+    },
+    onJoinPane: joinPane,
+    onBreakPane: breakPane,
   };
 
   return (
@@ -298,6 +289,7 @@ export default function App() {
             onSelectSession={(m, s) => {
               setSelectedMachine(m);
               setSelectedSession(s);
+              setSelectedGroup(undefined);
               clearNotifications(`${m}:${s}`);
               setDrawerOpen(false);
             }}
@@ -313,6 +305,7 @@ export default function App() {
               onSelectSession={(m, s) => {
                 setSelectedMachine(m);
                 setSelectedSession(s);
+                setSelectedGroup(undefined);
                 clearNotifications(`${m}:${s}`);
               }}
               onCollapse={() => setSidebarCollapsed(true)}
@@ -482,7 +475,22 @@ export default function App() {
             <span style={{ fontWeight: 400, opacity: 0.7 }}>Esc cancel</span>
           </div>
         )}
-        {selectedMachine && selectedSession ? (
+        {selectedMachine && selectedGroup && selectedGroupPanes.length > 1 ? (
+          <SplitView
+            machineId={selectedMachine}
+            panes={selectedGroupPanes}
+            isMobile={isMobile}
+            outputMapRef={outputMapRef}
+            subscribeOutput={subscribeOutput}
+            logMapRef={logMapRef}
+            scrollbackMapRef={scrollbackMapRef}
+            subscribeScrollback={subscribeScrollback}
+            onRequestScrollback={requestScrollback}
+            onSendInput={sendInput}
+            onSendResize={sendResize}
+            getSessionName={(m, s, d) => getSessionName ? getSessionName(m, s, d) : d}
+          />
+        ) : selectedMachine && selectedSession ? (
           <SessionDetail
             machineId={selectedMachine}
             sessionId={selectedSession}

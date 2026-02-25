@@ -38,6 +38,10 @@ interface SidebarProps {
   themes?: { id: string; label: string; accent: string; bg: string }[];
   hideTmuxSessions?: boolean;
   onToggleHideTmux?: () => void;
+  selectedGroup?: string;
+  onSelectGroup?: (machineId: string, windowId: string) => void;
+  onJoinPane?: (machineId: string, sourceSessionId: string, targetSessionId: string) => void;
+  onBreakPane?: (machineId: string, sessionId: string) => void;
 }
 
 export function Sidebar({
@@ -73,6 +77,10 @@ export function Sidebar({
   themes,
   hideTmuxSessions,
   onToggleHideTmux,
+  selectedGroup,
+  onSelectGroup,
+  onJoinPane,
+  onBreakPane,
 }: SidebarProps) {
   const [modalMachineId, setModalMachineId] = useState<string | null>(null);
   const [reloadTarget, setReloadTarget] = useState<{ machineId: string; session: SessionInfo } | null>(null);
@@ -668,19 +676,79 @@ export function Sidebar({
                   const idx = machine.sessions.indexOf(session);
                   return renderSession(session, idx);
                 })}
-                {!hideTmuxSessions && tmuxSessions.length > 0 && (
-                  <>
-                    {showGroupLabels && (
-                      <div style={{ padding: "4px 16px 2px", fontSize: 10, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                        Terminals
-                      </div>
-                    )}
-                    {tmuxSessions.map((session) => {
-                      const idx = machine.sessions.indexOf(session);
-                      return renderSession(session, idx);
-                    })}
-                  </>
-                )}
+                {!hideTmuxSessions && tmuxSessions.length > 0 && (() => {
+                  // Group terminal sessions by windowId
+                  interface WindowGroup { windowId: string; windowName?: string; panes: SessionInfo[] }
+                  const windowGroups: WindowGroup[] = [];
+                  const windowMap = new Map<string, WindowGroup>();
+                  for (const session of tmuxSessions) {
+                    const wid = session.windowId;
+                    if (!wid) {
+                      windowGroups.push({ windowId: session.id, panes: [session] });
+                      continue;
+                    }
+                    let group = windowMap.get(wid);
+                    if (!group) {
+                      group = { windowId: wid, windowName: session.windowName, panes: [] };
+                      windowMap.set(wid, group);
+                      windowGroups.push(group);
+                    }
+                    group.panes.push(session);
+                  }
+
+                  return (
+                    <>
+                      {showGroupLabels && (
+                        <div style={{ padding: "4px 16px 2px", fontSize: 10, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                          Terminals
+                        </div>
+                      )}
+                      {windowGroups.map((group) => {
+                        if (group.panes.length === 1) {
+                          // Single-pane window: render flat
+                          const idx = machine.sessions.indexOf(group.panes[0]);
+                          return renderSession(group.panes[0], idx);
+                        }
+                        // Multi-pane window group
+                        const isGroupSelected = selectedGroup === group.windowId && selectedMachine === machine.machineId;
+                        return (
+                          <div key={group.windowId}>
+                            <div
+                              onClick={() => onSelectGroup?.(machine.machineId, group.windowId)}
+                              style={{
+                                padding: "4px 16px",
+                                fontSize: 12,
+                                fontWeight: 600,
+                                color: isGroupSelected ? "var(--accent)" : "var(--text-muted)",
+                                cursor: "pointer",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 6,
+                                background: isGroupSelected ? "var(--bg-tertiary)" : "transparent",
+                              }}
+                            >
+                              <span style={{ fontSize: 10 }}>{"\u25E8"}</span>
+                              <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {group.windowName || group.windowId}
+                              </span>
+                              <span style={{ fontSize: 10, color: "var(--text-muted)" }}>
+                                {group.panes.length}
+                              </span>
+                            </div>
+                            {group.panes.map((pane) => {
+                              const idx = machine.sessions.indexOf(pane);
+                              return (
+                                <div key={pane.id} style={{ paddingLeft: 12 }}>
+                                  {renderSession(pane, idx)}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })}
+                    </>
+                  );
+                })()}
               </>
             );
           })()}

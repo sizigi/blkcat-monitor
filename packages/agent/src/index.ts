@@ -177,6 +177,46 @@ async function main() {
     if (sess) sess.name = name;
   }
 
+  function triggerRediscovery() {
+    if (!hasAutoTarget) return;
+    const fresh = discoverAllSessions();
+    const newSessions = fresh.filter((s) => !captures.has(s.id));
+    const now = Date.now();
+    for (const [id, ts] of reloadGracePanes) {
+      if (now - ts > RELOAD_GRACE_MS) reloadGracePanes.delete(id);
+    }
+    const goneSessions = autoSessions.filter(
+      (s) => !fresh.find((f) => f.id === s.id) && !reloadGracePanes.has(s.id)
+    );
+    if (newSessions.length > 0 || goneSessions.length > 0) {
+      for (const s of newSessions) captures.set(s.id, new TmuxCapture(bunExec));
+      for (const s of goneSessions) { captures.delete(s.id); prevLines.delete(s.id); }
+    }
+    const manualIds = new Set(manualSessions.map((s) => s.id));
+    autoSessions = fresh.filter((s) => !manualIds.has(s.id));
+    const all = [...autoSessions, ...manualSessions];
+    conn.updateSessions(all);
+    console.log(`Sessions updated: ${all.length} total`);
+  }
+
+  function handleJoinPane(sourceSessionId: string, targetSessionId: string) {
+    const cap = captures.get(sourceSessionId) ?? new TmuxCapture(bunExec);
+    cap.joinPane(sourceSessionId, targetSessionId);
+    triggerRediscovery();
+  }
+
+  function handleBreakPane(sessionId: string) {
+    const cap = captures.get(sessionId) ?? new TmuxCapture(bunExec);
+    cap.breakPane(sessionId);
+    triggerRediscovery();
+  }
+
+  function handleSwapPane(sessionId1: string, sessionId2: string) {
+    const cap = captures.get(sessionId1) ?? new TmuxCapture(bunExec);
+    cap.swapPane(sessionId1, sessionId2);
+    triggerRediscovery();
+  }
+
   function handleListDirectory(requestId: string, path: string) {
     // Resolve ~ so the web UI receives absolute paths
     const resolved = path.startsWith("~")
@@ -285,6 +325,9 @@ async function main() {
       onGetSettings: handleGetSettings,
       onUpdateSettings: handleUpdateSettings,
       onRenameSession: handleRenameSession,
+      onJoinPane: handleJoinPane,
+      onBreakPane: handleBreakPane,
+      onSwapPane: handleSwapPane,
     });
     // When a new server connects, clear prevLines so the next poll cycle
     // re-sends the current pane content for all sessions.
@@ -309,6 +352,9 @@ async function main() {
       onGetSettings: handleGetSettings,
       onUpdateSettings: handleUpdateSettings,
       onRenameSession: handleRenameSession,
+      onJoinPane: handleJoinPane,
+      onBreakPane: handleBreakPane,
+      onSwapPane: handleSwapPane,
       getSessions: () => [...autoSessions, ...manualSessions],
       onReconnect: () => { prevLines.clear(); },
     });
@@ -421,30 +467,7 @@ async function main() {
   }, config.pollInterval);
 
   if (hasAutoTarget) {
-    setInterval(() => {
-      const fresh = discoverAllSessions();
-      const newSessions = fresh.filter((s) => !captures.has(s.id));
-      // Expire old grace entries
-      const now = Date.now();
-      for (const [id, ts] of reloadGracePanes) {
-        if (now - ts > RELOAD_GRACE_MS) reloadGracePanes.delete(id);
-      }
-      // Skip removing sessions that are within the reload grace period
-      const goneSessions = autoSessions.filter(
-        (s) => !fresh.find((f) => f.id === s.id) && !reloadGracePanes.has(s.id)
-      );
-
-      if (newSessions.length > 0 || goneSessions.length > 0) {
-        for (const s of newSessions) captures.set(s.id, new TmuxCapture(bunExec));
-        for (const s of goneSessions) { captures.delete(s.id); prevLines.delete(s.id); }
-        // Exclude manually started sessions so auto-discovery doesn't overwrite their names
-        const manualIds = new Set(manualSessions.map((s) => s.id));
-        autoSessions = fresh.filter((s) => !manualIds.has(s.id));
-        const all = [...autoSessions, ...manualSessions];
-        conn.updateSessions(all);
-        console.log(`Sessions updated: ${all.length} total`);
-      }
-    }, 30000);
+    setInterval(() => triggerRediscovery(), 30000);
   }
 }
 

@@ -7,6 +7,8 @@ export interface SessionInfo {
   host?: string;
   args?: string;
   cliTool?: CliTool;
+  windowId?: string;
+  windowName?: string;
 }
 
 export type CliTool = "claude" | "codex" | "gemini";
@@ -241,7 +243,24 @@ export interface ServerRenameSessionMessage {
   name: string;
 }
 
-export type ServerToAgentMessage = ServerInputMessage | ServerStartSessionMessage | ServerCloseSessionMessage | ServerResizeMessage | ServerRequestScrollbackMessage | ServerReloadSessionMessage | ServerListDirectoryMessage | ServerDeploySkillsMessage | ServerGetSettingsMessage | ServerUpdateSettingsMessage | ServerRemoveSkillsMessage | ServerCreateDirectoryMessage | ServerRenameSessionMessage;
+export interface ServerJoinPaneMessage {
+  type: "join_pane";
+  sourceSessionId: string;
+  targetSessionId: string;
+}
+
+export interface ServerBreakPaneMessage {
+  type: "break_pane";
+  sessionId: string;
+}
+
+export interface ServerSwapPaneMessage {
+  type: "swap_pane";
+  sessionId1: string;
+  sessionId2: string;
+}
+
+export type ServerToAgentMessage = ServerInputMessage | ServerStartSessionMessage | ServerCloseSessionMessage | ServerResizeMessage | ServerRequestScrollbackMessage | ServerReloadSessionMessage | ServerListDirectoryMessage | ServerDeploySkillsMessage | ServerGetSettingsMessage | ServerUpdateSettingsMessage | ServerRemoveSkillsMessage | ServerCreateDirectoryMessage | ServerRenameSessionMessage | ServerJoinPaneMessage | ServerBreakPaneMessage | ServerSwapPaneMessage;
 
 // --- Server -> Dashboard messages ---
 
@@ -459,7 +478,27 @@ export interface DashboardCreateDirectoryMessage {
   path: string;
 }
 
-export type DashboardToServerMessage = DashboardInputMessage | DashboardStartSessionMessage | DashboardCloseSessionMessage | DashboardResizeMessage | DashboardRequestScrollbackMessage | DashboardReloadSessionMessage | DashboardListDirectoryMessage | DashboardDeploySkillsMessage | DashboardGetSettingsMessage | DashboardUpdateSettingsMessage | DashboardRemoveSkillsMessage | DashboardSetDisplayNameMessage | DashboardCreateDirectoryMessage;
+export interface DashboardJoinPaneMessage {
+  type: "join_pane";
+  machineId: string;
+  sourceSessionId: string;
+  targetSessionId: string;
+}
+
+export interface DashboardBreakPaneMessage {
+  type: "break_pane";
+  machineId: string;
+  sessionId: string;
+}
+
+export interface DashboardSwapPaneMessage {
+  type: "swap_pane";
+  machineId: string;
+  sessionId1: string;
+  sessionId2: string;
+}
+
+export type DashboardToServerMessage = DashboardInputMessage | DashboardStartSessionMessage | DashboardCloseSessionMessage | DashboardResizeMessage | DashboardRequestScrollbackMessage | DashboardReloadSessionMessage | DashboardListDirectoryMessage | DashboardDeploySkillsMessage | DashboardGetSettingsMessage | DashboardUpdateSettingsMessage | DashboardRemoveSkillsMessage | DashboardSetDisplayNameMessage | DashboardCreateDirectoryMessage | DashboardJoinPaneMessage | DashboardBreakPaneMessage | DashboardSwapPaneMessage;
 
 // --- Outbound agent info ---
 

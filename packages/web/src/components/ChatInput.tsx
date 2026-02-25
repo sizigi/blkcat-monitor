@@ -4,6 +4,8 @@ interface ChatInputProps {
   onSendText: (text: string) => void;
   onSendKey: (key: string) => void;
   onSendData?: (data: string) => void;
+  initialValue?: string;
+  onInputChange?: (value: string) => void;
 }
 
 const KEY_BUTTONS: { label: string; keys: string[] }[] = [
@@ -200,8 +202,15 @@ function DPad({ onDirection }: { onDirection: (dir: "Up" | "Down" | "Left" | "Ri
   );
 }
 
-export function ChatInput({ onSendText, onSendKey, onSendData }: ChatInputProps) {
-  const [text, setText] = useState("");
+export function ChatInput({ onSendText, onSendKey, onSendData, initialValue, onInputChange }: ChatInputProps) {
+  const [text, setTextRaw] = useState(initialValue ?? "");
+  const setText = useCallback((v: string | ((prev: string) => string)) => {
+    setTextRaw((prev) => {
+      const next = typeof v === "function" ? v(prev) : v;
+      onInputChange?.(next);
+      return next;
+    });
+  }, [onInputChange]);
   const [liveMode, setLiveMode] = useState(false);
   const liveModeRef = useRef(false);
   liveModeRef.current = liveMode;

@@ -33,7 +33,7 @@ export function discoverCliSessions(exec: ExecFn = bunExec): SessionInfo[] {
 export function discoverAllSessions(exec: ExecFn = bunExec): SessionInfo[] {
   const result = exec([
     "tmux", "list-panes", "-a",
-    "-F", "#{session_name}:#{window_index}.#{pane_index}\t#{session_name}\t#{pane_current_command}\t#{pane_pid}\t#{pane_id}",
+    "-F", "#{session_name}:#{window_index}.#{pane_index}\t#{session_name}\t#{pane_current_command}\t#{pane_pid}\t#{pane_id}\t#{window_name}",
   ]);
   if (!result.success) return [];
 
@@ -41,7 +41,7 @@ export function discoverAllSessions(exec: ExecFn = bunExec): SessionInfo[] {
   const seenPaneIds = new Set<string>();
   for (const line of result.stdout.trim().split("\n")) {
     if (!line) continue;
-    const [paneId, sessionName, cmd, panePid, tmuxPaneId] = line.split("\t");
+    const [paneId, sessionName, cmd, panePid, tmuxPaneId, windowName] = line.split("\t");
     // Deduplicate: tmux grouped sessions list the same physical pane
     // under multiple session names (e.g., "1:2.0" and "1-2:2.0").
     // #{pane_id} (e.g., %0) is unique per physical pane.
@@ -56,7 +56,18 @@ export function discoverAllSessions(exec: ExecFn = bunExec): SessionInfo[] {
       cliTool = resolveNodeCliTool(panePid, exec) ?? undefined;
     }
 
-    found.push({ id: paneId, name: sessionName, target: "local", ...(cliTool ? { cliTool } : {}) });
+    // Derive windowId from pane ID: "session:window.pane" → "session:window"
+    const dotIdx = paneId.lastIndexOf(".");
+    const windowId = dotIdx >= 0 ? paneId.substring(0, dotIdx) : undefined;
+
+    found.push({
+      id: paneId,
+      name: sessionName,
+      target: "local",
+      ...(cliTool ? { cliTool } : {}),
+      ...(windowId ? { windowId } : {}),
+      ...(windowName ? { windowName } : {}),
+    });
   }
 
   return found;
