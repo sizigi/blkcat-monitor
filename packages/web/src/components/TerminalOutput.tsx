@@ -251,13 +251,6 @@ export function TerminalOutput({ sessionKey, lines, cursor, logMapRef, scrollbac
     };
     if (xtermTextarea) xtermTextarea.addEventListener("focus", onXtermFocus);
 
-    // Prevent xterm's native paste handler — we handle Ctrl+V/Cmd+V ourselves
-    // in attachCustomKeyEventHandler via clipboard.readText(). Without this,
-    // the browser paste event fires on xterm's hidden textarea, causing a
-    // duplicate send.
-    const onPaste = (e: Event) => { e.preventDefault(); };
-    if (xtermTextarea) xtermTextarea.addEventListener("paste", onPaste);
-
     const dataDisposable = term.onData((data) => { if (!scrollModeRef.current) onDataRef.current?.(data); });
 
     const selDisposable = term.onSelectionChange(() => {
@@ -447,7 +440,6 @@ export function TerminalOutput({ sessionKey, lines, cursor, logMapRef, scrollbac
       selDisposable.dispose();
       themeObserver.disconnect();
       if (xtermTextarea) xtermTextarea.removeEventListener("focus", onXtermFocus);
-      if (xtermTextarea) xtermTextarea.removeEventListener("paste", onPaste);
       term.dispose();
     };
   }, []);
