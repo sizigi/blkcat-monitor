@@ -586,7 +586,7 @@ export function TerminalOutput({ sessionKey, lines, cursor, logMapRef, scrollbac
   };
 
   return (
-    <div style={{ position: "relative", flex: 1, minHeight: 0 }}>
+    <div style={{ position: "relative", flex: 1, minHeight: 0, minWidth: 0 }}>
       <div
         ref={containerRef}
         style={{ width: "100%", height: "100%", overflow: "hidden", background: "var(--bg)", touchAction: "none" }}

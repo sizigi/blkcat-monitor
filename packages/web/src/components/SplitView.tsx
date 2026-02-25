@@ -128,13 +128,14 @@ export function SplitView({
   }, [machineId, activePaneId, onSendInput]);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, minWidth: 0 }}>
       <div
         style={{
           display: "flex",
           flexDirection: isMobile ? "column" : "row",
           flex: 1,
           minHeight: 0,
+          minWidth: 0,
         }}
       >
         {panes.map((pane, i) => (

@@ -728,9 +728,54 @@ export function Sidebar({
                               }}
                             >
                               <span style={{ fontSize: 10 }}>{"\u25E8"}</span>
-                              <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {editingId === `group:${group.windowId}` ? (
+                                <input
+                                  autoFocus
+                                  value={editValue}
+                                  onChange={(e) => setEditValue(e.target.value)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onBlur={() => {
+                                    const trimmed = editValue.trim();
+                                    if (trimmed && trimmed !== (group.windowName || group.windowId)) {
+                                      onRenameSession?.(machine.machineId, group.panes[0].id, trimmed);
+                                    }
+                                    setEditingId(null);
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      const trimmed = editValue.trim();
+                                      if (trimmed) onRenameSession?.(machine.machineId, group.panes[0].id, trimmed);
+                                      setEditingId(null);
+                                    } else if (e.key === "Escape") {
+                                      setEditingId(null);
+                                    }
+                                  }}
+                                  style={{
+                                    flex: 1,
+                                    background: "var(--bg)",
+                                    color: "var(--text)",
+                                    border: "1px solid var(--accent)",
+                                    borderRadius: 3,
+                                    padding: "1px 4px",
+                                    fontSize: 12,
+                                    fontWeight: 600,
+                                    outline: "none",
+                                  }}
+                                />
+                              ) : (
+                              <span
+                                style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                                onDoubleClick={(e) => {
+                                  if (!onRenameSession) return;
+                                  e.stopPropagation();
+                                  setEditingId(`group:${group.windowId}`);
+                                  setEditValue(group.windowName || group.windowId);
+                                }}
+                                title="Double-click to rename"
+                              >
                                 {group.windowName || group.windowId}
                               </span>
+                              )}
                               <span style={{ fontSize: 10, color: "var(--text-muted)" }}>
                                 {group.panes.length}
                               </span>
