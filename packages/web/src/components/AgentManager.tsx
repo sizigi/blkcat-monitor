@@ -43,7 +43,7 @@ export function AgentManager({ agents, onAdd, onRemove }: AgentManagerProps) {
           justifyContent: "space-between",
         }}
       >
-        <h2 style={{ fontSize: 16, fontWeight: 400 }}>Outbound Agents</h2>
+        <h2 style={{ fontSize: 14, fontWeight: 600, fontFamily: "sans-serif", letterSpacing: "0.02em" }}>Outbound Agents</h2>
         <button
           data-testid="add-agent-btn"
           onClick={() => {

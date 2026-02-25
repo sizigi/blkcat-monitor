@@ -58,10 +58,10 @@ describe("Sidebar", () => {
     );
 
     const btn = screen.getByTestId("new-session-m1");
-    expect(btn.textContent).toBe("+");
+    expect(btn.querySelector("svg")).toBeTruthy();
 
     fireEvent.click(btn);
-    expect(btn.textContent).toBe("+");
+    expect(btn.querySelector("svg")).toBeTruthy();
   });
 
   it("shows red text for sessions with --dangerously-skip-permissions", () => {

@@ -125,7 +125,7 @@ export function Sidebar({
       <div style={{ flex: 1, overflowY: "auto" }}>
       <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 400 }}>BC Monitor</h2>
+          <h2 style={{ fontSize: 14, fontWeight: 600, fontFamily: "sans-serif", letterSpacing: "0.02em" }}>BLKCAT Monitor</h2>
           {themes && onThemeChange && (
             <span style={{ position: "relative" }}>
               <button
