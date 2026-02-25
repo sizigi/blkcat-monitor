@@ -206,13 +206,13 @@ html, body, #root {
 }
 
 /* Idle screen: single diagonal layer with background-position scroll */
-@keyframes idle-drift {
+@keyframes idle-scroll {
   from { background-position: 0 0; }
-  to { background-position: -300px 80px; }
+  to { background-position: -100px 0; }
 }
 .idle-layer {
   position: absolute;
-  inset: -40%;
+  inset: 0;
   background-image: url(/blk_cat_cry.gif);
   background-size: 100px 100px;
   background-repeat: repeat;
@@ -220,10 +220,9 @@ html, body, #root {
   pointer-events: none;
   mix-blend-mode: multiply;
   opacity: 0.65;
-  transform: rotate(-21deg);
 }
 .idle-layer-up {
-  animation: idle-drift 10s linear infinite;
+  animation: idle-scroll 3s linear infinite;
 }
 /* Light themes: lower opacity */
 [data-theme="github-light"] .idle-layer,
