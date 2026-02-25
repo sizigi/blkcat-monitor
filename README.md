@@ -420,21 +420,16 @@ BLKCAT_STATIC_DIR=packages/web/dist bun packages/server/src/index.ts
 
 Access the dashboard at `https://<machine-name>.<tailnet>.ts.net:3000`.
 
-**3. Auto-renew (optional)**
+**3. Auto-renew**
 
-Tailscale certificates expire after 90 days. Add a monthly cron job to auto-renew:
+Tailscale certificates expire after 90 days. Add a monthly cron job to auto-renew (runs on the 1st of each month at 3am):
 
 ```bash
-sudo crontab -e
+DOMAIN=$(tailscale status --json | jq -r '.Self.DNSName | rtrimstr(".")')
+echo "0 3 1 * * tailscale cert --cert-file /home/$USER/.blkcat/certs/server.crt --key-file /home/$USER/.blkcat/certs/server.key $DOMAIN && chown $USER /home/$USER/.blkcat/certs/server.crt /home/$USER/.blkcat/certs/server.key" | sudo crontab -
 ```
 
-Add:
-
-```
-0 3 1 * * tailscale cert --cert-file /home/<user>/.blkcat/certs/server.crt --key-file /home/<user>/.blkcat/certs/server.key <machine-name>.<tailnet>.ts.net && chown <user> /home/<user>/.blkcat/certs/server.{crt,key}
-```
-
-If the certificate expires, the dashboard still works but browsers show a security warning and the PWA install button disappears. Re-run the `tailscale cert` command to fix.
+Verify with `sudo crontab -l`. If the certificate expires, the dashboard still works but browsers show a security warning and the PWA install button disappears. Re-run the `tailscale cert` command manually to fix immediately.
 
 ### Custom certificates
 
