@@ -89,7 +89,7 @@ export function Sidebar({
   const [editValue, setEditValue] = useState("");
   // Drag-to-reorder state (refs to avoid re-renders during drag)
   const dragMachineRef = useRef<{ index: number } | null>(null);
-  const dragSessionRef = useRef<{ machineId: string; index: number } | null>(null);
+  const dragSessionRef = useRef<{ machineId: string; index: number; sessionId?: string; windowId?: string; isCli?: boolean } | null>(null);
   const [dropIndicator, setDropIndicator] = useState<
     | { kind: "machine"; toIndex: number }
     | { kind: "session"; machineId: string; toIndex: number }
@@ -412,22 +412,20 @@ export function Sidebar({
                   className="sidebar-session-row"
                   draggable={!!onReorderSession || !!onJoinPane}
                   onDragStart={(e) => {
-                    dragSessionRef.current = { machineId: machine.machineId, index: sessionIndex };
+                    dragSessionRef.current = {
+                      machineId: machine.machineId,
+                      index: sessionIndex,
+                      sessionId: session.id,
+                      windowId: session.windowId,
+                      isCli: !!session.cliTool,
+                    };
                     dragMachineRef.current = null;
                     e.dataTransfer.effectAllowed = "move";
                     e.dataTransfer.setData("text/plain", session.id);
-                    e.dataTransfer.setData("application/x-blkcat-session", JSON.stringify({
-                      sessionId: session.id,
-                      machineId: machine.machineId,
-                      windowId: session.windowId,
-                      isCli: !!session.cliTool,
-                    }));
                   }}
                   onDragOver={(e) => {
-                    // Allow drop if same machine (for reorder or join)
-                    const raw = e.dataTransfer.types.includes("application/x-blkcat-session");
-                    if (!raw && !dragSessionRef.current) return;
-                    if (dragSessionRef.current && dragSessionRef.current.machineId !== machine.machineId) return;
+                    if (!dragSessionRef.current) return;
+                    if (dragSessionRef.current.machineId !== machine.machineId) return;
                     e.preventDefault();
                     e.dataTransfer.dropEffect = "move";
                     if (dropIndicator?.kind !== "session" || dropIndicator.machineId !== machine.machineId || dropIndicator.toIndex !== sessionIndex) {
@@ -437,27 +435,22 @@ export function Sidebar({
                   onDrop={(e) => {
                     e.preventDefault();
                     setDropIndicator(null);
-                    const rawData = e.dataTransfer.getData("application/x-blkcat-session");
-                    if (rawData && onJoinPane) {
-                      try {
-                        const source = JSON.parse(rawData);
-                        // Same machine, different window, same type (both CLI or both terminal)
-                        if (source.machineId === machine.machineId
-                          && source.windowId !== session.windowId
-                          && source.isCli === isCli
-                          && source.sessionId !== session.id) {
-                          onJoinPane(machine.machineId, source.sessionId, session.id);
-                          dragSessionRef.current = null;
-                          return;
-                        }
-                      } catch {}
-                    }
-                    // Fallback: reorder within same window
-                    if (!dragSessionRef.current) return;
-                    if (dragSessionRef.current.machineId !== machine.machineId) return;
-                    const from = dragSessionRef.current.index;
+                    const source = dragSessionRef.current;
+                    if (!source) return;
+                    if (source.machineId !== machine.machineId) return;
                     dragSessionRef.current = null;
-                    if (from !== sessionIndex) onReorderSession?.(machine.machineId, from, sessionIndex);
+                    // Join: different window, same type → tmux join-pane
+                    if (onJoinPane
+                      && source.windowId !== session.windowId
+                      && source.isCli === isCli
+                      && source.sessionId !== session.id) {
+                      onJoinPane(machine.machineId, source.sessionId!, session.id);
+                      return;
+                    }
+                    // Reorder within same list
+                    if (source.index !== sessionIndex) {
+                      onReorderSession?.(machine.machineId, source.index, sessionIndex);
+                    }
                   }}
                   onDragEnd={() => {
                     dragSessionRef.current = null;
