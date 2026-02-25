@@ -11,6 +11,7 @@ interface SidebarProps {
   selectedMachine?: string;
   selectedSession?: string;
   onSelectSession: (machineId: string, sessionId: string) => void;
+  onDeselect?: () => void;
   onStartSession?: (machineId: string, args?: string, cwd?: string, name?: string, cliTool?: CliTool) => void;
   onCloseSession?: (machineId: string, sessionId: string) => void;
   onReloadSession?: (machineId: string, sessionId: string, args?: string, resume?: boolean) => void;
@@ -43,6 +44,7 @@ export function Sidebar({
   selectedMachine,
   selectedSession,
   onSelectSession,
+  onDeselect,
   onStartSession,
   onCloseSession,
   onReloadSession,
@@ -122,7 +124,7 @@ export function Sidebar({
         flexShrink: 0,
       }}
     >
-      <div style={{ flex: 1, overflowY: "auto" }}>
+      <div style={{ flex: 1, overflowY: "auto" }} onClick={(e) => { if (e.target === e.currentTarget && onDeselect) onDeselect(); }}>
       <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <h2 style={{ fontSize: 14, fontWeight: 600, fontFamily: "sans-serif", letterSpacing: "0.02em" }}>BLKCAT Monitor</h2>

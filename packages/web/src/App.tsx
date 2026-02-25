@@ -269,6 +269,7 @@ export default function App() {
     currentTheme: theme,
     onThemeChange: setTheme,
     themes,
+    onDeselect: () => { setSelectedMachine(undefined); setSelectedSession(undefined); },
   };
 
   return (
@@ -489,13 +490,12 @@ export default function App() {
           <div
             style={{
               flex: 1,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: "var(--text-muted)",
+              background: "var(--bg)",
+              overflow: "hidden",
+              position: "relative",
             }}
           >
-            Select a session from the sidebar
+            <div className="idle-layer idle-layer-up" />
           </div>
         )}
       </main>
