@@ -222,8 +222,7 @@ html, body, #root {
   background-repeat: repeat;
   image-rendering: pixelated;
   pointer-events: none;
-  mix-blend-mode: multiply;
-  opacity: 0.65;
+  opacity: 0.45;
 }
 /* Even rows: mask out odd rows with a repeating gradient */
 .idle-layer-even {
@@ -258,8 +257,7 @@ html, body, #root {
 [data-theme="solarized-light"] .idle-layer,
 [data-theme="catppuccin-latte"] .idle-layer,
 [data-theme="nord-light"] .idle-layer {
-  filter: grayscale(1);
-  opacity: 0.1;
+  opacity: 0.15;
 }
 
 /* Sidebar fonts: monospace for all content, thin serif for title */
