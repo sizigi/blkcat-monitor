@@ -171,10 +171,7 @@ async function main() {
     const cap = captures.get(sessionId);
     if (!cap) return;
     cap.renameWindow(sessionId, name);
-    // Update session name in our lists so the next updateSessions reflects it
-    const allSess = [...autoSessions, ...manualSessions];
-    const sess = allSess.find((s) => s.id === sessionId);
-    if (sess) sess.name = name;
+    triggerRediscovery();
   }
 
   function triggerRediscovery() {
