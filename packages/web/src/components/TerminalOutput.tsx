@@ -128,14 +128,38 @@ export function TerminalOutput({ sessionKey, lines, cursor, logMapRef, scrollbac
     });
   }, [renderScrollView]);
 
-  /** Adjust scroll offset by `delta` lines (positive = up) and schedule render. */
+  const exitScrollMode = useCallback(() => {
+    const term = termRef.current;
+    if (!term || !scrollModeRef.current) return;
+    scrollModeRef.current = false;
+    setScrollMode(false);
+    setScrollInfo("");
+    setScrollbackLoading(false);
+    scrollAllRef.current = [];
+    scrollOffsetRef.current = 0;
+    lastRenderedOffsetRef.current = -1;
+    lastRenderedStartRef.current = -1;
+    if (scrollInfoTimerRef.current) { clearTimeout(scrollInfoTimerRef.current); scrollInfoTimerRef.current = 0; }
+    if (scrollRafRef.current) { cancelAnimationFrame(scrollRafRef.current); scrollRafRef.current = 0; }
+    const latest = pendingLinesRef.current || prevLinesRef.current;
+    pendingLinesRef.current = null;
+    term.write("\x1b[H\x1b[2J" + latest.join("\r\n"));
+    term.focus();
+  }, []);
+
+  /** Adjust scroll offset by `delta` lines (positive = up) and schedule render.
+   *  Auto-exits scroll mode when scrolling down reaches the bottom (offset 0). */
   const scrollBy = useCallback((delta: number) => {
     if (!scrollModeRef.current) return;
     const rows = termRef.current?.rows ?? 24;
     const maxOffset = Math.max(0, scrollAllRef.current.length - rows);
     scrollOffsetRef.current = Math.max(0, Math.min(maxOffset, scrollOffsetRef.current + delta));
+    if (delta < 0 && scrollOffsetRef.current === 0) {
+      exitScrollMode();
+      return;
+    }
     scheduleRender();
-  }, [scheduleRender]);
+  }, [scheduleRender, exitScrollMode]);
 
   /** Named scroll actions — delegates to scrollBy. */
   const scrollNav = useCallback((action: "pageUp" | "pageDown" | "top" | "bottom" | "lineUp" | "lineDown") => {
@@ -170,25 +194,6 @@ export function TerminalOutput({ sessionKey, lines, cursor, logMapRef, scrollbac
     // Always request fresh scrollback
     onRequestScrollbackRef.current?.();
   }, [renderScrollView]);
-
-  const exitScrollMode = useCallback(() => {
-    const term = termRef.current;
-    if (!term || !scrollModeRef.current) return;
-    scrollModeRef.current = false;
-    setScrollMode(false);
-    setScrollInfo("");
-    setScrollbackLoading(false);
-    scrollAllRef.current = [];
-    scrollOffsetRef.current = 0;
-    lastRenderedOffsetRef.current = -1;
-    lastRenderedStartRef.current = -1;
-    if (scrollInfoTimerRef.current) { clearTimeout(scrollInfoTimerRef.current); scrollInfoTimerRef.current = 0; }
-    if (scrollRafRef.current) { cancelAnimationFrame(scrollRafRef.current); scrollRafRef.current = 0; }
-    const latest = pendingLinesRef.current || prevLinesRef.current;
-    pendingLinesRef.current = null;
-    term.write("\x1b[H\x1b[2J" + latest.join("\r\n"));
-    term.focus();
-  }, []);
 
   // --- Main terminal setup effect ---
   useEffect(() => {
@@ -231,25 +236,13 @@ export function TerminalOutput({ sessionKey, lines, cursor, logMapRef, scrollbac
     termRef.current = term;
     fitRef.current = fit;
 
-    // When xterm's hidden textarea gets focus on mobile, the browser doesn't
-    // adjust the viewport (it's invisible). Fix: briefly focus the visible
-    // ChatInput textarea to trigger the browser's keyboard accommodation,
-    // then return focus to xterm.
-    const xtermTextarea = containerRef.current.querySelector(".xterm-helper-textarea") as HTMLElement;
-    let redirectingFocus = false;
-    const onXtermFocus = () => {
-      if (redirectingFocus) return; // prevent infinite loop
-      if (!("ontouchstart" in window)) return;
-      const chatTextarea = document.querySelector(".chat-input-textarea textarea") as HTMLElement;
-      if (!chatTextarea) return;
-      redirectingFocus = true;
-      chatTextarea.focus({ preventScroll: false });
-      setTimeout(() => {
-        xtermTextarea?.focus({ preventScroll: true });
-        setTimeout(() => { redirectingFocus = false; }, 100);
-      }, 50);
-    };
-    if (xtermTextarea) xtermTextarea.addEventListener("focus", onXtermFocus);
+    // On mobile, prevent the soft keyboard from appearing when xterm's hidden
+    // textarea gets focus (e.g. exitScrollMode, session switch). inputMode="none"
+    // suppresses the virtual keyboard while still allowing hardware key events.
+    if ("ontouchstart" in window) {
+      const xtermTextarea = containerRef.current.querySelector(".xterm-helper-textarea") as HTMLElement;
+      if (xtermTextarea) xtermTextarea.setAttribute("inputmode", "none");
+    }
 
     const dataDisposable = term.onData((data) => { if (!scrollModeRef.current) onDataRef.current?.(data); });
 
@@ -439,7 +432,6 @@ export function TerminalOutput({ sessionKey, lines, cursor, logMapRef, scrollbac
       dataDisposable.dispose();
       selDisposable.dispose();
       themeObserver.disconnect();
-      if (xtermTextarea) xtermTextarea.removeEventListener("focus", onXtermFocus);
       term.dispose();
     };
   }, []);
@@ -567,23 +559,7 @@ export function TerminalOutput({ sessionKey, lines, cursor, logMapRef, scrollbac
     minHeight: 36,
   };
 
-  const floatBtn: React.CSSProperties = {
-    background: "rgba(255,255,255,0.12)",
-    border: "1px solid rgba(255,255,255,0.25)",
-    color: "#fff",
-    cursor: "pointer",
-    borderRadius: 6,
-    padding: "8px 12px",
-    fontSize: 18,
-    lineHeight: 1,
-    opacity: 0.6,
-    transition: "opacity 0.15s",
-    minWidth: 40,
-    minHeight: 40,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-  };
+  const floatBtn = "terminal-float-btn";
 
   return (
     <div style={{ position: "relative", flex: 1, minHeight: 0, minWidth: 0 }}>
@@ -618,25 +594,11 @@ export function TerminalOutput({ sessionKey, lines, cursor, logMapRef, scrollbac
         </div>
       ) : (
         <div style={{ position: "absolute", top: 6, right: 6, display: "flex", gap: 6, zIndex: 10 }}>
-          <button
-            onMouseDown={pd}
-            onClick={forceFit}
-            title="Force resize terminal"
-            style={floatBtn}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = "1"; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.6"; }}
-          >
+          <button onMouseDown={pd} onClick={forceFit} title="Force resize terminal" className={floatBtn}>
             <Maximize size={14} />
           </button>
           {(hasLog || lines.length > 0) && (
-            <button
-              onMouseDown={pd}
-              onClick={enterScrollMode}
-              title="Scroll history (Ctrl+Shift+S)"
-              style={floatBtn}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = "1"; }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.6"; }}
-            >
+            <button onMouseDown={pd} onClick={enterScrollMode} title="Scroll history (Ctrl+Shift+S)" className={floatBtn}>
               <ArrowUpDown size={14} />
             </button>
           )}

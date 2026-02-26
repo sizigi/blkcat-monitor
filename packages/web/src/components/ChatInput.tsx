@@ -37,6 +37,18 @@ function vibrate(ms = 10) {
   try { navigator?.vibrate?.(ms); } catch {}
 }
 
+// --- Prevent focus steal on mobile ---
+// preventDefault on mousedown stops the browser from focusing the button (which
+// would blur the textarea and dismiss the keyboard). On mobile, synthetic mousedown
+// fires before click, so focus prevention still works. Same pattern as the scroll
+// mode buttons in TerminalOutput.tsx.
+function noFocusStealHandlers(action: () => void) {
+  return {
+    onMouseDown: (e: React.MouseEvent) => { e.preventDefault(); },
+    onClick: () => { action(); },
+  };
+}
+
 // --- D-Pad component: swipe-based directional pad with repeat and haptics ---
 
 const DPAD_SIZE = 44;
@@ -466,7 +478,7 @@ export function ChatInput({ onSendText, onSendKey, onSendData, initialValue, onI
       {onSendData && (
         <button
           type="button"
-          onClick={() => { vibrate(15); setLiveMode((v) => { if (!v) { setText(SENTINEL); } else { setText(""); } return !v; }); }}
+          {...noFocusStealHandlers(() => { vibrate(15); setLiveMode((v) => { if (!v) { setText(SENTINEL); } else { setText(""); } return !v; }); })}
           className={`live-toggle-mobile ${liveMode ? "live-toggle-on" : ""}`}
         >
           <span className="live-toggle-label">LIVE</span>
@@ -478,7 +490,7 @@ export function ChatInput({ onSendText, onSendKey, onSendData, initialValue, onI
         {onSendData && (
           <button
             type="button"
-            onClick={() => { vibrate(15); setLiveMode((v) => { if (!v) { setText(SENTINEL); } else { setText(""); } return !v; }); }}
+            {...noFocusStealHandlers(() => { vibrate(15); setLiveMode((v) => { if (!v) { setText(SENTINEL); } else { setText(""); } return !v; }); })}
             className={`live-toggle-desktop ${liveMode ? "live-toggle-on" : ""}`}
             style={keyBtnStyle}
           >
@@ -489,7 +501,7 @@ export function ChatInput({ onSendText, onSendKey, onSendData, initialValue, onI
           <button
             key={btn.label}
             type="button"
-            onClick={() => { vibrate(10); btn.keys.forEach((k) => sendKeyWithModifiers(k)); }}
+            {...noFocusStealHandlers(() => { vibrate(10); btn.keys.forEach((k) => sendKeyWithModifiers(k)); })}
             style={keyBtnStyle}
           >
             {btn.label}
@@ -498,7 +510,7 @@ export function ChatInput({ onSendText, onSendKey, onSendData, initialValue, onI
         {/* Modifier toggle buttons */}
         <button
           type="button"
-          onClick={() => { vibrate(10); setCtrlActive((v) => !v); }}
+          {...noFocusStealHandlers(() => { vibrate(10); setCtrlActive((v) => !v); })}
           style={ctrlActive ? modifierActiveStyle : keyBtnStyle}
           title="Toggle Ctrl modifier for next key"
         >
@@ -506,7 +518,7 @@ export function ChatInput({ onSendText, onSendKey, onSendData, initialValue, onI
         </button>
         <button
           type="button"
-          onClick={() => { vibrate(10); setShiftActive((v) => !v); }}
+          {...noFocusStealHandlers(() => { vibrate(10); setShiftActive((v) => !v); })}
           style={shiftActive ? modifierActiveStyle : keyBtnStyle}
           title="Toggle Shift modifier for next key"
         >
@@ -516,7 +528,7 @@ export function ChatInput({ onSendText, onSendKey, onSendData, initialValue, onI
         {onSendKey && (
           <button
             type="button"
-            onClick={() => { vibrate(10); onSendKey("Enter"); }}
+            {...noFocusStealHandlers(() => { vibrate(10); onSendKey("Enter"); })}
             style={keyBtnStyle}
             title="Send Enter key"
           >
