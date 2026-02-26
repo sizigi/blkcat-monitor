@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from "react";
+import React, { useState, useCallback, useRef, useEffect, type Ref } from "react";
 import type { MachineSnapshot, View, ViewPane } from "@blkcat/shared";
 import type { OutputLine } from "../hooks/useSocket";
 import { useSessionOutput } from "../hooks/useSessionOutput";
@@ -63,9 +63,19 @@ function ViewPane({
   onRemove: () => void;
 }) {
   const output = useSessionOutput(outputMapRef, subscribeOutput, machineId, sessionId);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Auto-focus the xterm terminal when this pane becomes focused
+  useEffect(() => {
+    if (isFocused && containerRef.current) {
+      const textarea = containerRef.current.querySelector(".xterm-helper-textarea") as HTMLTextAreaElement | null;
+      if (textarea) textarea.focus();
+    }
+  }, [isFocused]);
 
   return (
     <div
+      ref={containerRef}
       onClick={onFocus}
       style={{
         flex: 1,
