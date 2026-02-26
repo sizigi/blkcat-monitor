@@ -435,6 +435,10 @@ html, body, #root {
 .mobile-topbar {
   display: none;
 }
+/* Function key buttons: hidden on desktop, shown on mobile */
+.chat-key-buttons {
+  display: none;
+}
 
 /* ── Mobile responsive (≤768px) ── */
 @media (max-width: 768px) {
@@ -516,6 +520,10 @@ html, body, #root {
   }
   .live-toggle-desktop {
     display: none !important;
+  }
+  /* Show function key buttons on mobile */
+  .chat-key-buttons {
+    display: flex !important;
   }
 
   /* Mobile: push textarea to bottom so buttons are visible above it.

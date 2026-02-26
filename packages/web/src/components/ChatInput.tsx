@@ -465,7 +465,7 @@ export function ChatInput({ onSendText, onSendKey, onSendData, initialValue, onI
           <span className="live-toggle-hint">{liveMode ? "tap to disable" : "tap to enable real-time input"}</span>
         </button>
       )}
-      <div className="chat-buttons" style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+      <div className="chat-buttons chat-key-buttons" style={{ gap: 4, flexWrap: "wrap", alignItems: "center" }}>
         {/* Desktop: compact LIVE button inline with key buttons (hidden on mobile via CSS) */}
         {onSendData && (
           <button
