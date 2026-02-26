@@ -105,7 +105,25 @@ export class TmuxCapture {
     // Extract window target from pane target (e.g., "sess:0.0" → "sess:0")
     const window = target.replace(/\.\d+$/, "");
     const session = window.replace(/:.*$/, "");
-    const ok = this.exec([...this.sshPrefix, "tmux", "resize-window", "-x", String(cols), "-y", String(rows), "-t", window]).success;
+
+    // For multi-pane windows, compute the window size needed so this pane
+    // gets the requested cols/rows. Query current pane and window dimensions
+    // to derive the ratio, then scale accordingly.
+    let targetCols = cols;
+    let targetRows = rows;
+    const paneSizeResult = this.exec([...this.sshPrefix, "tmux", "display-message", "-p", "-t", target, "#{pane_width},#{pane_height}"]);
+    const winSizeResult = this.exec([...this.sshPrefix, "tmux", "display-message", "-p", "-t", window, "#{window_width},#{window_height}"]);
+    if (paneSizeResult.success && winSizeResult.success) {
+      const [paneW, paneH] = paneSizeResult.stdout.trim().split(",").map(Number);
+      const [winW, winH] = winSizeResult.stdout.trim().split(",").map(Number);
+      if (paneW > 0 && paneH > 0 && (paneW !== winW || paneH !== winH)) {
+        // Multi-pane window: scale the requested size by window/pane ratio
+        targetCols = Math.round(cols * (winW / paneW));
+        targetRows = Math.round(rows * (winH / paneH));
+      }
+    }
+
+    const ok = this.exec([...this.sshPrefix, "tmux", "resize-window", "-x", String(targetCols), "-y", String(targetRows), "-t", window]).success;
     if (ok) {
       // Verify resize took effect — attached clients can constrain window size
       const sizeResult = this.exec([...this.sshPrefix, "tmux", "display-message", "-p", "-t", target, "#{pane_width},#{pane_height}"]);
@@ -114,7 +132,7 @@ export class TmuxCapture {
         if (w !== cols || h !== rows) {
           // Resize was overridden by client constraint — set window-size manual and retry
           this.exec([...this.sshPrefix, "tmux", "set-option", "-t", session, "window-size", "manual"]);
-          this.exec([...this.sshPrefix, "tmux", "resize-window", "-x", String(cols), "-y", String(rows), "-t", window]);
+          this.exec([...this.sshPrefix, "tmux", "resize-window", "-x", String(targetCols), "-y", String(targetRows), "-t", window]);
         }
       }
       // Force tmux to deliver SIGWINCH to processes in background windows
@@ -124,6 +142,35 @@ export class TmuxCapture {
       this.exec([...this.sshPrefix, "tmux", "last-window", "-t", session]);
     }
     return ok;
+  }
+
+  renameWindow(target: string, name: string): boolean {
+    // target is "session:window.pane" — extract "session:window" for rename
+    const window = target.replace(/\.\d+$/, "");
+    const cmd = [...this.sshPrefix, "tmux", "rename-window", "-t", window, name];
+    return this.exec(cmd).success;
+  }
+
+  joinPane(sourceTarget: string, destTarget: string): boolean {
+    const destWindow = destTarget.replace(/\.\d+$/, "");
+    const cmd = [...this.sshPrefix, "tmux", "join-pane", "-s", sourceTarget, "-t", destWindow];
+    return this.exec(cmd).success;
+  }
+
+  breakPane(target: string): boolean {
+    const cmd = [...this.sshPrefix, "tmux", "break-pane", "-s", target];
+    return this.exec(cmd).success;
+  }
+
+  swapPane(target1: string, target2: string): boolean {
+    const cmd = [...this.sshPrefix, "tmux", "swap-pane", "-s", target1, "-t", target2];
+    return this.exec(cmd).success;
+  }
+
+  /** Swap two tmux windows by their session:window targets (e.g. "main:0", "main:1"). */
+  swapWindow(target1: string, target2: string): boolean {
+    const cmd = [...this.sshPrefix, "tmux", "swap-window", "-s", target1, "-t", target2];
+    return this.exec(cmd).success;
   }
 
   killPane(target: string): boolean {
@@ -136,6 +183,20 @@ export class TmuxCapture {
     const shell = process.env.SHELL || "/bin/bash";
     const cmd = [...this.sshPrefix, "tmux", "respawn-pane", "-k", "-t", target, shell, "-ic", shellCommand];
     return this.exec(cmd).success;
+  }
+
+  startPlainSession(cwd?: string): string | null {
+    const resolvedCwd = cwd?.startsWith("~")
+      ? cwd.replace("~", process.env.HOME ?? "/root")
+      : cwd;
+    const hasTmux = this.exec([...this.sshPrefix, "tmux", "has-session"]).success;
+    const tmuxCmd = hasTmux ? "new-window" : "new-session";
+    const cmd = [...this.sshPrefix, "tmux", tmuxCmd, "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}"];
+    if (!hasTmux) cmd.push("-d");
+    if (resolvedCwd) cmd.push("-c", resolvedCwd);
+    const result = this.exec(cmd);
+    if (!result.success) return null;
+    return result.stdout.trim();
   }
 
   startSession(args?: string, cwd?: string, cliTool: CliTool = "claude"): string | null {

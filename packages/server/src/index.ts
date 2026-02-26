@@ -1,11 +1,13 @@
 import { createServer } from "./server";
 import { loadSavedAgents, saveAgents } from "./agents-store";
 import { loadDisplayNames, saveDisplayNames } from "./display-names-store";
+import { loadViews, saveViews } from "./views-store";
 import { loadServerConfig } from "./config";
 
 const config = await loadServerConfig();
 const savedAgents = await loadSavedAgents();
 const displayNames = await loadDisplayNames();
+const views = await loadViews();
 
 const server = createServer({
   port: config.port,
@@ -20,6 +22,8 @@ const server = createServer({
   onDisplayNamesSaved: (names) => { saveDisplayNames(names); },
   tlsCert: config.tlsCert,
   tlsKey: config.tlsKey,
+  views,
+  onViewsSaved: (v) => { saveViews(v); },
 });
 
 // Connect saved agents (as "api" source so they continue to be persisted)

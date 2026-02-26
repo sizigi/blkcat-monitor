@@ -4,6 +4,8 @@ import type {
   ServerToDashboardMessage,
   AgentHookEventMessage,
   CliTool,
+  View,
+  ViewPane,
 } from "@blkcat/shared";
 import { NOTIFY_HOOK_EVENTS } from "@blkcat/shared";
 
@@ -97,6 +99,7 @@ export interface UseSocketReturn {
 export function useSocket(url: string): UseSocketReturn {
   const [connected, setConnected] = useState(false);
   const [machines, setMachines] = useState<MachineSnapshot[]>([]);
+  const [views, setViews] = useState<View[]>([]);
   const [waitingSessions, setWaitingSessions] = useState<Set<string>>(new Set());
   const [activeSessions, setActiveSessions] = useState<Set<string>>(new Set());
   const activeTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
@@ -237,6 +240,11 @@ export function useSocket(url: string): UseSocketReturn {
               displayNamesRef.current = (msg as any).displayNames;
               for (const sub of displayNamesSubsRef.current) sub(displayNamesRef.current);
             }
+            if ((msg as any).views) {
+              setViews((msg as any).views);
+            }
+          } else if ((msg as any).type === "views_update") {
+            setViews((msg as any).views);
           } else if (msg.type === "machine_update") {
             setMachines((prev) => {
               if (msg.online === false) {
@@ -573,5 +581,36 @@ export function useSocket(url: string): UseSocketReturn {
     sendRaw(msg);
   }, [sendRaw]);
 
-  return { connected, machines, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory, createDirectory, sendRaw, deploySkills, removeSkills, getSettings, updateSettings, subscribeDeployResult, subscribeSettingsSnapshot, subscribeSettingsResult, setDisplayName, subscribeDisplayNames, subscribeReloadResult };
+  const joinPane = useCallback((machineId: string, sourceSessionId: string, targetSessionId: string) => {
+    sendRaw({ type: "join_pane", machineId, sourceSessionId, targetSessionId });
+  }, [sendRaw]);
+
+  const breakPane = useCallback((machineId: string, sessionId: string) => {
+    sendRaw({ type: "break_pane", machineId, sessionId });
+  }, [sendRaw]);
+
+  const swapPane = useCallback((machineId: string, sessionId1: string, sessionId2: string) => {
+    sendRaw({ type: "swap_pane", machineId, sessionId1, sessionId2 });
+  }, [sendRaw]);
+
+  const swapWindow = useCallback((machineId: string, sessionId1: string, sessionId2: string) => {
+    sendRaw({ type: "swap_window", machineId, sessionId1, sessionId2 });
+  }, [sendRaw]);
+
+  const createView = useCallback((id: string, name: string, panes: ViewPane[]) => {
+    sendRaw({ type: "create_view", id, name, panes });
+  }, [sendRaw]);
+
+  const updateView = useCallback((id: string, name?: string, panes?: ViewPane[]) => {
+    const msg: Record<string, any> = { type: "update_view", id };
+    if (name !== undefined) msg.name = name;
+    if (panes !== undefined) msg.panes = panes;
+    sendRaw(msg);
+  }, [sendRaw]);
+
+  const deleteView = useCallback((id: string) => {
+    sendRaw({ type: "delete_view", id });
+  }, [sendRaw]);
+
+  return { connected, machines, views, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory, createDirectory, sendRaw, deploySkills, removeSkills, getSettings, updateSettings, subscribeDeployResult, subscribeSettingsSnapshot, subscribeSettingsResult, setDisplayName, subscribeDisplayNames, subscribeReloadResult, joinPane, breakPane, swapPane, swapWindow, createView, updateView, deleteView };
 }

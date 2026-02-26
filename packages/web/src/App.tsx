@@ -1,12 +1,15 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
-import { useSocket, type OutputLine } from "./hooks/useSocket";
+import { useSocket } from "./hooks/useSocket";
+import { useSessionOutput } from "./hooks/useSessionOutput";
 import { useAgents } from "./hooks/useAgents";
 import { useDisplayNames } from "./hooks/useDisplayNames";
 import { useIsMobile } from "./hooks/useIsMobile";
-import { useSidebarOrder } from "./hooks/useSidebarOrder";
 import { useTheme } from "./hooks/useTheme";
 import { Sidebar } from "./components/Sidebar";
 import { SessionDetail } from "./components/SessionDetail";
+import { SplitView } from "./components/SplitView";
+import { CrossMachineSplitView } from "./components/CrossMachineSplitView";
+import { CreateViewModal } from "./components/CreateViewModal";
 import { EventFeed } from "./components/EventFeed";
 import { NotificationList } from "./components/NotificationList";
 import { SkillsMatrix } from "./components/SkillsMatrix";
@@ -15,6 +18,7 @@ import { ProjectSettingsModal } from "./components/ProjectSettingsModal";
 import { PWAPrompt } from "./components/PWAPrompt";
 import { useHealth } from "./hooks/useHealth";
 import { Menu, Pencil, ClipboardList, Bell, Settings, ChevronUp } from "./components/Icons";
+import type { SessionInfo } from "@blkcat/shared";
 
 const WS_URL =
   (import.meta as any).env?.VITE_WS_URL ??
@@ -24,43 +28,13 @@ const DEFAULT_SIDEBAR_WIDTH = 250;
 const MIN_SIDEBAR_WIDTH = 160;
 const MAX_SIDEBAR_WIDTH = 500;
 
-/** Subscribe to output changes for a specific session. Only triggers a
- *  re-render when the selected session's output changes — not when any
- *  other session receives new data. */
-function useSessionOutput(
-  outputMapRef: React.RefObject<Map<string, OutputLine>>,
-  subscribeOutput: (cb: (key: string) => void) => () => void,
-  machineId?: string,
-  sessionId?: string,
-): { lines: string[]; cursor?: { x: number; y: number } } {
-  const [output, setOutput] = useState<{ lines: string[]; cursor?: { x: number; y: number } }>({ lines: [] });
-  const targetKey = machineId && sessionId ? `${machineId}:${sessionId}` : "";
-
-  useEffect(() => {
-    if (!targetKey) { setOutput({ lines: [] }); return; }
-
-    const current = outputMapRef.current?.get(targetKey);
-    if (current) setOutput({ lines: current.lines, cursor: current.cursor });
-
-    return subscribeOutput((key) => {
-      if (key === targetKey) {
-        const o = outputMapRef.current?.get(key);
-        if (o) setOutput({ lines: o.lines, cursor: o.cursor });
-      }
-    });
-  }, [targetKey, outputMapRef, subscribeOutput]);
-
-  return output;
-}
-
 export default function App() {
-  const { connected, machines, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory, createDirectory, deploySkills, removeSkills, getSettings, updateSettings, subscribeDeployResult, subscribeSettingsSnapshot, subscribeSettingsResult, setDisplayName, subscribeDisplayNames, subscribeReloadResult } = useSocket(WS_URL);
+  const { connected, machines, views, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory, createDirectory, deploySkills, removeSkills, getSettings, updateSettings, subscribeDeployResult, subscribeSettingsSnapshot, subscribeSettingsResult, setDisplayName, subscribeDisplayNames, subscribeReloadResult, joinPane, breakPane, swapPane, swapWindow, createView, updateView, deleteView } = useSocket(WS_URL);
   const { agents, addAgent, removeAgent } = useAgents();
   const { getMachineName, getSessionName, setMachineName, setSessionName } = useDisplayNames({
     sendDisplayName: setDisplayName,
     subscribeDisplayNames,
   });
-  const { applyOrder, reorderMachine, reorderSession, syncOrder } = useSidebarOrder();
   const { theme, setTheme, themes } = useTheme();
   const isMobile = useIsMobile();
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -89,6 +63,9 @@ export default function App() {
   }, [connected]);
   const [selectedMachine, setSelectedMachine] = useState<string>();
   const [selectedSession, setSelectedSession] = useState<string>();
+  const [selectedGroup, setSelectedGroup] = useState<string>();
+  const [selectedView, setSelectedView] = useState<string>();
+  const [showCreateViewModal, setShowCreateViewModal] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
   const [panelTab, setPanelTab] = useState<"events" | "notifications" | "skills" | "health" | null>(null);
@@ -97,6 +74,16 @@ export default function App() {
   const [editingTopbarName, setEditingTopbarName] = useState(false);
   const [topbarEditValue, setTopbarEditValue] = useState("");
   const [navMode, setNavMode] = useState(false);
+  const [hideTmuxSessions, setHideTmuxSessions] = useState(() => {
+    try { return localStorage.getItem("blkcat:hideTmux") === "true"; } catch { return false; }
+  });
+  const toggleHideTmux = useCallback(() => {
+    setHideTmuxSessions((prev) => {
+      const next = !prev;
+      try { localStorage.setItem("blkcat:hideTmux", String(next)); } catch {}
+      return next;
+    });
+  }, []);
   const resizing = useRef(false);
   // Refs for values used in stable effects (avoids re-registering document listeners)
   const selectedMachineRef = useRef(selectedMachine);
@@ -106,11 +93,16 @@ export default function App() {
 
   const sessionOutput = useSessionOutput(outputMapRef, subscribeOutput, selectedMachine, selectedSession);
 
-  // Keep sidebar order in sync with server-provided machines
-  const orderedMachines = useMemo(() => applyOrder(machines), [applyOrder, machines]);
-  const orderedMachinesRef = useRef(orderedMachines);
-  orderedMachinesRef.current = orderedMachines;
-  useEffect(() => { if (machines.length > 0) syncOrder(machines); }, [machines, syncOrder]);
+  // Compute panes for split view when a group is selected
+  const selectedGroupPanes = useMemo<SessionInfo[]>(() => {
+    if (!selectedMachine || !selectedGroup) return [];
+    const machine = machines.find((m) => m.machineId === selectedMachine);
+    if (!machine) return [];
+    return machine.sessions.filter((s) => s.windowId === selectedGroup);
+  }, [machines, selectedMachine, selectedGroup]);
+
+  const machinesRef = useRef(machines);
+  machinesRef.current = machines;
 
   // Navigation mode: backtick (`) as leader key, works in xterm and input fields.
   // Uses refs so the keydown listener registers once and never re-attaches.
@@ -119,7 +111,7 @@ export default function App() {
     function setNav(v: boolean) { navModeRef.current = v; setNavMode(v); }
 
     function selectMachine(idx: number) {
-      const machine = orderedMachinesRef.current[idx];
+      const machine = machinesRef.current[idx];
       if (!machine) return;
       setSelectedMachine(machine.machineId);
       if (machine.sessions.length > 0) {
@@ -128,7 +120,7 @@ export default function App() {
       }
     }
     function cycleMachine(delta: number) {
-      const machines = orderedMachinesRef.current;
+      const machines = machinesRef.current;
       const idx = machines.findIndex((m) => m.machineId === selectedMachineRef.current);
       const next = (idx + delta + machines.length) % machines.length;
       selectMachine(next);
@@ -136,7 +128,7 @@ export default function App() {
     function selectSession(idx: number) {
       const mid = selectedMachineRef.current;
       if (!mid) return;
-      const machine = orderedMachinesRef.current.find((m) => m.machineId === mid);
+      const machine = machinesRef.current.find((m) => m.machineId === mid);
       const session = machine?.sessions[idx];
       if (session) {
         setSelectedSession(session.id);
@@ -146,7 +138,7 @@ export default function App() {
     function cycleSession(delta: number) {
       const mid = selectedMachineRef.current;
       if (!mid) return;
-      const machine = orderedMachinesRef.current.find((m) => m.machineId === mid);
+      const machine = machinesRef.current.find((m) => m.machineId === mid);
       if (!machine || machine.sessions.length === 0) return;
       const idx = machine.sessions.findIndex((s) => s.id === selectedSessionRef.current);
       const next = (idx + delta + machine.sessions.length) % machine.sessions.length;
@@ -246,7 +238,7 @@ export default function App() {
   }, [sidebarWidth]);
 
   const sidebarBaseProps = {
-    machines: orderedMachines,
+    machines: machines,
     selectedMachine,
     selectedSession,
     notificationCounts,
@@ -272,12 +264,37 @@ export default function App() {
     onRemoveAgent: removeAgent,
     onSessionSettings: (m: string, s: string) => setSettingsSession({ machineId: m, sessionId: s }),
     subscribeReloadResult,
-    onReorderMachine: reorderMachine,
-    onReorderSession: reorderSession,
     currentTheme: theme,
     onThemeChange: setTheme,
     themes,
     onDeselect: () => { setSelectedMachine(undefined); setSelectedSession(undefined); },
+    hideTmuxSessions,
+    onToggleHideTmux: toggleHideTmux,
+    selectedGroup,
+    onSelectGroup: (machineId: string, windowId: string) => {
+      setSelectedMachine(machineId);
+      setSelectedSession(undefined);
+      setSelectedGroup(windowId);
+      setSelectedView(undefined);
+    },
+    onJoinPane: joinPane,
+    onBreakPane: breakPane,
+    onSwapPane: swapPane,
+    onSwapWindow: swapWindow,
+    views,
+    selectedView,
+    onSelectView: (viewId: string) => {
+      setSelectedView(viewId);
+      setSelectedMachine(undefined);
+      setSelectedSession(undefined);
+      setSelectedGroup(undefined);
+    },
+    onCreateView: () => setShowCreateViewModal(true),
+    onDeleteView: (id: string) => {
+      deleteView(id);
+      if (selectedView === id) setSelectedView(undefined);
+    },
+    onRenameView: (id: string, name: string) => updateView(id, name),
   };
 
   return (
@@ -294,6 +311,8 @@ export default function App() {
             onSelectSession={(m, s) => {
               setSelectedMachine(m);
               setSelectedSession(s);
+              setSelectedGroup(undefined);
+              setSelectedView(undefined);
               clearNotifications(`${m}:${s}`);
               setDrawerOpen(false);
             }}
@@ -309,6 +328,8 @@ export default function App() {
               onSelectSession={(m, s) => {
                 setSelectedMachine(m);
                 setSelectedSession(s);
+                setSelectedGroup(undefined);
+                setSelectedView(undefined);
                 clearNotifications(`${m}:${s}`);
               }}
               onCollapse={() => setSidebarCollapsed(true)}
@@ -478,7 +499,50 @@ export default function App() {
             <span style={{ fontWeight: 400, opacity: 0.7 }}>Esc cancel</span>
           </div>
         )}
-        {selectedMachine && selectedSession ? (
+        {selectedView && (() => {
+          const view = views.find((v) => v.id === selectedView);
+          if (!view || view.panes.length === 0) {
+            return (
+              <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", fontSize: 14 }}>
+                View is empty. Drag sessions from the sidebar to add them.
+              </div>
+            );
+          }
+          return (
+            <CrossMachineSplitView
+              view={view}
+              machines={machines}
+              isMobile={isMobile}
+              outputMapRef={outputMapRef}
+              subscribeOutput={subscribeOutput}
+              logMapRef={logMapRef}
+              scrollbackMapRef={scrollbackMapRef}
+              subscribeScrollback={subscribeScrollback}
+              onRequestScrollback={requestScrollback}
+              onSendInput={sendInput}
+              onSendResize={sendResize}
+              getMachineName={getMachineName}
+              getSessionName={getSessionName}
+              onUpdateView={updateView}
+            />
+          );
+        })()}
+        {selectedView ? null : selectedMachine && selectedGroup && selectedGroupPanes.length > 1 ? (
+          <SplitView
+            machineId={selectedMachine}
+            panes={selectedGroupPanes}
+            isMobile={isMobile}
+            outputMapRef={outputMapRef}
+            subscribeOutput={subscribeOutput}
+            logMapRef={logMapRef}
+            scrollbackMapRef={scrollbackMapRef}
+            subscribeScrollback={subscribeScrollback}
+            onRequestScrollback={requestScrollback}
+            onSendInput={sendInput}
+            onSendResize={sendResize}
+            getSessionName={(m, s, d) => getSessionName ? getSessionName(m, s, d) : d}
+          />
+        ) : selectedMachine && selectedSession ? (
           <SessionDetail
             machineId={selectedMachine}
             sessionId={selectedSession}
@@ -670,6 +734,23 @@ export default function App() {
         );
       })()}
       <PWAPrompt />
+      {/* Create View modal */}
+      {showCreateViewModal && (
+        <CreateViewModal
+          machines={machines}
+          getMachineName={getMachineName}
+          getSessionName={getSessionName}
+          onCreate={(id, name, panes) => {
+            createView(id, name, panes);
+            setShowCreateViewModal(false);
+            setSelectedView(id);
+            setSelectedMachine(undefined);
+            setSelectedSession(undefined);
+            setSelectedGroup(undefined);
+          }}
+          onClose={() => setShowCreateViewModal(false)}
+        />
+      )}
     </div>
   );
 }

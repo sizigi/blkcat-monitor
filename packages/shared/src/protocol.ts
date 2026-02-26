@@ -1,3 +1,16 @@
+// --- View types ---
+
+export interface ViewPane {
+  machineId: string;
+  sessionId: string;
+}
+
+export interface View {
+  id: string;
+  name: string;
+  panes: ViewPane[];
+}
+
 // --- Session & Machine types ---
 
 export interface SessionInfo {
@@ -8,6 +21,9 @@ export interface SessionInfo {
   args?: string;
   cwd?: string;
   cliTool?: CliTool;
+  windowId?: string;
+  windowName?: string;
+  paneCommand?: string;
 }
 
 export type CliTool = "claude" | "codex" | "gemini";
@@ -236,7 +252,36 @@ export interface ServerCreateDirectoryMessage {
   path: string;
 }
 
-export type ServerToAgentMessage = ServerInputMessage | ServerStartSessionMessage | ServerCloseSessionMessage | ServerResizeMessage | ServerRequestScrollbackMessage | ServerReloadSessionMessage | ServerListDirectoryMessage | ServerDeploySkillsMessage | ServerGetSettingsMessage | ServerUpdateSettingsMessage | ServerRemoveSkillsMessage | ServerCreateDirectoryMessage;
+export interface ServerRenameSessionMessage {
+  type: "rename_session";
+  sessionId: string;
+  name: string;
+}
+
+export interface ServerJoinPaneMessage {
+  type: "join_pane";
+  sourceSessionId: string;
+  targetSessionId: string;
+}
+
+export interface ServerBreakPaneMessage {
+  type: "break_pane";
+  sessionId: string;
+}
+
+export interface ServerSwapPaneMessage {
+  type: "swap_pane";
+  sessionId1: string;
+  sessionId2: string;
+}
+
+export interface ServerSwapWindowMessage {
+  type: "swap_window";
+  sessionId1: string;
+  sessionId2: string;
+}
+
+export type ServerToAgentMessage = ServerInputMessage | ServerStartSessionMessage | ServerCloseSessionMessage | ServerResizeMessage | ServerRequestScrollbackMessage | ServerReloadSessionMessage | ServerListDirectoryMessage | ServerDeploySkillsMessage | ServerGetSettingsMessage | ServerUpdateSettingsMessage | ServerRemoveSkillsMessage | ServerCreateDirectoryMessage | ServerRenameSessionMessage | ServerJoinPaneMessage | ServerBreakPaneMessage | ServerSwapPaneMessage | ServerSwapWindowMessage;
 
 // --- Server -> Dashboard messages ---
 
@@ -244,6 +289,12 @@ export interface ServerSnapshotMessage {
   type: "snapshot";
   machines: MachineSnapshot[];
   displayNames?: { machines: Record<string, string>; sessions: Record<string, string> };
+  views?: View[];
+}
+
+export interface ServerViewsUpdateMessage {
+  type: "views_update";
+  views: View[];
 }
 
 export interface ServerDisplayNameUpdateMessage {
@@ -350,7 +401,8 @@ export type ServerToDashboardMessage =
   | ServerSettingsResultMessage
   | ServerDisplayNameUpdateMessage
   | ServerReloadSessionResultMessage
-  | ServerCreateDirectoryResultMessage;
+  | ServerCreateDirectoryResultMessage
+  | ServerViewsUpdateMessage;
 
 // --- Dashboard -> Server messages ---
 
@@ -454,7 +506,53 @@ export interface DashboardCreateDirectoryMessage {
   path: string;
 }
 
-export type DashboardToServerMessage = DashboardInputMessage | DashboardStartSessionMessage | DashboardCloseSessionMessage | DashboardResizeMessage | DashboardRequestScrollbackMessage | DashboardReloadSessionMessage | DashboardListDirectoryMessage | DashboardDeploySkillsMessage | DashboardGetSettingsMessage | DashboardUpdateSettingsMessage | DashboardRemoveSkillsMessage | DashboardSetDisplayNameMessage | DashboardCreateDirectoryMessage;
+export interface DashboardJoinPaneMessage {
+  type: "join_pane";
+  machineId: string;
+  sourceSessionId: string;
+  targetSessionId: string;
+}
+
+export interface DashboardBreakPaneMessage {
+  type: "break_pane";
+  machineId: string;
+  sessionId: string;
+}
+
+export interface DashboardSwapPaneMessage {
+  type: "swap_pane";
+  machineId: string;
+  sessionId1: string;
+  sessionId2: string;
+}
+
+export interface DashboardSwapWindowMessage {
+  type: "swap_window";
+  machineId: string;
+  sessionId1: string;
+  sessionId2: string;
+}
+
+export interface DashboardCreateViewMessage {
+  type: "create_view";
+  id: string;
+  name: string;
+  panes: ViewPane[];
+}
+
+export interface DashboardUpdateViewMessage {
+  type: "update_view";
+  id: string;
+  name?: string;
+  panes?: ViewPane[];
+}
+
+export interface DashboardDeleteViewMessage {
+  type: "delete_view";
+  id: string;
+}
+
+export type DashboardToServerMessage = DashboardInputMessage | DashboardStartSessionMessage | DashboardCloseSessionMessage | DashboardResizeMessage | DashboardRequestScrollbackMessage | DashboardReloadSessionMessage | DashboardListDirectoryMessage | DashboardDeploySkillsMessage | DashboardGetSettingsMessage | DashboardUpdateSettingsMessage | DashboardRemoveSkillsMessage | DashboardSetDisplayNameMessage | DashboardCreateDirectoryMessage | DashboardJoinPaneMessage | DashboardBreakPaneMessage | DashboardSwapPaneMessage | DashboardSwapWindowMessage | DashboardCreateViewMessage | DashboardUpdateViewMessage | DashboardDeleteViewMessage;
 
 // --- Outbound agent info ---
 
@@ -470,7 +568,7 @@ export const NOTIFY_HOOK_EVENTS = new Set(["Stop", "Notification", "PermissionRe
 // --- Parsers ---
 
 const AGENT_TYPES = new Set(["register", "output", "sessions", "scrollback", "hook_event", "directory_listing", "deploy_result", "settings_snapshot", "settings_result", "reload_session_result", "create_directory_result"]);
-const DASHBOARD_TYPES = new Set(["input", "start_session", "close_session", "resize", "request_scrollback", "reload_session", "list_directory", "deploy_skills", "get_settings", "update_settings", "remove_skills", "set_display_name", "create_directory"]);
+const DASHBOARD_TYPES = new Set(["input", "start_session", "close_session", "resize", "request_scrollback", "reload_session", "list_directory", "deploy_skills", "get_settings", "update_settings", "remove_skills", "set_display_name", "create_directory", "rename_session", "join_pane", "break_pane", "swap_pane", "swap_window", "create_view", "update_view", "delete_view"]);
 
 export function parseAgentMessage(raw: string): AgentToServerMessage | null {
   try {

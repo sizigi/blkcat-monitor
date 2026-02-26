@@ -39,7 +39,7 @@ export function StartSessionModal({
   const [entries, setEntries] = useState<{ name: string; isDir: boolean }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedTool, setSelectedTool] = useState<CliTool>("claude");
+  const [selectedTool, setSelectedTool] = useState<CliTool | null>("claude");
   const [selectedFlags, setSelectedFlags] = useState<Set<string>>(new Set());
   const [extraArgs, setExtraArgs] = useState("");
   const [newFolderMode, setNewFolderMode] = useState(false);
@@ -47,10 +47,10 @@ export function StartSessionModal({
   const [creatingFolder, setCreatingFolder] = useState(false);
   const newFolderInputRef = useRef<HTMLInputElement>(null);
 
-  const flagOptions = [
+  const flagOptions = selectedTool ? [
     { flag: selectedTool === "codex" ? "resume" : "--resume", color: "var(--accent)" },
     ...CLI_TOOLS[selectedTool].flags,
-  ];
+  ] : [];
 
   // Track the last fetched parent directory (resolved path) to avoid redundant fetches
   const lastFetchedParentRef = useRef<string>("");
@@ -181,6 +181,13 @@ export function StartSessionModal({
   }
 
   function handleStart() {
+    if (!selectedTool) {
+      // Plain terminal session
+      const finalName = sessionName.trim() || undefined;
+      onStart(machineId, undefined, currentPath, finalName, undefined);
+      onClose();
+      return;
+    }
     const parts: string[] = [];
     for (const { flag } of flagOptions) {
       if (selectedFlags.has(flag)) {
@@ -515,17 +522,18 @@ export function StartSessionModal({
             </div>
           </div>
 
-          {/* CLI Tool */}
+          {/* Session Type */}
           <div>
             <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>
-              CLI Tool
+              Session Type
             </label>
-            <div style={{ display: "flex", gap: 8 }}>
-              {(["claude", "codex", "gemini"] as const).map((tool) => {
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {([null, "claude", "codex", "gemini"] as const).map((tool) => {
                 const isSelected = selectedTool === tool;
+                const label = tool ? tool.charAt(0).toUpperCase() + tool.slice(1) : "Terminal";
                 return (
                   <button
-                    key={tool}
+                    key={tool ?? "terminal"}
                     type="button"
                     onClick={() => { setSelectedTool(tool); setSelectedFlags(new Set()); }}
                     style={{
@@ -540,14 +548,15 @@ export function StartSessionModal({
                       lineHeight: 1.4,
                     }}
                   >
-                    {tool.charAt(0).toUpperCase() + tool.slice(1)}
+                    {label}
                   </button>
                 );
               })}
             </div>
           </div>
 
-          {/* Flags */}
+          {/* Flags (CLI tools only) */}
+          {selectedTool && (
           <div>
             <label
               style={{
@@ -586,8 +595,10 @@ export function StartSessionModal({
               })}
             </div>
           </div>
+          )}
 
-          {/* Additional args */}
+          {/* Additional args (CLI tools only) */}
+          {selectedTool && (
           <div>
             <label
               style={{
@@ -618,6 +629,7 @@ export function StartSessionModal({
               }}
             />
           </div>
+          )}
         </div>
 
         {/* Footer */}

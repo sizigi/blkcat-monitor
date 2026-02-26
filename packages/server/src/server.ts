@@ -4,6 +4,7 @@ import {
   type MachineSnapshot,
   type OutboundAgentInfo,
   type SessionInfo,
+  type View,
   parseAgentMessage,
   parseDashboardMessage,
   NOTIFY_HOOK_EVENTS,
@@ -26,6 +27,8 @@ interface ServerOptions {
   onDisplayNamesSaved?: (names: DisplayNames) => void;
   tlsCert?: string;
   tlsKey?: string;
+  views?: View[];
+  onViewsSaved?: (views: View[]) => void;
 }
 
 interface WsData {
@@ -105,6 +108,7 @@ export function createServer(opts: ServerOptions) {
   const displayNames: DisplayNames = opts.displayNames
     ? { machines: { ...opts.displayNames.machines }, sessions: { ...opts.displayNames.sessions } }
     : { machines: {}, sessions: {} };
+  const views: View[] = opts.views ? [...opts.views] : [];
 
   // --- Health monitoring: CPU snapshot for delta computation ---
   function cpuSnapshot() {
@@ -410,6 +414,9 @@ export function createServer(opts: ServerOptions) {
           if (Object.keys(displayNames.machines).length > 0 || Object.keys(displayNames.sessions).length > 0) {
             snapshotMsg.displayNames = displayNames;
           }
+          if (views.length > 0) {
+            snapshotMsg.views = views;
+          }
           ws.send(JSON.stringify(snapshotMsg));
           for (const machine of machines.values()) {
             for (const output of machine.lastOutputs.values()) {
@@ -590,6 +597,15 @@ export function createServer(opts: ServerOptions) {
               } else {
                 delete displayNames.sessions[key];
               }
+              // Forward rename to the agent so it can rename the tmux window
+              const machine = machines.get(msg.machineId);
+              if (machine && msg.name) {
+                machine.agent.send(JSON.stringify({
+                  type: "rename_session",
+                  sessionId: msg.sessionId,
+                  name: msg.name,
+                }));
+              }
             }
             broadcastToDashboards({
               type: "display_name_update",
@@ -600,6 +616,60 @@ export function createServer(opts: ServerOptions) {
             });
             if (opts.onDisplayNamesSaved) {
               opts.onDisplayNamesSaved(displayNames);
+            }
+          } else if (msg.type === "join_pane") {
+            const machine = machines.get(msg.machineId);
+            if (machine) {
+              machine.agent.send(JSON.stringify({
+                type: "join_pane",
+                sourceSessionId: msg.sourceSessionId,
+                targetSessionId: msg.targetSessionId,
+              }));
+            }
+          } else if (msg.type === "break_pane") {
+            const machine = machines.get(msg.machineId);
+            if (machine) {
+              machine.agent.send(JSON.stringify({
+                type: "break_pane",
+                sessionId: msg.sessionId,
+              }));
+            }
+          } else if (msg.type === "swap_pane") {
+            const machine = machines.get(msg.machineId);
+            if (machine) {
+              machine.agent.send(JSON.stringify({
+                type: "swap_pane",
+                sessionId1: msg.sessionId1,
+                sessionId2: msg.sessionId2,
+              }));
+            }
+          } else if (msg.type === "swap_window") {
+            const machine = machines.get(msg.machineId);
+            if (machine) {
+              machine.agent.send(JSON.stringify({
+                type: "swap_window",
+                sessionId1: msg.sessionId1,
+                sessionId2: msg.sessionId2,
+              }));
+            }
+          } else if (msg.type === "create_view") {
+            views.push({ id: msg.id, name: msg.name, panes: msg.panes });
+            broadcastToDashboards({ type: "views_update", views });
+            opts.onViewsSaved?.(views);
+          } else if (msg.type === "update_view") {
+            const idx = views.findIndex((v) => v.id === msg.id);
+            if (idx >= 0) {
+              if (msg.name !== undefined) views[idx].name = msg.name;
+              if (msg.panes !== undefined) views[idx].panes = msg.panes;
+              broadcastToDashboards({ type: "views_update", views });
+              opts.onViewsSaved?.(views);
+            }
+          } else if (msg.type === "delete_view") {
+            const idx = views.findIndex((v) => v.id === msg.id);
+            if (idx >= 0) {
+              views.splice(idx, 1);
+              broadcastToDashboards({ type: "views_update", views });
+              opts.onViewsSaved?.(views);
             }
           }
         }

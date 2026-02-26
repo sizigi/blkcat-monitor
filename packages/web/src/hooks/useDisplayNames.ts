@@ -27,12 +27,8 @@ export function useDisplayNames(opts: UseDisplayNamesOptions) {
   }, [opts.sendDisplayName]);
 
   const setSessionName = useCallback((machineId: string, sessionId: string, name: string) => {
-    const key = `${machineId}:${sessionId}`;
-    setNames((prev) => {
-      const next = { ...prev, sessions: { ...prev.sessions, [key]: name } };
-      if (!name) delete next.sessions[key];
-      return next;
-    });
+    // Don't store locally — the name lives in tmux (windowName).
+    // Sending the message triggers a tmux rename-window on the agent.
     opts.sendDisplayName("session", machineId, sessionId, name);
   }, [opts.sendDisplayName]);
 
@@ -42,9 +38,9 @@ export function useDisplayNames(opts: UseDisplayNamesOptions) {
   );
 
   const getSessionName = useCallback(
-    (machineId: string, sessionId: string, defaultName: string) =>
-      names.sessions[`${machineId}:${sessionId}`] || defaultName,
-    [names],
+    (_machineId: string, _sessionId: string, defaultName: string) =>
+      defaultName,
+    [],
   );
 
   return { getMachineName, getSessionName, setMachineName, setSessionName };

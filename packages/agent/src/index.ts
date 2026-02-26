@@ -2,7 +2,7 @@ import { loadConfig } from "./config";
 import { AgentConnection } from "./connection";
 import { AgentListener } from "./listener";
 import { TmuxCapture, bunExec } from "./capture";
-import { discoverCliSessions } from "./discovery";
+import { discoverAllSessions } from "./discovery";
 import { hasChanged } from "./diff";
 import { HooksServer } from "./hooks-server";
 import { installHooks } from "./hooks-install";
@@ -50,7 +50,7 @@ async function main() {
   const hasAutoTarget = config.targets.some((t) => t.type === "auto");
   let autoSessions: SessionInfo[] = [];
   if (hasAutoTarget) {
-    autoSessions = discoverCliSessions();
+    autoSessions = discoverAllSessions();
     for (const s of autoSessions) {
       captures.set(s.id, new TmuxCapture(bunExec));
     }
@@ -141,16 +141,21 @@ async function main() {
   }
 
   function handleStartSession(args?: string, cwd?: string, name?: string, cliTool?: CliTool) {
-    const tool = cliTool ?? "claude";
     const localCap = new TmuxCapture(bunExec);
-    const paneId = localCap.startSession(args, cwd, tool);
+    let paneId: string | null;
+    if (cliTool) {
+      paneId = localCap.startSession(args, cwd, cliTool);
+    } else {
+      paneId = localCap.startPlainSession(cwd);
+    }
     if (!paneId) {
       console.error("Failed to start new session");
       return;
     }
     captures.set(paneId, localCap);
-    const sessionName = name || `${tool}${args ? ` ${args}` : ""}`;
-    const session: SessionInfo = { id: paneId, name: sessionName, target: "local", args: args || undefined, cliTool: tool };
+    const sessionName = name || (cliTool ? `${cliTool}${args ? ` ${args}` : ""}` : "shell");
+    if (name) localCap.renameWindow(paneId, name);
+    const session: SessionInfo = { id: paneId, name: sessionName, target: "local", args: args || undefined, ...(cliTool ? { cliTool } : {}) };
     // Remove any existing entry with the same pane ID to prevent duplicates
     const existingIdx = manualSessions.findIndex((s) => s.id === paneId);
     if (existingIdx >= 0) manualSessions.splice(existingIdx, 1);
@@ -159,7 +164,62 @@ async function main() {
     manualSessions.push(session);
     const all = [...autoSessions, ...manualSessions];
     conn.updateSessions(all);
-    console.log(`Started new ${tool} session: ${paneId}`);
+    console.log(`Started new ${cliTool ?? "terminal"} session: ${paneId}`);
+  }
+
+  function handleRenameSession(sessionId: string, name: string) {
+    const cap = captures.get(sessionId);
+    if (!cap) return;
+    cap.renameWindow(sessionId, name);
+    triggerRediscovery();
+  }
+
+  function triggerRediscovery() {
+    if (!hasAutoTarget) return;
+    const fresh = discoverAllSessions();
+    const newSessions = fresh.filter((s) => !captures.has(s.id));
+    const now = Date.now();
+    for (const [id, ts] of reloadGracePanes) {
+      if (now - ts > RELOAD_GRACE_MS) reloadGracePanes.delete(id);
+    }
+    const goneSessions = autoSessions.filter(
+      (s) => !fresh.find((f) => f.id === s.id) && !reloadGracePanes.has(s.id)
+    );
+    if (newSessions.length > 0 || goneSessions.length > 0) {
+      for (const s of newSessions) captures.set(s.id, new TmuxCapture(bunExec));
+      for (const s of goneSessions) { captures.delete(s.id); prevLines.delete(s.id); }
+    }
+    const manualIds = new Set(manualSessions.map((s) => s.id));
+    autoSessions = fresh.filter((s) => !manualIds.has(s.id));
+    const all = [...autoSessions, ...manualSessions];
+    conn.updateSessions(all);
+    console.log(`Sessions updated: ${all.length} total`);
+  }
+
+  function handleJoinPane(sourceSessionId: string, targetSessionId: string) {
+    const cap = captures.get(sourceSessionId) ?? new TmuxCapture(bunExec);
+    cap.joinPane(sourceSessionId, targetSessionId);
+    triggerRediscovery();
+  }
+
+  function handleBreakPane(sessionId: string) {
+    const cap = captures.get(sessionId) ?? new TmuxCapture(bunExec);
+    cap.breakPane(sessionId);
+    triggerRediscovery();
+  }
+
+  function handleSwapPane(sessionId1: string, sessionId2: string) {
+    const cap = captures.get(sessionId1) ?? new TmuxCapture(bunExec);
+    cap.swapPane(sessionId1, sessionId2);
+    triggerRediscovery();
+  }
+
+  function handleSwapWindow(sessionId1: string, sessionId2: string) {
+    // Extract window targets (session:window) from session IDs (session:window.pane)
+    const winTarget = (id: string) => id.replace(/\.\d+$/, "");
+    const cap = captures.get(sessionId1) ?? new TmuxCapture(bunExec);
+    cap.swapWindow(winTarget(sessionId1), winTarget(sessionId2));
+    triggerRediscovery();
   }
 
   function handleListDirectory(requestId: string, path: string) {
@@ -269,6 +329,11 @@ async function main() {
       onRemoveSkills: handleRemoveSkills,
       onGetSettings: handleGetSettings,
       onUpdateSettings: handleUpdateSettings,
+      onRenameSession: handleRenameSession,
+      onJoinPane: handleJoinPane,
+      onBreakPane: handleBreakPane,
+      onSwapPane: handleSwapPane,
+      onSwapWindow: handleSwapWindow,
     });
     // When a new server connects, clear prevLines so the next poll cycle
     // re-sends the current pane content for all sessions.
@@ -292,6 +357,11 @@ async function main() {
       onRemoveSkills: handleRemoveSkills,
       onGetSettings: handleGetSettings,
       onUpdateSettings: handleUpdateSettings,
+      onRenameSession: handleRenameSession,
+      onJoinPane: handleJoinPane,
+      onBreakPane: handleBreakPane,
+      onSwapPane: handleSwapPane,
+      onSwapWindow: handleSwapWindow,
       getSessions: () => [...autoSessions, ...manualSessions],
       onReconnect: () => { prevLines.clear(); },
     });
@@ -392,7 +462,10 @@ async function main() {
       const lines = cap.capturePane(paneId);
       const prev = prevLines.get(paneId) ?? [];
       if (hasChanged(prev, lines)) {
-        const waitingForInput = detectWaitingForInput(lines);
+        // Only detect waiting-for-input for CLI tool sessions
+        const allSess = [...autoSessions, ...manualSessions];
+        const sess = allSess.find((s) => s.id === paneId);
+        const waitingForInput = sess?.cliTool ? detectWaitingForInput(lines) : false;
         const cursor = cap.getCursorPos(paneId);
         conn.sendOutput(paneId, lines, waitingForInput, cursor ?? undefined);
         prevLines.set(paneId, lines);
@@ -401,39 +474,7 @@ async function main() {
   }, config.pollInterval);
 
   if (hasAutoTarget) {
-    setInterval(() => {
-      const manualIds = new Set(manualSessions.map((s) => s.id));
-      const fresh = discoverCliSessions(bunExec, manualIds);
-      const newSessions = fresh.filter((s) => !captures.has(s.id));
-      // Expire old grace entries
-      const now = Date.now();
-      for (const [id, ts] of reloadGracePanes) {
-        if (now - ts > RELOAD_GRACE_MS) reloadGracePanes.delete(id);
-      }
-      // Skip removing sessions that are within the reload grace period
-      const goneSessions = autoSessions.filter(
-        (s) => !fresh.find((f) => f.id === s.id) && !reloadGracePanes.has(s.id)
-      );
-
-      // Check if cwd changed for any existing auto session
-      let cwdChanged = false;
-      for (const f of fresh) {
-        const existing = autoSessions.find((s) => s.id === f.id);
-        if (existing && existing.cwd !== f.cwd) { cwdChanged = true; break; }
-      }
-
-      if (newSessions.length > 0 || goneSessions.length > 0 || cwdChanged) {
-        for (const s of newSessions) captures.set(s.id, new TmuxCapture(bunExec));
-        for (const s of goneSessions) { captures.delete(s.id); prevLines.delete(s.id); }
-        // Exclude manually started sessions so auto-discovery doesn't overwrite their names
-        autoSessions = fresh.filter((s) => !manualIds.has(s.id));
-        const all = [...autoSessions, ...manualSessions];
-        conn.updateSessions(all);
-        if (newSessions.length > 0 || goneSessions.length > 0) {
-          console.log(`Sessions updated: ${all.length} total`);
-        }
-      }
-    }, 30000);
+    setInterval(() => triggerRediscovery(), 30000);
   }
 }
 
