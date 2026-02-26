@@ -58,6 +58,8 @@ interface SidebarProps {
   onRenameGroup?: (machineId: string, cwdRoot: string, name: string) => void;
   getOrderedGroups?: <T extends { cwdRoot: string }>(machineId: string, groups: T[]) => T[];
   onReorderCwdGroups?: (machineId: string, cwdRoots: string[]) => void;
+  panelTab?: "events" | "notifications" | "skills" | "health" | null;
+  onPanelTab?: (tab: "events" | "notifications" | "skills" | "health" | null) => void;
 }
 
 export function Sidebar({
@@ -109,6 +111,8 @@ export function Sidebar({
   onRenameGroup,
   getOrderedGroups,
   onReorderCwdGroups,
+  panelTab,
+  onPanelTab,
 }: SidebarProps) {
   const [modalMachineId, setModalMachineId] = useState<string | null>(null);
   const [reloadTarget, setReloadTarget] = useState<{ machineId: string; session: SessionInfo } | null>(null);
@@ -236,18 +240,20 @@ export function Sidebar({
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
         {onToggleHideTmux && (() => {
-          // Collect individually hidden (non-attached) terminals
+          // Collect hidden terminals: individually hidden OR all terminals when global toggle is on
           const hiddenItems: { machineId: string; terminalId: string; name: string }[] = [];
           for (const m of machines) {
             for (const s of m.sessions) {
-              if (!s.cliTool && attachedTerminals?.isHidden(m.machineId, s.id)
-                  && !(attachedTerminals?.isAttached(m.machineId, s.id))) {
+              if (s.cliTool) continue;
+              if (attachedTerminals?.isAttached(m.machineId, s.id)) continue;
+              const isIndividuallyHidden = attachedTerminals?.isHidden(m.machineId, s.id);
+              if (isIndividuallyHidden || hideTmuxSessions) {
                 const name = getSessionName ? getSessionName(m.machineId, s.id, s.windowName ?? s.name) : (s.windowName ?? s.name);
                 hiddenItems.push({ machineId: m.machineId, terminalId: s.id, name });
               }
             }
           }
-          const hasHidden = hiddenItems.length > 0 || hideTmuxSessions;
+          const hasHidden = hiddenItems.length > 0;
           return (
             <span style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
               <button
@@ -1319,6 +1325,41 @@ export function Sidebar({
       </div>
       {agents && onAddAgent && onRemoveAgent && (
         <AgentManager agents={agents} onAdd={onAddAgent} onRemove={onRemoveAgent} />
+      )}
+      {onPanelTab && (
+        <div className="panel-tabs-desktop" style={{
+          display: "flex",
+          borderTop: "1px solid var(--border)",
+          flexShrink: 0,
+        }}>
+          {(["events", "notifications", "skills", "health"] as const).map((tab) => {
+            const active = panelTab === tab;
+            let label = tab === "events" ? "Events" : tab === "notifications" ? "Notifs" : tab === "health" ? "Health" : "Skills";
+            if (tab === "notifications" && notificationCounts) {
+              let total = 0;
+              for (const c of notificationCounts.values()) total += c;
+              if (total > 0) label += ` (${total})`;
+            }
+            return (
+              <button
+                key={tab}
+                onClick={() => onPanelTab(active ? null : tab)}
+                style={{
+                  flex: 1,
+                  background: active ? "var(--accent)" : "transparent",
+                  border: "none",
+                  color: active ? "#fff" : "var(--text-muted)",
+                  cursor: "pointer",
+                  fontSize: 11,
+                  padding: "6px 0",
+                  fontWeight: active ? 600 : 400,
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
       )}
       {modalMachineId && onStartSession && listDirectory && (
         <StartSessionModal
