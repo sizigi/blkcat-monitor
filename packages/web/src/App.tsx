@@ -3,6 +3,7 @@ import { useSocket } from "./hooks/useSocket";
 import { useSessionOutput } from "./hooks/useSessionOutput";
 import { useAgents } from "./hooks/useAgents";
 import { useDisplayNames } from "./hooks/useDisplayNames";
+import { useGroupNames } from "./hooks/useGroupNames";
 import { useIsMobile } from "./hooks/useIsMobile";
 import { useTheme } from "./hooks/useTheme";
 import { Sidebar } from "./components/Sidebar";
@@ -35,6 +36,7 @@ export default function App() {
     sendDisplayName: setDisplayName,
     subscribeDisplayNames,
   });
+  const { getGroupName, setGroupName } = useGroupNames();
   const { theme, setTheme, themes } = useTheme();
   const isMobile = useIsMobile();
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -295,6 +297,8 @@ export default function App() {
       if (selectedView === id) setSelectedView(undefined);
     },
     onRenameView: (id: string, name: string) => updateView(id, name),
+    getGroupName,
+    onRenameGroup: setGroupName,
   };
 
   return (

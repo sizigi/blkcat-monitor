@@ -288,6 +288,13 @@ html, body, #root {
 .sidebar-section-header.section-terminals {
   border-left-color: var(--text-muted);
 }
+.sidebar-section-header.section-cwd {
+  cursor: pointer;
+  border-left-color: var(--accent);
+}
+.sidebar-section-header.section-cwd:hover {
+  background: rgba(88,166,255,0.06);
+}
 
 /* Hover-reveal action buttons on session rows */
 .session-actions {

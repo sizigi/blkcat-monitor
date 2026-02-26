@@ -48,6 +48,8 @@ interface SidebarProps {
   onCreateView?: () => void;
   onDeleteView?: (viewId: string) => void;
   onRenameView?: (viewId: string, name: string) => void;
+  getGroupName?: (machineId: string, cwdRoot: string, defaultName: string) => string;
+  onRenameGroup?: (machineId: string, cwdRoot: string, name: string) => void;
 }
 
 export function Sidebar({
@@ -93,6 +95,8 @@ export function Sidebar({
   onCreateView,
   onDeleteView,
   onRenameView,
+  getGroupName,
+  onRenameGroup,
 }: SidebarProps) {
   const [modalMachineId, setModalMachineId] = useState<string | null>(null);
   const [reloadTarget, setReloadTarget] = useState<{ machineId: string; session: SessionInfo } | null>(null);
@@ -106,6 +110,8 @@ export function Sidebar({
   const [reloadStatus, setReloadStatus] = useState<Map<string, string>>(new Map());
   // Collapsed machines: sessions hidden when machine is collapsed
   const [collapsedMachines, setCollapsedMachines] = useState<Set<string>>(new Set());
+  // Collapsed CWD groups: keyed by "machineId:cwdRoot"
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const reloadTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   useEffect(() => {
@@ -518,11 +524,73 @@ export function Sidebar({
             )}
           </div>
           {!collapsedMachines.has(machine.machineId) && (() => {
-            const cliSessions = machine.sessions.filter((s) => !!s.cliTool);
-            const tmuxSessions = machine.sessions.filter((s) => !s.cliTool);
-            const showGroupLabels = cliSessions.length > 0 && tmuxSessions.length > 0;
+            // ── CWD-based grouping ──────────────────────────────────────
+            interface CwdGroup {
+              cwdRoot: string;
+              sessions: SessionInfo[];
+            }
 
-            function renderSession(session: SessionInfo, sessionIndex: number, group: "cli" | "terminal" | string) {
+            function shortenPath(p: string): string {
+              return p.replace(/^\/home\/[^/]+/, "~").replace(/^\/root/, "~");
+            }
+
+            function buildCwdGroups(sessions: SessionInfo[]): { groups: CwdGroup[]; ungrouped: SessionInfo[] } {
+              // 1. Collect anchor roots from CLI sessions
+              const anchorSet = new Set<string>();
+              for (const s of sessions) {
+                if (s.cliTool && s.cwd) anchorSet.add(s.cwd);
+              }
+              // 2. Sort shortest-first; merge subdirectory anchors into parent
+              let anchors = [...anchorSet].sort((a, b) => a.length - b.length);
+              const merged: string[] = [];
+              for (const a of anchors) {
+                const parent = merged.find((m) => a === m || a.startsWith(m + "/"));
+                if (!parent) merged.push(a);
+              }
+              anchors = merged;
+
+              // 3. Assign each session to best matching anchor (longest match)
+              const groupMap = new Map<string, SessionInfo[]>();
+              for (const a of anchors) groupMap.set(a, []);
+              const ungrouped: SessionInfo[] = [];
+
+              for (const s of sessions) {
+                if (!s.cwd) {
+                  ungrouped.push(s);
+                  continue;
+                }
+                let bestAnchor: string | null = null;
+                for (const a of anchors) {
+                  if (s.cwd === a || s.cwd.startsWith(a + "/")) {
+                    if (!bestAnchor || a.length > bestAnchor.length) bestAnchor = a;
+                  }
+                }
+                if (bestAnchor) {
+                  groupMap.get(bestAnchor)!.push(s);
+                } else {
+                  ungrouped.push(s);
+                }
+              }
+
+              const groups: CwdGroup[] = anchors
+                .map((a) => ({ cwdRoot: a, sessions: groupMap.get(a)! }))
+                .filter((g) => g.sessions.length > 0);
+              return { groups, ungrouped };
+            }
+
+            const { groups: cwdGroups, ungrouped } = buildCwdGroups(machine.sessions);
+
+            // When hideTmuxSessions, filter terminals out of groups and hide empty groups
+            const visibleGroups = hideTmuxSessions
+              ? cwdGroups
+                  .map((g) => ({ ...g, sessions: g.sessions.filter((s) => !!s.cliTool) }))
+                  .filter((g) => g.sessions.length > 0)
+              : cwdGroups;
+            const visibleUngrouped = hideTmuxSessions
+              ? ungrouped.filter((s) => !!s.cliTool)
+              : ungrouped;
+
+            function renderSession(session: SessionInfo, sessionIndex: number, group: string) {
               const isSelected =
                 selectedMachine === machine.machineId &&
                 selectedSession === session.id;
@@ -563,10 +631,8 @@ export function Sidebar({
                     if (!src || src.machineId !== machine.machineId || src.group !== group || src.sessionId === session.id) return;
                     dragRef.current = null;
                     if (src.windowId === session.windowId) {
-                      // Same window → swap panes
                       onSwapPane?.(machine.machineId, src.sessionId, session.id);
                     } else {
-                      // Different windows → swap windows
                       onSwapWindow?.(machine.machineId, src.sessionId, session.id);
                     }
                   }}
@@ -903,30 +969,203 @@ export function Sidebar({
               );
             }
 
-            const cliGroups = buildWindowGroups(cliSessions);
-            const terminalGroups = buildWindowGroups(tmuxSessions);
+            // ── Render CWD groups + ungrouped ──────────────────────────
+            function renderCwdGroupSessions(sessions: SessionInfo[], cwdRoot: string) {
+              const windowGroups = buildWindowGroups(sessions);
+              return windowGroups.map((wg) => renderWindowGroup(wg, cwdRoot));
+            }
+
+            function renderWindowGroup(group: WindowGroup, defaultGroup: string) {
+              if (group.panes.length === 1) {
+                const idx = machine.sessions.indexOf(group.panes[0]);
+                return renderSession(group.panes[0], idx, defaultGroup);
+              }
+              const isGroupSelected = selectedGroup === group.windowId && selectedMachine === machine.machineId;
+              return (
+                <div key={group.windowId}>
+                  <div
+                    onClick={() => onSelectGroup?.(machine.machineId, group.windowId)}
+                    style={{
+                      padding: "4px 16px",
+                      fontSize: 12,
+                      fontWeight: 600,
+                      color: isGroupSelected ? "var(--accent)" : "var(--text-muted)",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      background: isGroupSelected ? "var(--bg-tertiary)" : "transparent",
+                    }}
+                  >
+                    <span style={{ fontSize: 10 }}>{"\u25E8"}</span>
+                    {editingId === `group:${group.windowId}` ? (
+                      <input
+                        autoFocus
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        onBlur={() => {
+                          const trimmed = editValue.trim();
+                          if (trimmed && trimmed !== (group.windowName || group.windowId)) {
+                            onRenameSession?.(machine.machineId, group.panes[0].id, trimmed);
+                          }
+                          setEditingId(null);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            const trimmed = editValue.trim();
+                            if (trimmed) onRenameSession?.(machine.machineId, group.panes[0].id, trimmed);
+                            setEditingId(null);
+                          } else if (e.key === "Escape") {
+                            setEditingId(null);
+                          }
+                        }}
+                        style={{
+                          flex: 1,
+                          background: "var(--bg)",
+                          color: "var(--text)",
+                          border: "1px solid var(--accent)",
+                          borderRadius: 3,
+                          padding: "1px 4px",
+                          fontSize: 12,
+                          fontWeight: 600,
+                          outline: "none",
+                        }}
+                      />
+                    ) : (
+                    <span
+                      style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                      onDoubleClick={(e) => {
+                        if (!onRenameSession) return;
+                        e.stopPropagation();
+                        setEditingId(`group:${group.windowId}`);
+                        setEditValue(group.windowName || group.windowId);
+                      }}
+                      title="Double-click to rename"
+                    >
+                      {group.windowName || group.windowId}
+                    </span>
+                    )}
+                    <span style={{ fontSize: 10, color: "var(--text-muted)" }}>
+                      {group.panes.length}
+                    </span>
+                  </div>
+                  {group.panes.map((pane) => {
+                    const idx = machine.sessions.indexOf(pane);
+                    const groupedPane = { ...pane, windowName: pane.paneCommand ?? pane.windowName };
+                    return (
+                      <div key={pane.id} style={{ paddingLeft: 12, marginLeft: 12 }}>
+                        {renderSession(groupedPane, idx, group.windowId)}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            }
 
             return (
               <>
-                {showGroupLabels && cliSessions.length > 0 && (
-                  <div className="sidebar-section-header">
-                    <span style={{ fontSize: 11 }}>✦</span>
-                    Vibe Coding
-                  </div>
-                )}
-                {cliGroups.map((g) => renderGroup(g, "cli"))}
-                {!hideTmuxSessions && terminalGroups.length > 0 && (
+                {visibleGroups.map((cwdGroup) => {
+                  const groupKey = `${machine.machineId}:${cwdGroup.cwdRoot}`;
+                  const isCollapsed = collapsedGroups.has(groupKey);
+                  const defaultLabel = shortenPath(cwdGroup.cwdRoot);
+                  const label = getGroupName
+                    ? getGroupName(machine.machineId, cwdGroup.cwdRoot, defaultLabel)
+                    : defaultLabel;
+
+                  return (
+                    <div key={cwdGroup.cwdRoot} data-testid={`cwd-group-${cwdGroup.cwdRoot}`}>
+                      <div
+                        className="sidebar-section-header section-cwd"
+                        onClick={() => {
+                          setCollapsedGroups((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(groupKey)) next.delete(groupKey);
+                            else next.add(groupKey);
+                            return next;
+                          });
+                        }}
+                      >
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            flexShrink: 0,
+                            transition: "transform 0.15s",
+                            transform: isCollapsed ? "rotate(-90deg)" : "rotate(0deg)",
+                          }}
+                        >
+                          <ChevronDown size={10} />
+                        </span>
+                        <span style={{ fontSize: 11 }}>{"\uD83D\uDCC1"}</span>
+                        {editingId === `cwdgroup:${groupKey}` ? (
+                          <input
+                            autoFocus
+                            value={editValue}
+                            onChange={(e) => setEditValue(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            onBlur={() => {
+                              const trimmed = editValue.trim();
+                              if (trimmed && trimmed !== label) {
+                                onRenameGroup?.(machine.machineId, cwdGroup.cwdRoot, trimmed);
+                              }
+                              setEditingId(null);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                const trimmed = editValue.trim();
+                                if (trimmed) onRenameGroup?.(machine.machineId, cwdGroup.cwdRoot, trimmed);
+                                setEditingId(null);
+                              } else if (e.key === "Escape") {
+                                setEditingId(null);
+                              }
+                            }}
+                            style={{
+                              flex: 1,
+                              background: "var(--bg)",
+                              color: "var(--text)",
+                              border: "1px solid var(--accent)",
+                              borderRadius: 3,
+                              padding: "1px 4px",
+                              fontSize: 11,
+                              fontWeight: 600,
+                              outline: "none",
+                            }}
+                          />
+                        ) : (
+                          <span
+                            style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                            onDoubleClick={(e) => {
+                              if (!onRenameGroup) return;
+                              e.stopPropagation();
+                              setEditingId(`cwdgroup:${groupKey}`);
+                              setEditValue(label);
+                            }}
+                            title={`${cwdGroup.cwdRoot}\nDouble-click to rename`}
+                          >
+                            {label}
+                          </span>
+                        )}
+                        <span style={{ fontSize: 10, color: "var(--text-muted)", flexShrink: 0 }}>
+                          {cwdGroup.sessions.length}
+                        </span>
+                      </div>
+                      {!isCollapsed && renderCwdGroupSessions(cwdGroup.sessions, cwdGroup.cwdRoot)}
+                    </div>
+                  );
+                })}
+                {visibleUngrouped.length > 0 && (
                   <>
-                    {showGroupLabels && (
-                      <>
-                        <div style={{ height: 1, background: "var(--border)", margin: "4px 16px 0", opacity: 0.5 }} />
-                        <div className="sidebar-section-header section-terminals">
-                          <span style={{ fontSize: 11, fontFamily: "monospace" }}>{">_"}</span>
-                          Terminals
-                        </div>
-                      </>
+                    {visibleGroups.length > 0 && (
+                      <div style={{ height: 1, background: "var(--border)", margin: "4px 16px 0", opacity: 0.5 }} />
                     )}
-                    {terminalGroups.map((g) => renderGroup(g, "terminal"))}
+                    {visibleGroups.length > 0 && (
+                      <div className="sidebar-section-header section-terminals">
+                        <span style={{ fontSize: 11, fontFamily: "monospace" }}>{">_"}</span>
+                        Terminals
+                      </div>
+                    )}
+                    {renderCwdGroupSessions(visibleUngrouped, "ungrouped")}
                   </>
                 )}
               </>

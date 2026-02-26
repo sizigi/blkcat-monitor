@@ -117,4 +117,99 @@ describe("Sidebar", () => {
     const icons = screen.getAllByText(">_");
     expect(icons.length).toBeGreaterThanOrEqual(1);
   });
+
+  // ── CWD grouping tests ──────────────────────────────────────
+
+  it("groups sessions with same cwd together under a CWD header", () => {
+    const cwdMachines: MachineSnapshot[] = [
+      {
+        machineId: "m1",
+        sessions: [
+          { id: "s1", name: "claude-task", target: "local", cliTool: "claude", cwd: "/home/user/project" },
+          { id: "s2", name: "terminal", target: "local", cwd: "/home/user/project" },
+        ],
+        lastSeen: Date.now(),
+      },
+    ];
+    render(<Sidebar machines={cwdMachines} onSelectSession={() => {}} />);
+    // Both sessions should be visible
+    expect(screen.getByText("claude-task")).toBeInTheDocument();
+    expect(screen.getByText("terminal")).toBeInTheDocument();
+    // CWD group header should show shortened path
+    expect(screen.getByText("~/project")).toBeInTheDocument();
+  });
+
+  it("groups subdirectory terminal with parent vibe session", () => {
+    const cwdMachines: MachineSnapshot[] = [
+      {
+        machineId: "m1",
+        sessions: [
+          { id: "s1", name: "refactor", target: "local", cliTool: "claude", cwd: "/home/user/myapp" },
+          { id: "s2", name: "server-shell", target: "local", cwd: "/home/user/myapp/packages/server" },
+        ],
+        lastSeen: Date.now(),
+      },
+    ];
+    render(<Sidebar machines={cwdMachines} onSelectSession={() => {}} />);
+    // Both should appear — the terminal is in a subdirectory of the CLI cwd
+    expect(screen.getByText("refactor")).toBeInTheDocument();
+    expect(screen.getByText("server-shell")).toBeInTheDocument();
+    // Group header
+    expect(screen.getByText("~/myapp")).toBeInTheDocument();
+  });
+
+  it("puts sessions without cwd in ungrouped section", () => {
+    const cwdMachines: MachineSnapshot[] = [
+      {
+        machineId: "m1",
+        sessions: [
+          { id: "s1", name: "claude-task", target: "local", cliTool: "claude", cwd: "/home/user/project" },
+          { id: "s2", name: "misc-shell", target: "local" },
+        ],
+        lastSeen: Date.now(),
+      },
+    ];
+    render(<Sidebar machines={cwdMachines} onSelectSession={() => {}} />);
+    expect(screen.getByText("claude-task")).toBeInTheDocument();
+    expect(screen.getByText("misc-shell")).toBeInTheDocument();
+    // Ungrouped section header "Terminals" should appear
+    expect(screen.getByText("Terminals")).toBeInTheDocument();
+  });
+
+  it("renders all sessions ungrouped when no CLI sessions exist", () => {
+    const noCliMachines: MachineSnapshot[] = [
+      {
+        machineId: "m1",
+        sessions: [
+          { id: "s1", name: "shell1", target: "local", cwd: "/tmp" },
+          { id: "s2", name: "shell2", target: "local" },
+        ],
+        lastSeen: Date.now(),
+      },
+    ];
+    render(<Sidebar machines={noCliMachines} onSelectSession={() => {}} />);
+    expect(screen.getByText("shell1")).toBeInTheDocument();
+    expect(screen.getByText("shell2")).toBeInTheDocument();
+    // No CWD group headers should be shown (no anchors since no CLI sessions)
+    expect(screen.queryByText("Terminals")).not.toBeInTheDocument();
+  });
+
+  it("hides terminals from CWD groups when hideTmuxSessions is true", () => {
+    const cwdMachines: MachineSnapshot[] = [
+      {
+        machineId: "m1",
+        sessions: [
+          { id: "s1", name: "claude-task", target: "local", cliTool: "claude", cwd: "/home/user/project" },
+          { id: "s2", name: "terminal", target: "local", cwd: "/home/user/project" },
+          { id: "s3", name: "misc-shell", target: "local" },
+        ],
+        lastSeen: Date.now(),
+      },
+    ];
+    render(<Sidebar machines={cwdMachines} onSelectSession={() => {}} hideTmuxSessions />);
+    expect(screen.getByText("claude-task")).toBeInTheDocument();
+    // Terminal sessions should be hidden
+    expect(screen.queryByText("terminal")).not.toBeInTheDocument();
+    expect(screen.queryByText("misc-shell")).not.toBeInTheDocument();
+  });
 });
