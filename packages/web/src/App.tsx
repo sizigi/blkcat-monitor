@@ -229,7 +229,9 @@ export default function App() {
   }, [sidebarWidth]);
 
   // Track which pane to focus inside a split view (set by sidebar click)
-  const [viewFocusKey, setViewFocusKey] = useState<string>();
+  // Focus request for split view: key + a counter so repeated clicks on the same session still trigger
+  const [viewFocusReq, setViewFocusReq] = useState<{ key: string; seq: number } | undefined>();
+  const focusSeqRef = useRef(0);
 
   // When clicking a session, check if it belongs to a view — if so, select that view and focus
   const handleSelectSession = useCallback((machineId: string, sessionId: string) => {
@@ -238,14 +240,14 @@ export default function App() {
     );
     if (containingView) {
       setSelectedView(containingView.id);
-      setViewFocusKey(`${machineId}:${sessionId}`);
+      setViewFocusReq({ key: `${machineId}:${sessionId}`, seq: ++focusSeqRef.current });
       setSelectedMachine(undefined);
       setSelectedSession(undefined);
     } else {
       setSelectedMachine(machineId);
       setSelectedSession(sessionId);
       setSelectedView(undefined);
-      setViewFocusKey(undefined);
+      setViewFocusReq(undefined);
     }
     clearNotifications(`${machineId}:${sessionId}`);
   }, [views, clearNotifications]);
@@ -532,6 +534,42 @@ export default function App() {
             <span style={{ fontWeight: 400, opacity: 0.7 }}>Esc cancel</span>
           </div>
         )}
+        {/* Desktop: in-flow tab bar for panel buttons */}
+        {!isMobile && (
+          <div className="panel-tabs-desktop" style={{
+            display: "flex",
+            justifyContent: "flex-end",
+            padding: "4px 8px 0",
+            gap: 0,
+            flexShrink: 0,
+          }}>
+            {(["events", "notifications", "skills", "health"] as const).map((tab, i, arr) => (
+              <button
+                key={tab}
+                onClick={() => setPanelTab((v) => v === tab ? null : tab)}
+                style={{
+                  background: panelTab === tab ? "var(--bg-secondary)" : "var(--bg-tertiary)",
+                  border: "1px solid var(--border)",
+                  borderBottom: panelTab === tab ? "none" : "1px solid var(--border)",
+                  color: panelTab === tab ? "var(--text-primary)" : "var(--text-muted)",
+                  cursor: "pointer",
+                  fontSize: 12,
+                  padding: "4px 10px",
+                  borderRadius: i === 0 ? "4px 0 0 0" : i === arr.length - 1 ? "0 4px 0 0" : "0",
+                }}
+              >
+                {tab === "events" ? "Events" : tab === "notifications" ? "Notifications" : tab === "health" ? "Health" : "Skills"}
+                {tab === "notifications" && (() => {
+                  let total = 0;
+                  for (const c of notificationCounts.values()) total += c;
+                  return total > 0 ? ` (${total})` : "";
+                })()}
+              </button>
+            ))}
+          </div>
+        )}
+        {/* Content area wrapper — provides positioning context for panel overlay */}
+        <div style={{ flex: 1, position: "relative", minHeight: 0, overflow: "hidden" }}>
         {selectedView && (() => {
           const view = views.find((v) => v.id === selectedView);
           if (!view || view.panes.length === 0) {
@@ -557,7 +595,8 @@ export default function App() {
               getMachineName={getMachineName}
               getSessionName={getSessionName}
               onUpdateView={updateView}
-              focusSessionKey={viewFocusKey}
+              focusSessionKey={viewFocusReq?.key}
+              focusSeq={viewFocusReq?.seq}
             />
           );
         })()}
@@ -591,6 +630,45 @@ export default function App() {
             <div className="idle-layer idle-layer-odd" />
           </div>
         )}
+        {/* Desktop: panel content overlay (inside content wrapper for correct positioning) */}
+        {!isMobile && panelTab && panelTab !== "skills" && (
+          <div style={{
+            position: "absolute",
+            top: 0,
+            right: 0,
+            bottom: 0,
+            width: 320,
+            zIndex: 20,
+            overflow: "hidden",
+          }}>
+            {panelTab === "events" ? (
+              <EventFeed
+                hookEventsRef={hookEventsRef}
+                subscribeHookEvents={subscribeHookEvents}
+                onClose={() => setPanelTab(null)}
+              />
+            ) : panelTab === "health" ? (
+              <HealthPanel
+                health={health}
+                onClose={() => setPanelTab(null)}
+              />
+            ) : (
+              <NotificationList
+                hookEventsRef={hookEventsRef}
+                subscribeHookEvents={subscribeHookEvents}
+                machines={machines}
+                onSelectSession={(m, s) => {
+                  handleSelectSession(m, s);
+                  setPanelTab(null);
+                }}
+                getMachineName={getMachineName}
+                getSessionName={getSessionName}
+                onClose={() => setPanelTab(null)}
+              />
+            )}
+          </div>
+        )}
+        </div>{/* end content wrapper */}
       </main>
       {/* Full-width skills matrix overlay */}
       {panelTab === "skills" && (
@@ -614,88 +692,6 @@ export default function App() {
             subscribeSettingsResult={subscribeSettingsResult}
             onClose={() => setPanelTab(null)}
           />
-        </div>
-      )}
-      {/* Desktop: right overlay panel with tab buttons + panel content */}
-      {!isMobile && (
-        <div style={{
-          position: "absolute",
-          top: 0,
-          right: 0,
-          bottom: 0,
-          display: "flex",
-          flexDirection: "column",
-          zIndex: 20,
-          pointerEvents: "none",
-        }}>
-          {/* Tab buttons */}
-          <div className="panel-tabs-desktop" style={{
-            display: "flex",
-            gap: 0,
-            padding: "8px 8px 0",
-            justifyContent: "flex-end",
-            pointerEvents: "auto",
-          }}>
-            {(["events", "notifications", "skills", "health"] as const).map((tab, i, arr) => (
-              <button
-                key={tab}
-                onClick={() => setPanelTab((v) => v === tab ? null : tab)}
-                style={{
-                  background: panelTab === tab ? "var(--bg-secondary)" : "var(--bg-tertiary)",
-                  border: "1px solid var(--border)",
-                  borderBottom: panelTab === tab ? "none" : "1px solid var(--border)",
-                  color: panelTab === tab ? "var(--text-primary)" : "var(--text-muted)",
-                  cursor: "pointer",
-                  fontSize: 12,
-                  padding: "4px 10px",
-                  borderRadius: i === 0 ? "4px 0 0 0" : i === arr.length - 1 ? "0 4px 0 0" : "0",
-                }}
-              >
-                {tab === "events" ? "Events" : tab === "notifications" ? "Notifications" : tab === "health" ? "Health" : "Skills"}
-                {tab === "notifications" && (() => {
-                  let total = 0;
-                  for (const c of notificationCounts.values()) total += c;
-                  return total > 0 ? ` (${total})` : "";
-                })()}
-              </button>
-            ))}
-          </div>
-          {/* Panel content */}
-          {panelTab && panelTab !== "skills" && (
-            <div style={{
-              width: 320,
-              flex: 1,
-              pointerEvents: "auto",
-              alignSelf: "flex-end",
-              overflow: "hidden",
-            }}>
-              {panelTab === "events" ? (
-                <EventFeed
-                  hookEventsRef={hookEventsRef}
-                  subscribeHookEvents={subscribeHookEvents}
-                  onClose={() => setPanelTab(null)}
-                />
-              ) : panelTab === "health" ? (
-                <HealthPanel
-                  health={health}
-                  onClose={() => setPanelTab(null)}
-                />
-              ) : (
-                <NotificationList
-                  hookEventsRef={hookEventsRef}
-                  subscribeHookEvents={subscribeHookEvents}
-                  machines={machines}
-                  onSelectSession={(m, s) => {
-                    handleSelectSession(m, s);
-                    setPanelTab(null);
-                  }}
-                  getMachineName={getMachineName}
-                  getSessionName={getSessionName}
-                  onClose={() => setPanelTab(null)}
-                />
-              )}
-            </div>
-          )}
         </div>
       )}
       {/* Mobile: full-screen panel overlay (rendered outside pointer-events:none container) */}

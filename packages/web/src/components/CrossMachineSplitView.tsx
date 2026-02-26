@@ -23,6 +23,8 @@ interface CrossMachineSplitViewProps {
   onUpdateView: (id: string, name?: string, panes?: ViewPane[]) => void;
   /** When set, focus this pane (format: "machineId:sessionId") */
   focusSessionKey?: string;
+  /** Incrementing counter — each change triggers a focus update */
+  focusSeq?: number;
 }
 
 function ViewPane({
@@ -164,16 +166,18 @@ export function CrossMachineSplitView({
   getSessionName,
   onUpdateView,
   focusSessionKey,
+  focusSeq,
 }: CrossMachineSplitViewProps) {
   const firstPane = view.panes[0];
   const [focusedKey, setFocusedKey] = useState(firstPane ? `${firstPane.machineId}:${firstPane.sessionId}` : "");
 
   // Sync focus when requested externally (e.g. sidebar click)
+  // Uses focusSeq as trigger so repeated clicks on the same session still work
   useEffect(() => {
-    if (focusSessionKey && view.panes.some((p) => `${p.machineId}:${p.sessionId}` === focusSessionKey)) {
+    if (focusSessionKey) {
       setFocusedKey(focusSessionKey);
     }
-  }, [focusSessionKey, view.panes]);
+  }, [focusSeq]); // eslint-disable-line react-hooks/exhaustive-deps
   const inputCacheRef = useRef(new Map<string, string>());
   const dragRef = useRef<number | null>(null);
   const [dropTarget, setDropTarget] = useState<number | null>(null);
