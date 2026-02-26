@@ -8,7 +8,6 @@ import { useIsMobile } from "./hooks/useIsMobile";
 import { useTheme } from "./hooks/useTheme";
 import { Sidebar } from "./components/Sidebar";
 import { SessionDetail } from "./components/SessionDetail";
-import { SplitView } from "./components/SplitView";
 import { CrossMachineSplitView } from "./components/CrossMachineSplitView";
 import { CreateViewModal } from "./components/CreateViewModal";
 import { EventFeed } from "./components/EventFeed";
@@ -18,8 +17,9 @@ import { HealthPanel } from "./components/HealthPanel";
 import { ProjectSettingsModal } from "./components/ProjectSettingsModal";
 import { PWAPrompt } from "./components/PWAPrompt";
 import { useHealth } from "./hooks/useHealth";
-import { Menu, Pencil, ClipboardList, Bell, Settings, ChevronUp } from "./components/Icons";
-import type { SessionInfo } from "@blkcat/shared";
+import { useAttachedTerminals } from "./hooks/useAttachedTerminals";
+import { useCwdGroupOrder } from "./hooks/useCwdGroupOrder";
+import { Menu, Pencil, ClipboardList, Bell, Settings } from "./components/Icons";
 
 const WS_URL =
   (import.meta as any).env?.VITE_WS_URL ??
@@ -30,7 +30,7 @@ const MIN_SIDEBAR_WIDTH = 160;
 const MAX_SIDEBAR_WIDTH = 500;
 
 export default function App() {
-  const { connected, machines, views, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory, createDirectory, deploySkills, removeSkills, getSettings, updateSettings, subscribeDeployResult, subscribeSettingsSnapshot, subscribeSettingsResult, setDisplayName, subscribeDisplayNames, subscribeReloadResult, joinPane, breakPane, swapPane, swapWindow, createView, updateView, deleteView } = useSocket(WS_URL);
+  const { connected, machines, views, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory, createDirectory, deploySkills, removeSkills, getSettings, updateSettings, subscribeDeployResult, subscribeSettingsSnapshot, subscribeSettingsResult, setDisplayName, subscribeDisplayNames, subscribeReloadResult, swapPane, swapWindow, createView, updateView, deleteView } = useSocket(WS_URL);
   const { agents, addAgent, removeAgent } = useAgents();
   const { getMachineName, getSessionName, setMachineName, setSessionName } = useDisplayNames({
     sendDisplayName: setDisplayName,
@@ -38,6 +38,8 @@ export default function App() {
   });
   const { getGroupName, setGroupName } = useGroupNames();
   const { theme, setTheme, themes } = useTheme();
+  const attachedTerminals = useAttachedTerminals();
+  const { getOrderedGroups, setGroupOrder } = useCwdGroupOrder();
   const isMobile = useIsMobile();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -65,7 +67,6 @@ export default function App() {
   }, [connected]);
   const [selectedMachine, setSelectedMachine] = useState<string>();
   const [selectedSession, setSelectedSession] = useState<string>();
-  const [selectedGroup, setSelectedGroup] = useState<string>();
   const [selectedView, setSelectedView] = useState<string>();
   const [showCreateViewModal, setShowCreateViewModal] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -94,14 +95,6 @@ export default function App() {
   selectedSessionRef.current = selectedSession;
 
   const sessionOutput = useSessionOutput(outputMapRef, subscribeOutput, selectedMachine, selectedSession);
-
-  // Compute panes for split view when a group is selected
-  const selectedGroupPanes = useMemo<SessionInfo[]>(() => {
-    if (!selectedMachine || !selectedGroup) return [];
-    const machine = machines.find((m) => m.machineId === selectedMachine);
-    if (!machine) return [];
-    return machine.sessions.filter((s) => s.windowId === selectedGroup);
-  }, [machines, selectedMachine, selectedGroup]);
 
   const machinesRef = useRef(machines);
   machinesRef.current = machines;
@@ -184,10 +177,6 @@ export default function App() {
         e.preventDefault(); e.stopPropagation();
         selectMachine(num - 1); setNav(false); return;
       }
-      if (e.shiftKey && num >= 1 && num <= 9) {
-        e.preventDefault(); e.stopPropagation();
-        selectSession(num - 1); setNav(false); return;
-      }
       if (code === "BracketLeft" || code === "BracketRight") {
         e.preventDefault(); e.stopPropagation();
         cycleMachine(code === "BracketLeft" ? -1 : 1); return;
@@ -239,6 +228,28 @@ export default function App() {
     document.body.style.userSelect = "none";
   }, [sidebarWidth]);
 
+  // Track which pane to focus inside a split view (set by sidebar click)
+  const [viewFocusKey, setViewFocusKey] = useState<string>();
+
+  // When clicking a session, check if it belongs to a view — if so, select that view and focus
+  const handleSelectSession = useCallback((machineId: string, sessionId: string) => {
+    const containingView = views.find((v) =>
+      v.panes.some((p) => p.machineId === machineId && p.sessionId === sessionId)
+    );
+    if (containingView) {
+      setSelectedView(containingView.id);
+      setViewFocusKey(`${machineId}:${sessionId}`);
+      setSelectedMachine(undefined);
+      setSelectedSession(undefined);
+    } else {
+      setSelectedMachine(machineId);
+      setSelectedSession(sessionId);
+      setSelectedView(undefined);
+      setViewFocusKey(undefined);
+    }
+    clearNotifications(`${machineId}:${sessionId}`);
+  }, [views, clearNotifications]);
+
   const sidebarBaseProps = {
     machines: machines,
     selectedMachine,
@@ -272,15 +283,6 @@ export default function App() {
     onDeselect: () => { setSelectedMachine(undefined); setSelectedSession(undefined); },
     hideTmuxSessions,
     onToggleHideTmux: toggleHideTmux,
-    selectedGroup,
-    onSelectGroup: (machineId: string, windowId: string) => {
-      setSelectedMachine(machineId);
-      setSelectedSession(undefined);
-      setSelectedGroup(windowId);
-      setSelectedView(undefined);
-    },
-    onJoinPane: joinPane,
-    onBreakPane: breakPane,
     onSwapPane: swapPane,
     onSwapWindow: swapWindow,
     views,
@@ -289,7 +291,6 @@ export default function App() {
       setSelectedView(viewId);
       setSelectedMachine(undefined);
       setSelectedSession(undefined);
-      setSelectedGroup(undefined);
     },
     onCreateView: () => setShowCreateViewModal(true),
     onDeleteView: (id: string) => {
@@ -297,12 +298,49 @@ export default function App() {
       if (selectedView === id) setSelectedView(undefined);
     },
     onRenameView: (id: string, name: string) => updateView(id, name),
+    onCreateViewFromDrag: (s1: { machineId: string; sessionId: string }, s2: { machineId: string; sessionId: string }) => {
+      // Check if a View with exactly these two sessions already exists
+      const existing = views.find((v) =>
+        v.panes.length === 2 &&
+        v.panes.some((p) => p.machineId === s1.machineId && p.sessionId === s1.sessionId) &&
+        v.panes.some((p) => p.machineId === s2.machineId && p.sessionId === s2.sessionId)
+      );
+      if (existing) {
+        setSelectedView(existing.id);
+        setSelectedMachine(undefined);
+        setSelectedSession(undefined);
+        return;
+      }
+      const id = Math.random().toString(36).slice(2) + Date.now().toString(36);
+      const getName = (mid: string, sid: string) => {
+        const machine = machines.find((m) => m.machineId === mid);
+        const session = machine?.sessions.find((s) => s.id === sid);
+        const defaultName = session?.windowName ?? session?.name ?? sid;
+        return getSessionName ? getSessionName(mid, sid, defaultName) : defaultName;
+      };
+      const name = `${getName(s1.machineId, s1.sessionId)} + ${getName(s2.machineId, s2.sessionId)}`;
+      createView(id, name, [s1, s2]);
+      setSelectedView(id);
+      setSelectedMachine(undefined);
+      setSelectedSession(undefined);
+    },
+    onAttachTerminal: attachedTerminals.attachTerminal,
+    onDetachTerminal: attachedTerminals.detachTerminal,
+    onHideTerminal: attachedTerminals.hideTerminal,
+    onShowTerminal: attachedTerminals.showTerminal,
+    attachedTerminals: {
+      getAttachedTo: attachedTerminals.getAttachedTo,
+      isAttached: attachedTerminals.isAttached,
+      isHidden: attachedTerminals.isHidden,
+    },
     getGroupName,
     onRenameGroup: setGroupName,
+    getOrderedGroups,
+    onReorderCwdGroups: setGroupOrder,
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", height: "100dvh", position: "relative" }}>
+    <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", height: "var(--app-height, 100dvh)", position: "relative" }}>
       {isMobile ? (
         <>
           {drawerOpen && (
@@ -313,11 +351,7 @@ export default function App() {
             className={drawerOpen ? "open" : ""}
             {...sidebarBaseProps}
             onSelectSession={(m, s) => {
-              setSelectedMachine(m);
-              setSelectedSession(s);
-              setSelectedGroup(undefined);
-              setSelectedView(undefined);
-              clearNotifications(`${m}:${s}`);
+              handleSelectSession(m, s);
               setDrawerOpen(false);
             }}
             onCollapse={() => setDrawerOpen(false)}
@@ -330,11 +364,7 @@ export default function App() {
               width={sidebarWidth}
               {...sidebarBaseProps}
               onSelectSession={(m, s) => {
-                setSelectedMachine(m);
-                setSelectedSession(s);
-                setSelectedGroup(undefined);
-                setSelectedView(undefined);
-                clearNotifications(`${m}:${s}`);
+                handleSelectSession(m, s);
               }}
               onCollapse={() => setSidebarCollapsed(true)}
             />
@@ -496,7 +526,6 @@ export default function App() {
           }}>
             <span style={{ fontFamily: "monospace" }}>`</span>
             <span style={{ fontWeight: 400 }}>1-9 machine</span>
-            <span style={{ fontWeight: 400, display: "inline-flex", alignItems: "center", gap: 2 }}><ChevronUp size={12} />1-9 session</span>
             <span style={{ fontWeight: 400 }}>[ ] cycle machine</span>
             <span style={{ fontWeight: 400 }}>Tab cycle session</span>
             <span style={{ fontWeight: 400, opacity: 0.7 }}>`` literal `</span>
@@ -528,25 +557,11 @@ export default function App() {
               getMachineName={getMachineName}
               getSessionName={getSessionName}
               onUpdateView={updateView}
+              focusSessionKey={viewFocusKey}
             />
           );
         })()}
-        {selectedView ? null : selectedMachine && selectedGroup && selectedGroupPanes.length > 1 ? (
-          <SplitView
-            machineId={selectedMachine}
-            panes={selectedGroupPanes}
-            isMobile={isMobile}
-            outputMapRef={outputMapRef}
-            subscribeOutput={subscribeOutput}
-            logMapRef={logMapRef}
-            scrollbackMapRef={scrollbackMapRef}
-            subscribeScrollback={subscribeScrollback}
-            onRequestScrollback={requestScrollback}
-            onSendInput={sendInput}
-            onSendResize={sendResize}
-            getSessionName={(m, s, d) => getSessionName ? getSessionName(m, s, d) : d}
-          />
-        ) : selectedMachine && selectedSession ? (
+        {selectedView ? null : selectedMachine && selectedSession ? (
           <SessionDetail
             machineId={selectedMachine}
             sessionId={selectedSession}
@@ -671,9 +686,7 @@ export default function App() {
                   subscribeHookEvents={subscribeHookEvents}
                   machines={machines}
                   onSelectSession={(m, s) => {
-                    setSelectedMachine(m);
-                    setSelectedSession(s);
-                    clearNotifications(`${m}:${s}`);
+                    handleSelectSession(m, s);
                     setPanelTab(null);
                   }}
                   getMachineName={getMachineName}
@@ -705,9 +718,7 @@ export default function App() {
               subscribeHookEvents={subscribeHookEvents}
               machines={machines}
               onSelectSession={(m, s) => {
-                setSelectedMachine(m);
-                setSelectedSession(s);
-                clearNotifications(`${m}:${s}`);
+                handleSelectSession(m, s);
                 setPanelTab(null);
               }}
               getMachineName={getMachineName}
@@ -750,7 +761,6 @@ export default function App() {
             setSelectedView(id);
             setSelectedMachine(undefined);
             setSelectedSession(undefined);
-            setSelectedGroup(undefined);
           }}
           onClose={() => setShowCreateViewModal(false)}
         />

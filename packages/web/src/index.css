@@ -179,7 +179,7 @@ html, body, #root {
   animation: pulse-active 0.8s ease-in-out infinite;
 }
 
-/* Shortcut number badges */
+/* Machine shortcut number badge */
 .shortcut-badge {
   font-family: monospace;
   font-size: 9px;
@@ -198,11 +198,6 @@ html, body, #root {
   background: var(--bg-tertiary);
   color: var(--text-muted);
   border: 1px solid var(--border);
-}
-.shortcut-badge-session {
-  background: transparent;
-  color: var(--text-muted);
-  opacity: 0.6;
 }
 
 /* Idle screen: two layers for brick-pattern stagger (even/odd rows offset by half tile) */
@@ -296,6 +291,11 @@ html, body, #root {
   background: rgba(88,166,255,0.06);
 }
 
+/* Drop target indicator */
+.sidebar-session-row.drop-center {
+  background: rgba(88,166,255,0.15) !important;
+}
+
 /* Hover-reveal action buttons on session rows */
 .session-actions {
   display: flex;
@@ -314,6 +314,25 @@ html, body, #root {
   color: var(--text-muted);
   flex-shrink: 0;
   line-height: 1;
+}
+
+/* Terminal session badge — small bordered pill with >_ */
+.terminal-badge {
+  font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+  font-size: 9px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 4px;
+  min-width: 18px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  opacity: 0.7;
 }
 
 /* Sidebar fonts: monospace for all content, thin serif for title */
@@ -416,6 +435,37 @@ html, body, #root {
   text-shadow: 0 1px 2px rgba(0,0,0,0.3);
 }
 
+/* Terminal floating buttons (resize / scroll history) — dark theme default */
+.terminal-float-btn {
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #fff;
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 18px;
+  line-height: 1;
+  opacity: 0.6;
+  transition: opacity 0.15s;
+  min-width: 40px;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.terminal-float-btn:hover {
+  opacity: 1;
+}
+/* Light themes: invert to dark-on-light */
+[data-theme="github-light"] .terminal-float-btn,
+[data-theme="solarized-light"] .terminal-float-btn,
+[data-theme="catppuccin-latte"] .terminal-float-btn,
+[data-theme="nord-light"] .terminal-float-btn {
+  background: rgba(0, 0, 0, 0.1);
+  border-color: rgba(0, 0, 0, 0.2);
+  color: #000;
+}
+
 /* Respect reduced-motion preference */
 @media (prefers-reduced-motion: reduce) {
   .waiting-indicator,
@@ -442,10 +492,11 @@ html, body, #root {
 
 /* ── Mobile responsive (≤768px) ── */
 @media (max-width: 768px) {
-  /* Prevent page scroll on mobile (position:fixed causes keyboard layout thrashing) */
+  /* Prevent page scroll on mobile. Use --app-height (set by visualViewport listener
+     in main.tsx) so the layout shrinks when the soft keyboard opens. */
   html, body, #root {
     overflow: hidden;
-    height: 100%;
+    height: var(--app-height, 100dvh);
   }
 
   /* Sidebar as slide-out drawer */
@@ -524,6 +575,10 @@ html, body, #root {
   /* Show function key buttons on mobile */
   .chat-key-buttons {
     display: flex !important;
+  }
+  /* Eliminate 300ms tap delay on key buttons */
+  .chat-key-buttons button {
+    touch-action: manipulation;
   }
 
   /* Mobile: push textarea to bottom so buttons are visible above it.

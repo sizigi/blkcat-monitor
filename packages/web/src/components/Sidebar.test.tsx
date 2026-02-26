@@ -212,4 +212,101 @@ describe("Sidebar", () => {
     expect(screen.queryByText("terminal")).not.toBeInTheDocument();
     expect(screen.queryByText("misc-shell")).not.toBeInTheDocument();
   });
+
+  // ── Flat list (no window sub-grouping) ────────────────────────
+
+  it("renders sessions flat within a CWD group (no window sub-groups)", () => {
+    const cwdMachines: MachineSnapshot[] = [
+      {
+        machineId: "m1",
+        sessions: [
+          { id: "s1", name: "task1", target: "local", cliTool: "claude", cwd: "/home/user/proj", windowId: "0" },
+          { id: "s2", name: "task2", target: "local", cliTool: "claude", cwd: "/home/user/proj", windowId: "0" },
+          { id: "s3", name: "shell", target: "local", cwd: "/home/user/proj", windowId: "1" },
+        ],
+        lastSeen: Date.now(),
+      },
+    ];
+    render(<Sidebar machines={cwdMachines} onSelectSession={() => {}} />);
+    // All three sessions should be rendered flat (no window group headers)
+    expect(screen.getByText("task1")).toBeInTheDocument();
+    expect(screen.getByText("task2")).toBeInTheDocument();
+    expect(screen.getByText("shell")).toBeInTheDocument();
+    // No window group header icon (◨) should be present
+    expect(screen.queryByText("\u25E8")).not.toBeInTheDocument();
+  });
+
+  // ── No numbering badges ───────────────────────────────────────
+
+  it("does not render numbering badges on sessions (machine badges still present)", () => {
+    render(<Sidebar machines={machines} onSelectSession={() => {}} />);
+    // Session badges should not exist, but machine badges are kept
+    const sessionBadges = document.querySelectorAll(".shortcut-badge-session");
+    expect(sessionBadges.length).toBe(0);
+    // Machine badge should still be present
+    const machineBadges = document.querySelectorAll(".shortcut-badge-machine");
+    expect(machineBadges.length).toBe(1);
+  });
+
+  // ── Attached terminals ────────────────────────────────────────
+
+  it("renders attached terminals under their parent CLI session", () => {
+    const cwdMachines: MachineSnapshot[] = [
+      {
+        machineId: "m1",
+        sessions: [
+          { id: "cli1", name: "my-task", target: "local", cliTool: "claude", cwd: "/home/user/proj" },
+          { id: "term1", name: "server", target: "local", cwd: "/home/user/proj" },
+        ],
+        lastSeen: Date.now(),
+      },
+    ];
+    const attachedTerminals = {
+      getAttachedTo: (mid: string, tid: string) => (mid === "m1" && tid === "term1" ? "cli1" : null),
+      isAttached: (mid: string, tid: string) => mid === "m1" && tid === "term1",
+      isHidden: () => false,
+    };
+    render(
+      <Sidebar
+        machines={cwdMachines}
+        onSelectSession={() => {}}
+        attachedTerminals={attachedTerminals}
+      />,
+    );
+    // CLI session should be visible
+    expect(screen.getByText("my-task")).toBeInTheDocument();
+    // Attached terminal should be rendered (via attached-term1 testid)
+    expect(screen.getByTestId("attached-term1")).toBeInTheDocument();
+    // The terminal should NOT appear in the main session list
+    expect(screen.queryByTestId("session-term1")).not.toBeInTheDocument();
+  });
+
+  it("hides attached terminals that are marked hidden", () => {
+    const cwdMachines: MachineSnapshot[] = [
+      {
+        machineId: "m1",
+        sessions: [
+          { id: "cli1", name: "my-task", target: "local", cliTool: "claude", cwd: "/home/user/proj" },
+          { id: "term1", name: "server", target: "local", cwd: "/home/user/proj" },
+        ],
+        lastSeen: Date.now(),
+      },
+    ];
+    const attachedTerminals = {
+      getAttachedTo: (mid: string, tid: string) => (mid === "m1" && tid === "term1" ? "cli1" : null),
+      isAttached: (mid: string, tid: string) => mid === "m1" && tid === "term1",
+      isHidden: (mid: string, tid: string) => mid === "m1" && tid === "term1",
+    };
+    render(
+      <Sidebar
+        machines={cwdMachines}
+        onSelectSession={() => {}}
+        attachedTerminals={attachedTerminals}
+      />,
+    );
+    // CLI session visible
+    expect(screen.getByText("my-task")).toBeInTheDocument();
+    // Attached terminal should NOT be rendered (it's hidden)
+    expect(screen.queryByTestId("attached-term1")).not.toBeInTheDocument();
+  });
 });
