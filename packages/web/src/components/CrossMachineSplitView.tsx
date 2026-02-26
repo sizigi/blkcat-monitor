@@ -3,8 +3,9 @@ import type { MachineSnapshot, View, ViewPane } from "@blkcat/shared";
 import type { OutputLine } from "../hooks/useSocket";
 import { useSessionOutput } from "../hooks/useSessionOutput";
 import { TerminalOutput } from "./TerminalOutput";
+import type { TerminalOutputHandle } from "./TerminalOutput";
 import { FloatingChatInput } from "./FloatingChatInput";
-import { X } from "./Icons";
+import { X, Maximize } from "./Icons";
 
 interface CrossMachineSplitViewProps {
   view: View;
@@ -25,6 +26,8 @@ interface CrossMachineSplitViewProps {
   focusSessionKey?: string;
   /** Incrementing counter — each change triggers a focus update */
   focusSeq?: number;
+  /** Ref callback for direct pane cycling from keyboard shortcuts (bypasses App re-render) */
+  cyclePaneRef?: React.MutableRefObject<((delta: number) => void) | undefined>;
 }
 
 function ViewPane({
@@ -64,19 +67,21 @@ function ViewPane({
 }) {
   const output = useSessionOutput(outputMapRef, subscribeOutput, machineId, sessionId);
   const containerRef = useRef<HTMLDivElement>(null);
+  const termRef = useRef<TerminalOutputHandle>(null);
 
-  // Auto-focus the xterm terminal when this pane becomes focused
   useEffect(() => {
-    if (isFocused && containerRef.current) {
-      const textarea = containerRef.current.querySelector(".xterm-helper-textarea") as HTMLTextAreaElement | null;
+    if (!isFocused) return;
+    const timer = setTimeout(() => {
+      const textarea = containerRef.current?.querySelector(".xterm-helper-textarea") as HTMLTextAreaElement | null;
       if (textarea) textarea.focus();
-    }
+    }, 50);
+    return () => clearTimeout(timer);
   }, [isFocused]);
 
   return (
     <div
       ref={containerRef}
-      onClick={onFocus}
+      onMouseDownCapture={onFocus}
       style={{
         flex: 1,
         minWidth: 0,
@@ -91,14 +96,12 @@ function ViewPane({
         style={{
           padding: "3px 12px",
           fontSize: 11,
-          background: isFocused ? "var(--bg-secondary)" : "var(--bg)",
-          borderBottom: "1px solid var(--border)",
+          background: isFocused ? "color-mix(in srgb, var(--accent) 12%, var(--bg-secondary))" : "var(--bg)",
+          borderBottom: isFocused ? "2px solid var(--accent)" : "2px solid var(--border)",
           display: "flex",
           alignItems: "center",
           gap: 6,
           fontFamily: "'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace",
-          position: "relative",
-          zIndex: 25,
         }}
       >
         <div style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
@@ -114,6 +117,24 @@ function ViewPane({
             {sessionName}
           </div>
         </div>
+        <button
+          onClick={(e) => { e.stopPropagation(); termRef.current?.forceFit(); }}
+          title="Force resize terminal"
+          style={{
+            background: "none",
+            border: "none",
+            color: "var(--text-muted)",
+            cursor: "pointer",
+            padding: 2,
+            lineHeight: 1,
+            opacity: 0.5,
+            flexShrink: 0,
+          }}
+          onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; }}
+          onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.5"; }}
+        >
+          <Maximize size={10} />
+        </button>
         <button
           onClick={(e) => { e.stopPropagation(); onRemove(); }}
           title="Remove from view"
@@ -135,6 +156,7 @@ function ViewPane({
       </div>
       {available ? (
         <TerminalOutput
+          ref={termRef}
           sessionKey={`${machineId}:${sessionId}`}
           lines={output.lines}
           cursor={output.cursor}
@@ -144,6 +166,7 @@ function ViewPane({
           onRequestScrollback={onRequestScrollback}
           onData={onSendData}
           onResize={onSendResize}
+          hideFloatingButtons
         />
       ) : (
         <div style={{
@@ -179,9 +202,12 @@ export function CrossMachineSplitView({
   onUpdateView,
   focusSessionKey,
   focusSeq,
+  cyclePaneRef,
 }: CrossMachineSplitViewProps) {
   const firstPane = view.panes[0];
   const [focusedKey, setFocusedKey] = useState(firstPane ? `${firstPane.machineId}:${firstPane.sessionId}` : "");
+  const focusedKeyRef = useRef(focusedKey);
+  focusedKeyRef.current = focusedKey;
 
   // Sync focus when requested externally (e.g. sidebar click)
   // Uses focusSeq as trigger so repeated clicks on the same session still work
@@ -190,13 +216,33 @@ export function CrossMachineSplitView({
       setFocusedKey(focusSessionKey);
     }
   }, [focusSeq]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const inputCacheRef = useRef(new Map<string, string>());
   const dragRef = useRef<number | null>(null);
-  const [dropTarget, setDropTarget] = useState<number | null>(null);
+  const dropTargetRef = useRef<number | null>(null);
+  const paneRefsMap = useRef<Map<number, HTMLDivElement>>(new Map());
+  const splitContainerRef = useRef<HTMLDivElement>(null);
+  const viewPanesRef = useRef(view.panes);
+  viewPanesRef.current = view.panes;
 
   // Find the focused pane (or fall back to first)
   const activePane = view.panes.find((p) => `${p.machineId}:${p.sessionId}` === focusedKey) ?? view.panes[0];
   const activeKey = activePane ? `${activePane.machineId}:${activePane.sessionId}` : "";
+
+  // Expose direct pane cycling via ref (bypasses App re-render)
+  useEffect(() => {
+    if (!cyclePaneRef) return;
+    cyclePaneRef.current = (delta: number) => {
+      const panes = viewPanesRef.current;
+      if (panes.length === 0) return;
+      const currentKey = focusedKeyRef.current;
+      const idx = currentKey ? panes.findIndex((p) => `${p.machineId}:${p.sessionId}` === currentKey) : -1;
+      const next = (idx + delta + panes.length) % panes.length;
+      const pane = panes[next];
+      setFocusedKey(`${pane.machineId}:${pane.sessionId}`);
+    };
+    return () => { cyclePaneRef.current = undefined; };
+  }, [cyclePaneRef]);
 
   // Check if a session is available (machine connected and session exists)
   const isAvailable = (machineId: string, sessionId: string) => {
@@ -244,8 +290,16 @@ export function CrossMachineSplitView({
 
   return (
     <div
+      ref={splitContainerRef}
       style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, minWidth: 0, position: "relative" }}
       onDragOver={(e) => {
+        // Internal pane drag — always allow drop everywhere to prevent forbidden cursor
+        if (dragRef.current !== null) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+          return;
+        }
+        // External drop from sidebar
         if (e.dataTransfer.types.includes("application/x-blkcat-session")) {
           e.preventDefault();
           e.dataTransfer.dropEffect = "move";
@@ -265,7 +319,6 @@ export function CrossMachineSplitView({
         {view.panes.map((pane, i) => {
           const key = `${pane.machineId}:${pane.sessionId}`;
           const available = isAvailable(pane.machineId, pane.sessionId);
-          const isSwapTarget = dropTarget === i && dragRef.current !== null && dragRef.current !== i;
           return (
             <React.Fragment key={key}>
               {i > 0 && (
@@ -277,23 +330,32 @@ export function CrossMachineSplitView({
                 }} />
               )}
               <div
+                ref={(el) => { if (el) paneRefsMap.current.set(i, el); else paneRefsMap.current.delete(i); }}
                 draggable
                 onDragStart={(e) => {
                   dragRef.current = i;
                   e.dataTransfer.effectAllowed = "move";
                   e.dataTransfer.setData("text/plain", key);
-                }}
-                onDragEnter={(e) => {
-                  if (dragRef.current !== null && dragRef.current !== i) e.preventDefault();
-                  if (e.dataTransfer.types.includes("application/x-blkcat-session")) e.preventDefault();
+                  // Use 1x1 transparent image instead of browser screenshotting
+                  // the entire pane (with terminal canvas) — that's extremely expensive
+                  const img = new Image();
+                  img.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+                  e.dataTransfer.setDragImage(img, 0, 0);
+                  splitContainerRef.current?.classList.add("split-dragging");
                 }}
                 onDragOver={(e) => {
-                  // Internal reorder
-                  if (dragRef.current !== null && dragRef.current !== i) {
+                  // Always preventDefault during internal drag to prevent forbidden cursor
+                  if (dragRef.current !== null) {
                     e.preventDefault();
-                    e.stopPropagation();
                     e.dataTransfer.dropEffect = "move";
-                    if (dropTarget !== i) setDropTarget(i);
+                    if (dragRef.current !== i && dropTargetRef.current !== i) {
+                      // Clear previous target highlight
+                      if (dropTargetRef.current !== null) {
+                        paneRefsMap.current.get(dropTargetRef.current)?.classList.remove("pane-swap-target");
+                      }
+                      dropTargetRef.current = i;
+                      paneRefsMap.current.get(i)?.classList.add("pane-swap-target");
+                    }
                     return;
                   }
                   // External drop from sidebar
@@ -305,7 +367,12 @@ export function CrossMachineSplitView({
                 onDrop={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  setDropTarget(null);
+                  splitContainerRef.current?.classList.remove("split-dragging");
+                  // Clear highlight
+                  if (dropTargetRef.current !== null) {
+                    paneRefsMap.current.get(dropTargetRef.current)?.classList.remove("pane-swap-target");
+                  }
+                  dropTargetRef.current = null;
                   // Internal swap
                   const from = dragRef.current;
                   if (from !== null && from !== i) {
@@ -325,8 +392,12 @@ export function CrossMachineSplitView({
                   }
                 }}
                 onDragEnd={() => {
+                  splitContainerRef.current?.classList.remove("split-dragging");
                   dragRef.current = null;
-                  setDropTarget(null);
+                  if (dropTargetRef.current !== null) {
+                    paneRefsMap.current.get(dropTargetRef.current)?.classList.remove("pane-swap-target");
+                    dropTargetRef.current = null;
+                  }
                 }}
                 style={{
                   flex: 1,
@@ -337,16 +408,6 @@ export function CrossMachineSplitView({
                   position: "relative",
                 }}
               >
-                {isSwapTarget && (
-                  <div style={{
-                    position: "absolute",
-                    inset: 0,
-                    background: "rgba(88,166,255,0.15)",
-                    border: "2px solid var(--accent)",
-                    zIndex: 10,
-                    pointerEvents: "none",
-                  }} />
-                )}
                 <ViewPane
                   machineId={pane.machineId}
                   sessionId={pane.sessionId}

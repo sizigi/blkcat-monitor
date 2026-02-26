@@ -6,6 +6,7 @@ interface AgentManagerProps {
   agents: OutboundAgentInfo[];
   onAdd: (address: string) => Promise<{ ok: boolean; error?: string }>;
   onRemove: (address: string) => Promise<void>;
+  onClose?: () => void;
 }
 
 const STATUS_COLORS: Record<OutboundAgentInfo["status"], string> = {
@@ -14,7 +15,7 @@ const STATUS_COLORS: Record<OutboundAgentInfo["status"], string> = {
   disconnected: "var(--red)",
 };
 
-export function AgentManager({ agents, onAdd, onRemove }: AgentManagerProps) {
+export function AgentManager({ agents, onAdd, onRemove, onClose }: AgentManagerProps) {
   const [showForm, setShowForm] = useState(false);
   const [address, setAddress] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -34,16 +35,32 @@ export function AgentManager({ agents, onAdd, onRemove }: AgentManagerProps) {
   }
 
   return (
-    <div style={{ borderTop: "1px solid var(--border)" }}>
+    <div style={{
+      display: "flex",
+      flexDirection: "column",
+      height: "100%",
+      background: "color-mix(in srgb, var(--bg-secondary) 75%, transparent)",
+      backdropFilter: "blur(12px)",
+      WebkitBackdropFilter: "blur(12px)",
+      borderLeft: "1px solid color-mix(in srgb, var(--border) 60%, transparent)",
+    }}>
       <div
         style={{
-          padding: "12px 16px",
+          padding: "8px 12px",
+          borderBottom: "1px solid color-mix(in srgb, var(--border) 60%, transparent)",
           display: "flex",
           alignItems: "center",
-          justifyContent: "space-between",
+          gap: 8,
         }}
       >
-        <h2 style={{ fontSize: 14, fontWeight: 600, fontFamily: "sans-serif", letterSpacing: "0.02em" }}>Outbound Agents</h2>
+        {onClose && (
+          <button onClick={onClose} style={{
+            background: "none", border: "none", color: "var(--text-muted)",
+            cursor: "pointer", lineHeight: 1, padding: "8px 12px",
+            minWidth: 44, minHeight: 44, display: "flex", alignItems: "center", justifyContent: "center",
+          }}><X size={18} /></button>
+        )}
+        <span style={{ flex: 1, fontWeight: 600, fontSize: 13 }}>Outbound Agents</span>
         <button
           data-testid="add-agent-btn"
           onClick={() => {
@@ -66,6 +83,7 @@ export function AgentManager({ agents, onAdd, onRemove }: AgentManagerProps) {
         </button>
       </div>
 
+      <div style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>
       {showForm && (
         <form
           data-testid="add-agent-form"
@@ -193,6 +211,7 @@ export function AgentManager({ agents, onAdd, onRemove }: AgentManagerProps) {
           </button>
         </div>
       ))}
+      </div>
     </div>
   );
 }

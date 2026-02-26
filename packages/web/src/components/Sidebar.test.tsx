@@ -81,21 +81,6 @@ describe("Sidebar", () => {
     expect(sessionBtn.style.color).toBe("var(--red)");
   });
 
-  it("renders AgentManager when agent props provided", () => {
-    render(
-      <Sidebar
-        machines={machines}
-        onSelectSession={() => {}}
-        agents={[{ address: "localhost:4000", status: "connected", source: "api" }]}
-        onAddAgent={vi.fn()}
-        onRemoveAgent={vi.fn()}
-      />,
-    );
-
-    expect(screen.getByText("Outbound Agents")).toBeInTheDocument();
-    expect(screen.getByText("localhost:4000")).toBeInTheDocument();
-  });
-
   it("does not render AgentManager when agent props absent", () => {
     render(<Sidebar machines={machines} onSelectSession={() => {}} />);
 

@@ -19,7 +19,8 @@ import { PWAPrompt } from "./components/PWAPrompt";
 import { useHealth } from "./hooks/useHealth";
 import { useAttachedTerminals } from "./hooks/useAttachedTerminals";
 import { useCwdGroupOrder } from "./hooks/useCwdGroupOrder";
-import { Menu, Pencil, ClipboardList, Bell, Settings } from "./components/Icons";
+import { Menu, Pencil, ClipboardList, Bell, Settings, Activity, Plug } from "./components/Icons";
+import { AgentManager } from "./components/AgentManager";
 
 const WS_URL =
   (import.meta as any).env?.VITE_WS_URL ??
@@ -71,7 +72,7 @@ export default function App() {
   const [showCreateViewModal, setShowCreateViewModal] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
-  const [panelTab, setPanelTab] = useState<"events" | "notifications" | "skills" | "health" | null>(null);
+  const [panelTab, setPanelTab] = useState<"events" | "notifications" | "skills" | "health" | "agents" | null>(null);
   const health = useHealth(panelTab === "health");
   const [settingsSession, setSettingsSession] = useState<{ machineId: string; sessionId: string } | null>(null);
   const [editingTopbarName, setEditingTopbarName] = useState(false);
@@ -93,6 +94,8 @@ export default function App() {
   selectedMachineRef.current = selectedMachine;
   const selectedSessionRef = useRef(selectedSession);
   selectedSessionRef.current = selectedSession;
+
+  const cyclePaneRef = useRef<((delta: number) => void) | undefined>();
 
   const sessionOutput = useSessionOutput(outputMapRef, subscribeOutput, selectedMachine, selectedSession);
 
@@ -139,23 +142,34 @@ export default function App() {
       const next = (idx + delta + machine.sessions.length) % machine.sessions.length;
       selectSession(next);
     }
-    function sendLiteralBacktick() {
+    // Track which key activated nav mode so double-tap sends the correct literal
+    let navTriggerKey = "`";
+
+    function sendLiteralChar(ch: string) {
       const el = document.activeElement as HTMLElement;
       if (el?.closest?.(".xterm")) {
         const mid = selectedMachineRef.current;
         const sid = selectedSessionRef.current;
-        if (mid && sid) sendInput(mid, sid, { data: "`" });
+        if (mid && sid) sendInput(mid, sid, { data: ch });
       } else if (el?.tagName === "INPUT" || el?.tagName === "TEXTAREA") {
-        document.execCommand("insertText", false, "`");
+        document.execCommand("insertText", false, ch);
       }
+    }
+
+    function cyclePane(delta: number) {
+      // Call directly into CrossMachineSplitView's local state — no App re-render
+      cyclePaneRef.current?.(delta);
     }
 
     function handleKeyDown(e: KeyboardEvent) {
       if (e.isComposing) return;
 
-      if (e.key === "`" && !e.ctrlKey && !e.altKey && !e.metaKey && !navModeRef.current) {
+      if ((e.key === "`" || e.key === "~") && !e.ctrlKey && !e.altKey && !e.metaKey && !navModeRef.current) {
+        // ~ is Shift+` on most keyboards — accept both as prefix
+        if (e.key === "~" && !e.shiftKey) return; // ignore bare ~ if not shift
         e.preventDefault();
         e.stopPropagation();
+        navTriggerKey = e.key === "~" ? "~" : "`";
         setNav(true);
         return;
       }
@@ -165,9 +179,15 @@ export default function App() {
       const code = e.code;
       const num = code?.startsWith("Digit") ? parseInt(code[5]) : NaN;
 
-      if (e.key === "`") {
+      // Double-tap prefix key → send literal character
+      if (e.key === navTriggerKey || (navTriggerKey === "~" && e.key === "~")) {
         e.preventDefault(); e.stopPropagation();
-        setNav(false); sendLiteralBacktick(); return;
+        setNav(false); sendLiteralChar(navTriggerKey); return;
+      }
+      // Also handle the other prefix key as exit
+      if (e.key === "`" || e.key === "~") {
+        e.preventDefault(); e.stopPropagation();
+        setNav(false); sendLiteralChar(e.key === "~" ? "~" : "`"); return;
       }
       if (e.key === "Escape" || e.key === "Enter") {
         e.preventDefault(); e.stopPropagation();
@@ -184,6 +204,10 @@ export default function App() {
       if (e.key === "Tab") {
         e.preventDefault(); e.stopPropagation();
         cycleSession(e.shiftKey ? -1 : 1); return;
+      }
+      if (e.key === "j" || e.key === "k") {
+        e.preventDefault(); e.stopPropagation();
+        cyclePane(e.key === "j" ? 1 : -1); return;
       }
       if (e.key === "Shift" || e.key === "Control" || e.key === "Alt" || e.key === "Meta") return;
       setNav(false);
@@ -283,6 +307,13 @@ export default function App() {
     onThemeChange: setTheme,
     themes,
     onDeselect: () => { setSelectedMachine(undefined); setSelectedSession(undefined); },
+    onSelectSessionDirect: (machineId: string, sessionId: string) => {
+      setSelectedMachine(machineId);
+      setSelectedSession(sessionId);
+      setSelectedView(undefined);
+      setViewFocusReq(undefined);
+      clearNotifications(`${machineId}:${sessionId}`);
+    },
     hideTmuxSessions,
     onToggleHideTmux: toggleHideTmux,
     onSwapPane: swapPane,
@@ -300,6 +331,11 @@ export default function App() {
       if (selectedView === id) setSelectedView(undefined);
     },
     onRenameView: (id: string, name: string) => updateView(id, name),
+    onAddPaneToView: (viewId: string, pane: { machineId: string; sessionId: string }) => {
+      const view = views.find((v) => v.id === viewId);
+      if (!view) return;
+      updateView(viewId, undefined, [...view.panes, pane]);
+    },
     onCreateViewFromDrag: (s1: { machineId: string; sessionId: string }, s2: { machineId: string; sessionId: string }) => {
       // Check if a View with exactly these two sessions already exists
       const existing = views.find((v) =>
@@ -339,6 +375,8 @@ export default function App() {
     onRenameGroup: setGroupName,
     getOrderedGroups,
     onReorderCwdGroups: setGroupOrder,
+    panelTab,
+    onPanelTab: setPanelTab,
   };
 
   return (
@@ -460,7 +498,7 @@ export default function App() {
             title="Rename session"
           ><Pencil size={14} /></button>
         )}
-        {(["events", "notifications", "skills", "health"] as const).map((tab) => (
+        {(["events", "notifications", "skills", "health", "agents"] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setPanelTab((v) => v === tab ? null : tab)}
@@ -480,7 +518,7 @@ export default function App() {
               let total = 0;
               for (const c of notificationCounts.values()) total += c;
               return <><Bell size={16} />{total > 0 && <span style={{ fontSize: 11, fontWeight: 600 }}>{total}</span>}</>;
-            })() : tab === "health" ? <span style={{ fontSize: 13 }}>&#9829;</span> : <Settings size={16} />}
+            })() : tab === "health" ? <Activity size={16} /> : tab === "agents" ? <Plug size={16} /> : <Settings size={16} />}
           </button>
         ))}
       </div>
@@ -526,50 +564,15 @@ export default function App() {
             alignItems: "center",
             flexWrap: "wrap",
           }}>
-            <span style={{ fontFamily: "monospace" }}>`</span>
+            <span style={{ fontFamily: "monospace" }}>` ~</span>
             <span style={{ fontWeight: 400 }}>1-9 machine</span>
             <span style={{ fontWeight: 400 }}>[ ] cycle machine</span>
             <span style={{ fontWeight: 400 }}>Tab cycle session</span>
-            <span style={{ fontWeight: 400, opacity: 0.7 }}>`` literal `</span>
+            <span style={{ fontWeight: 400 }}>j/k cycle pane</span>
+            <span style={{ fontWeight: 400, opacity: 0.7 }}>`` ~~ literal</span>
             <span style={{ fontWeight: 400, opacity: 0.7 }}>Esc cancel</span>
           </div>
         )}
-        {/* Desktop: in-flow tab bar for panel buttons */}
-        {!isMobile && (
-          <div className="panel-tabs-desktop" style={{
-            display: "flex",
-            justifyContent: "flex-end",
-            padding: "4px 8px 0",
-            gap: 0,
-            flexShrink: 0,
-          }}>
-            {(["events", "notifications", "skills", "health"] as const).map((tab, i, arr) => (
-              <button
-                key={tab}
-                onClick={() => setPanelTab((v) => v === tab ? null : tab)}
-                style={{
-                  background: panelTab === tab ? "var(--bg-secondary)" : "var(--bg-tertiary)",
-                  border: "1px solid var(--border)",
-                  borderBottom: panelTab === tab ? "none" : "1px solid var(--border)",
-                  color: panelTab === tab ? "var(--text-primary)" : "var(--text-muted)",
-                  cursor: "pointer",
-                  fontSize: 12,
-                  padding: "4px 10px",
-                  borderRadius: i === 0 ? "4px 0 0 0" : i === arr.length - 1 ? "0 4px 0 0" : "0",
-                }}
-              >
-                {tab === "events" ? "Events" : tab === "notifications" ? "Notifications" : tab === "health" ? "Health" : "Skills"}
-                {tab === "notifications" && (() => {
-                  let total = 0;
-                  for (const c of notificationCounts.values()) total += c;
-                  return total > 0 ? ` (${total})` : "";
-                })()}
-              </button>
-            ))}
-          </div>
-        )}
-        {/* Content area wrapper — provides positioning context for panel overlay */}
-        <div style={{ flex: 1, position: "relative", minHeight: 0, overflow: "hidden" }}>
         {selectedView && (() => {
           const view = views.find((v) => v.id === selectedView);
           if (!view || view.panes.length === 0) {
@@ -594,9 +597,17 @@ export default function App() {
               onSendResize={sendResize}
               getMachineName={getMachineName}
               getSessionName={getSessionName}
-              onUpdateView={updateView}
+              onUpdateView={(id, name, panes) => {
+                if (panes && panes.length === 0) {
+                  deleteView(id);
+                  if (selectedView === id) setSelectedView(undefined);
+                } else {
+                  updateView(id, name, panes);
+                }
+              }}
               focusSessionKey={viewFocusReq?.key}
               focusSeq={viewFocusReq?.seq}
+              cyclePaneRef={cyclePaneRef}
             />
           );
         })()}
@@ -630,46 +641,47 @@ export default function App() {
             <div className="idle-layer idle-layer-odd" />
           </div>
         )}
-        {/* Desktop: panel content overlay (inside content wrapper for correct positioning) */}
-        {!isMobile && panelTab && panelTab !== "skills" && (
-          <div style={{
-            position: "absolute",
-            top: 0,
-            right: 0,
-            bottom: 0,
-            width: 320,
-            zIndex: 20,
-            overflow: "hidden",
-          }}>
-            {panelTab === "events" ? (
-              <EventFeed
-                hookEventsRef={hookEventsRef}
-                subscribeHookEvents={subscribeHookEvents}
-                onClose={() => setPanelTab(null)}
-              />
-            ) : panelTab === "health" ? (
-              <HealthPanel
-                health={health}
-                onClose={() => setPanelTab(null)}
-              />
-            ) : (
-              <NotificationList
-                hookEventsRef={hookEventsRef}
-                subscribeHookEvents={subscribeHookEvents}
-                machines={machines}
-                onSelectSession={(m, s) => {
-                  handleSelectSession(m, s);
-                  setPanelTab(null);
-                }}
-                getMachineName={getMachineName}
-                getSessionName={getSessionName}
-                onClose={() => setPanelTab(null)}
-              />
-            )}
-          </div>
-        )}
-        </div>{/* end content wrapper */}
       </main>
+      {/* Desktop: panel content overlay next to sidebar */}
+      {!isMobile && panelTab && panelTab !== "skills" && (
+        <div style={{
+          position: "absolute",
+          top: 0,
+          left: sidebarCollapsed ? 0 : sidebarWidth + 4,
+          bottom: 0,
+          width: 320,
+          zIndex: 20,
+          overflow: "hidden",
+        }}>
+          {panelTab === "events" ? (
+            <EventFeed
+              hookEventsRef={hookEventsRef}
+              subscribeHookEvents={subscribeHookEvents}
+              onClose={() => setPanelTab(null)}
+            />
+          ) : panelTab === "health" ? (
+            <HealthPanel
+              health={health}
+              onClose={() => setPanelTab(null)}
+            />
+          ) : panelTab === "agents" ? (
+            <AgentManager agents={agents} onAdd={addAgent} onRemove={removeAgent} onClose={() => setPanelTab(null)} />
+          ) : (
+            <NotificationList
+              hookEventsRef={hookEventsRef}
+              subscribeHookEvents={subscribeHookEvents}
+              machines={machines}
+              onSelectSession={(m, s) => {
+                handleSelectSession(m, s);
+                setPanelTab(null);
+              }}
+              getMachineName={getMachineName}
+              getSessionName={getSessionName}
+              onClose={() => setPanelTab(null)}
+            />
+          )}
+        </div>
+      )}
       {/* Full-width skills matrix overlay */}
       {panelTab === "skills" && (
         <div className="panel-overlay" style={{
@@ -708,6 +720,8 @@ export default function App() {
               health={health}
               onClose={() => setPanelTab(null)}
             />
+          ) : panelTab === "agents" ? (
+            <AgentManager agents={agents} onAdd={addAgent} onRemove={removeAgent} onClose={() => setPanelTab(null)} />
           ) : (
             <NotificationList
               hookEventsRef={hookEventsRef}

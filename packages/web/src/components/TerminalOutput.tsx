@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState, useCallback, useImperativeHandle, forwardRef } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
@@ -14,9 +14,14 @@ interface TerminalOutputProps {
   onRequestScrollback?: () => void;
   onData?: (data: string) => void;
   onResize?: (cols: number, rows: number, force?: boolean) => void;
+  hideFloatingButtons?: boolean;
 }
 
-export function TerminalOutput({ sessionKey, lines, cursor, logMapRef, scrollbackMapRef, subscribeScrollback, onRequestScrollback, onData, onResize }: TerminalOutputProps) {
+export interface TerminalOutputHandle {
+  forceFit: () => void;
+}
+
+export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputProps>(function TerminalOutput({ sessionKey, lines, cursor, logMapRef, scrollbackMapRef, subscribeScrollback, onRequestScrollback, onData, onResize, hideFloatingButtons }, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -540,6 +545,8 @@ export function TerminalOutput({ sessionKey, lines, cursor, logMapRef, scrollbac
     onResizeRef.current?.(term.cols, term.rows, true);
   }, []);
 
+  useImperativeHandle(ref, () => ({ forceFit }), [forceFit]);
+
   const hasLog = logMapRef?.current?.has(sessionKey ?? "") ?? false;
   const pd = useCallback((e: React.MouseEvent) => e.preventDefault(), []);
 
@@ -567,7 +574,7 @@ export function TerminalOutput({ sessionKey, lines, cursor, logMapRef, scrollbac
         ref={containerRef}
         style={{ width: "100%", height: "100%", overflow: "hidden", background: "var(--bg)", touchAction: "none" }}
       />
-      {scrollMode ? (
+      {scrollMode && (
         <div
           style={{
             position: "absolute",
@@ -592,7 +599,8 @@ export function TerminalOutput({ sessionKey, lines, cursor, logMapRef, scrollbac
           <button onMouseDown={pd} onClick={() => scrollNav("bottom")} style={btnBase} title="Bottom (End)"><ChevronsDown size={12} /></button>
           <button onMouseDown={pd} onClick={exitScrollMode} style={{ ...btnBase, fontWeight: 700 }} title="Exit (Esc)"><X size={12} /></button>
         </div>
-      ) : (
+      )}
+      {!hideFloatingButtons && !scrollMode && (
         <div style={{ position: "absolute", top: 6, right: 6, display: "flex", gap: 6, zIndex: 10 }}>
           <button onMouseDown={pd} onClick={forceFit} title="Force resize terminal" className={floatBtn}>
             <Maximize size={14} />
@@ -606,4 +614,4 @@ export function TerminalOutput({ sessionKey, lines, cursor, logMapRef, scrollbac
       )}
     </div>
   );
-}
+});

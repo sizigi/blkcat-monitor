@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import type { MachineSnapshot, OutboundAgentInfo, SessionInfo, CliTool, View } from "@blkcat/shared";
-import { AgentManager } from "./AgentManager";
 import { StartSessionModal } from "./StartSessionModal";
 import { ReloadSessionModal } from "./ReloadSessionModal";
-import { ChevronsLeft, ChevronDown, Settings, Check, X, RotateCw, Plus } from "./Icons";
+import { ChevronsLeft, ChevronDown, Settings, Check, X, RotateCw, Plus, ClipboardList, Bell, Activity, Plug, LayoutGrid } from "./Icons";
 
 interface SidebarProps {
   width?: number;
@@ -11,6 +10,7 @@ interface SidebarProps {
   selectedMachine?: string;
   selectedSession?: string;
   onSelectSession: (machineId: string, sessionId: string) => void;
+  onSelectSessionDirect?: (machineId: string, sessionId: string) => void;
   onDeselect?: () => void;
   onStartSession?: (machineId: string, args?: string, cwd?: string, name?: string, cliTool?: CliTool) => void;
   onCloseSession?: (machineId: string, sessionId: string) => void;
@@ -45,6 +45,7 @@ interface SidebarProps {
   onDeleteView?: (viewId: string) => void;
   onRenameView?: (viewId: string, name: string) => void;
   onCreateViewFromDrag?: (s1: { machineId: string; sessionId: string }, s2: { machineId: string; sessionId: string }) => void;
+  onAddPaneToView?: (viewId: string, pane: { machineId: string; sessionId: string }) => void;
   onAttachTerminal?: (machineId: string, terminalId: string, cliSessionId: string) => void;
   onDetachTerminal?: (machineId: string, terminalId: string) => void;
   onHideTerminal?: (machineId: string, sessionId: string) => void;
@@ -58,8 +59,8 @@ interface SidebarProps {
   onRenameGroup?: (machineId: string, cwdRoot: string, name: string) => void;
   getOrderedGroups?: <T extends { cwdRoot: string }>(machineId: string, groups: T[]) => T[];
   onReorderCwdGroups?: (machineId: string, cwdRoots: string[]) => void;
-  panelTab?: "events" | "notifications" | "skills" | "health" | null;
-  onPanelTab?: (tab: "events" | "notifications" | "skills" | "health" | null) => void;
+  panelTab?: "events" | "notifications" | "skills" | "health" | "agents" | null;
+  onPanelTab?: (tab: "events" | "notifications" | "skills" | "health" | "agents" | null) => void;
 }
 
 export function Sidebar({
@@ -68,6 +69,7 @@ export function Sidebar({
   selectedMachine,
   selectedSession,
   onSelectSession,
+  onSelectSessionDirect,
   onDeselect,
   onStartSession,
   onCloseSession,
@@ -102,6 +104,7 @@ export function Sidebar({
   onDeleteView,
   onRenameView,
   onCreateViewFromDrag,
+  onAddPaneToView,
   onAttachTerminal,
   onDetachTerminal,
   onHideTerminal,
@@ -137,6 +140,8 @@ export function Sidebar({
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   // Collapsed CLI sessions (hide attached terminals): keyed by "machineId:sessionId"
   const [collapsedSessions, setCollapsedSessions] = useState<Set<string>>(new Set());
+  // Collapsed Views section
+  const [viewsCollapsed, setViewsCollapsed] = useState(false);
   const reloadTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   useEffect(() => {
@@ -174,7 +179,7 @@ export function Sidebar({
         flexShrink: 0,
       }}
     >
-      <div style={{ flex: 1, overflowY: "auto" }}>
+      <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
       <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <h2
@@ -184,7 +189,7 @@ export function Sidebar({
           {themes && onThemeChange && (
             <span style={{ position: "relative" }}>
               <button
-                onClick={() => setThemeOpen(!themeOpen)}
+                onClick={() => { setThemeOpen((v) => !v); setTerminalMenuOpen(false); }}
                 style={{
                   background: "none",
                   border: "none",
@@ -200,15 +205,14 @@ export function Sidebar({
               >{"\u22EE"}</button>
               {themeOpen && (
                 <div style={{
-                  position: "absolute",
-                  top: "100%",
-                  left: 0,
-                  marginTop: 4,
+                  position: "fixed",
+                  top: 44,
+                  left: 12,
                   background: "var(--bg-secondary)",
                   border: "1px solid var(--border)",
                   borderRadius: 6,
                   padding: 4,
-                  zIndex: 50,
+                  zIndex: 200,
                   boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
                   minWidth: 140,
                 }}>
@@ -260,6 +264,7 @@ export function Sidebar({
                 onClick={() => {
                   if (hasHidden) {
                     setTerminalMenuOpen((v) => !v);
+                    setThemeOpen(false);
                   } else {
                     onToggleHideTmux();
                   }
@@ -293,7 +298,16 @@ export function Sidebar({
                   minWidth: 160,
                 }}>
                   <button
-                    onClick={() => { onToggleHideTmux(); setTerminalMenuOpen(false); }}
+                    onClick={() => {
+                      // When showing all, also clear individually hidden terminals
+                      if (hideTmuxSessions || hiddenItems.length > 0) {
+                        for (const item of hiddenItems) {
+                          onShowTerminal?.(item.machineId, item.terminalId);
+                        }
+                      }
+                      onToggleHideTmux();
+                      setTerminalMenuOpen(false);
+                    }}
                     style={{
                       display: "block",
                       width: "100%",
@@ -319,6 +333,15 @@ export function Sidebar({
                         <button
                           key={`${item.machineId}:${item.terminalId}`}
                           onClick={() => {
+                            if (hideTmuxSessions) {
+                              // Global hide is on — turn it off and individually hide all others
+                              onToggleHideTmux();
+                              for (const other of hiddenItems) {
+                                if (other.machineId !== item.machineId || other.terminalId !== item.terminalId) {
+                                  onHideTerminal?.(other.machineId, other.terminalId);
+                                }
+                              }
+                            }
                             onShowTerminal?.(item.machineId, item.terminalId);
                             setTerminalMenuOpen(false);
                           }}
@@ -367,163 +390,6 @@ export function Sidebar({
         )}
         </div>
       </div>
-      {/* Views section */}
-      {(views && views.length > 0 || onCreateView) && (
-        <div style={{ borderBottom: "1px solid var(--border)" }}>
-          <div style={{
-            padding: "6px 12px",
-            fontSize: 10,
-            fontWeight: 600,
-            color: "var(--text-muted)",
-            textTransform: "uppercase",
-            letterSpacing: "0.05em",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}>
-            <span>Views</span>
-            {onCreateView && (
-              <button
-                onClick={onCreateView}
-                style={{
-                  background: "none",
-                  border: "1px solid var(--border)",
-                  borderRadius: 4,
-                  color: "var(--text-muted)",
-                  cursor: "pointer",
-                  lineHeight: 1,
-                  padding: "1px 3px",
-                  display: "flex",
-                  alignItems: "center",
-                }}
-              >
-                <Plus size={10} />
-              </button>
-            )}
-          </div>
-          {views?.map((view) => (
-            <div
-              key={view.id}
-              className="sidebar-session-row"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                background: selectedView === view.id ? "var(--bg-tertiary)" : "transparent",
-                userSelect: "none",
-              }}
-              onDragOver={(e) => {
-                if (e.dataTransfer.types.includes("application/x-blkcat-session")) {
-                  e.preventDefault();
-                  e.dataTransfer.dropEffect = "copy";
-                }
-              }}
-              onDrop={(e) => {
-                const data = e.dataTransfer.getData("application/x-blkcat-session");
-                if (!data) return;
-                e.preventDefault();
-                // Handled by parent via onAddPaneToView — but we don't have it here.
-                // Instead, fire a custom event or handle inline:
-                const { machineId: mid, sessionId: sid } = JSON.parse(data);
-                const alreadyExists = view.panes.some((p) => p.machineId === mid && p.sessionId === sid);
-                if (!alreadyExists && onRenameView) {
-                  // Use updateView pattern — we need onUpdateView. For now, cheat: rename triggers update.
-                  // Actually let's just emit via a dedicated mechanism. We'll handle this in App.tsx.
-                }
-              }}
-            >
-              <button
-                onClick={() => onSelectView?.(view.id)}
-                style={{
-                  flex: 1,
-                  textAlign: "left",
-                  padding: "6px 4px 6px 16px",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                  background: "transparent",
-                  border: "none",
-                  color: selectedView === view.id ? "var(--accent)" : "var(--text-muted)",
-                  cursor: "pointer",
-                  fontSize: 13,
-                  overflow: "hidden",
-                }}
-              >
-                <span style={{ fontSize: 10, flexShrink: 0 }}>{"\u25A3"}</span>
-                {editingId === `view:${view.id}` ? (
-                  <input
-                    autoFocus
-                    value={editValue}
-                    onChange={(e) => setEditValue(e.target.value)}
-                    onClick={(e) => e.stopPropagation()}
-                    onBlur={() => {
-                      const trimmed = editValue.trim();
-                      if (trimmed && trimmed !== view.name) onRenameView?.(view.id, trimmed);
-                      setEditingId(null);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        const trimmed = editValue.trim();
-                        if (trimmed) onRenameView?.(view.id, trimmed);
-                        setEditingId(null);
-                      } else if (e.key === "Escape") {
-                        setEditingId(null);
-                      }
-                    }}
-                    style={{
-                      flex: 1,
-                      background: "var(--bg)",
-                      color: "var(--text)",
-                      border: "1px solid var(--accent)",
-                      borderRadius: 3,
-                      padding: "1px 4px",
-                      fontSize: 13,
-                      outline: "none",
-                    }}
-                  />
-                ) : (
-                  <span
-                    style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                    onDoubleClick={(e) => {
-                      if (!onRenameView) return;
-                      e.stopPropagation();
-                      setEditingId(`view:${view.id}`);
-                      setEditValue(view.name);
-                    }}
-                    title="Double-click to rename"
-                  >
-                    {view.name}
-                  </span>
-                )}
-                <span style={{ color: "var(--text-muted)", fontSize: 11, flexShrink: 0 }}>
-                  {view.panes.length}
-                </span>
-              </button>
-              {onDeleteView && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (confirm("Delete this view?")) onDeleteView(view.id);
-                  }}
-                  title="Delete view"
-                  style={{
-                    background: "none",
-                    border: "none",
-                    color: "var(--text-muted)",
-                    cursor: "pointer",
-                    padding: "4px 8px",
-                    lineHeight: 1,
-                    opacity: 0.5,
-                  }}
-                  onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; (e.target as HTMLElement).style.color = "var(--red)"; }}
-                  onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.5"; (e.target as HTMLElement).style.color = "var(--text-muted)"; }}
-                >
-                  <X size={12} />
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
       {machines.length === 0 && (
         <p style={{ padding: 16, color: "var(--text-muted)" }}>No machines connected</p>
       )}
@@ -825,6 +691,7 @@ export function Sidebar({
                   </span>
                   <button
                     onClick={() => onSelectSession(machine.machineId, session.id)}
+                    onDoubleClick={() => onSelectSessionDirect?.(machine.machineId, session.id)}
                     data-testid={`session-${session.id}`}
                     style={{
                       flex: 1,
@@ -1092,6 +959,7 @@ export function Sidebar({
                 >
                   <button
                     onClick={() => onSelectSession(machine.machineId, term.id)}
+                    onDoubleClick={() => onSelectSessionDirect?.(machine.machineId, term.id)}
                     data-testid={`attached-${term.id}`}
                     style={{
                       flex: 1,
@@ -1322,40 +1190,201 @@ export function Sidebar({
           })()}
         </div>
       ))}
-      </div>
-      {agents && onAddAgent && onRemoveAgent && (
-        <AgentManager agents={agents} onAdd={onAddAgent} onRemove={onRemoveAgent} />
+      {/* Views section */}
+      {(views && views.length > 0 || onCreateView) && (
+        <div style={{ borderTop: "1px solid var(--border)", marginTop: "auto" }}>
+          <div
+            onClick={() => setViewsCollapsed((v) => !v)}
+            style={{
+              padding: "6px 12px",
+              fontSize: 10,
+              fontWeight: 600,
+              color: "var(--text-muted)",
+              textTransform: "uppercase",
+              letterSpacing: "0.05em",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              cursor: "pointer",
+            }}
+          >
+            <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <ChevronDown size={10} style={{ transform: viewsCollapsed ? "rotate(-90deg)" : undefined, transition: "transform 0.15s" }} />
+              Views
+            </span>
+            {onCreateView && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onCreateView(); }}
+                style={{
+                  background: "none",
+                  border: "1px solid var(--border)",
+                  borderRadius: 4,
+                  color: "var(--text-muted)",
+                  cursor: "pointer",
+                  lineHeight: 1,
+                  padding: "1px 3px",
+                  display: "flex",
+                  alignItems: "center",
+                }}
+              >
+                <Plus size={10} />
+              </button>
+            )}
+          </div>
+          {!viewsCollapsed && views?.map((view) => (
+            <div
+              key={view.id}
+              className="sidebar-session-row"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                background: selectedView === view.id ? "var(--bg-tertiary)" : "transparent",
+                userSelect: "none",
+              }}
+              onDragOver={(e) => {
+                if (e.dataTransfer.types.includes("application/x-blkcat-session")) {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "copy";
+                }
+              }}
+              onDrop={(e) => {
+                const data = e.dataTransfer.getData("application/x-blkcat-session");
+                if (!data) return;
+                e.preventDefault();
+                const { machineId: mid, sessionId: sid } = JSON.parse(data);
+                const alreadyExists = view.panes.some((p) => p.machineId === mid && p.sessionId === sid);
+                if (!alreadyExists && onAddPaneToView) {
+                  onAddPaneToView(view.id, { machineId: mid, sessionId: sid });
+                }
+              }}
+            >
+              <button
+                onClick={() => onSelectView?.(view.id)}
+                style={{
+                  flex: 1,
+                  textAlign: "left",
+                  padding: "6px 4px 6px 16px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  background: "transparent",
+                  border: "none",
+                  color: selectedView === view.id ? "var(--accent)" : "var(--text-muted)",
+                  cursor: "pointer",
+                  fontSize: 13,
+                  overflow: "hidden",
+                }}
+              >
+                <LayoutGrid size={12} />
+                {editingId === `view:${view.id}` ? (
+                  <input
+                    autoFocus
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                    onBlur={() => {
+                      const trimmed = editValue.trim();
+                      if (trimmed && trimmed !== view.name) onRenameView?.(view.id, trimmed);
+                      setEditingId(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        const trimmed = editValue.trim();
+                        if (trimmed) onRenameView?.(view.id, trimmed);
+                        setEditingId(null);
+                      } else if (e.key === "Escape") {
+                        setEditingId(null);
+                      }
+                    }}
+                    style={{
+                      flex: 1,
+                      background: "var(--bg)",
+                      color: "var(--text)",
+                      border: "1px solid var(--accent)",
+                      borderRadius: 3,
+                      padding: "1px 4px",
+                      fontSize: 13,
+                      outline: "none",
+                    }}
+                  />
+                ) : (
+                  <span
+                    style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                    onDoubleClick={(e) => {
+                      if (!onRenameView) return;
+                      e.stopPropagation();
+                      setEditingId(`view:${view.id}`);
+                      setEditValue(view.name);
+                    }}
+                    title="Double-click to rename"
+                  >
+                    {view.name}
+                  </span>
+                )}
+                <span style={{ color: "var(--text-muted)", fontSize: 11, flexShrink: 0 }}>
+                  {view.panes.length}
+                </span>
+              </button>
+              {onDeleteView && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (confirm("Delete this view?")) onDeleteView(view.id);
+                  }}
+                  title="Delete view"
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "var(--text-muted)",
+                    cursor: "pointer",
+                    padding: "4px 8px",
+                    lineHeight: 1,
+                    opacity: 0.5,
+                  }}
+                  onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; (e.target as HTMLElement).style.color = "var(--red)"; }}
+                  onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.5"; (e.target as HTMLElement).style.color = "var(--text-muted)"; }}
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
       )}
+      </div>
       {onPanelTab && (
         <div className="panel-tabs-desktop" style={{
           display: "flex",
+          justifyContent: "flex-end",
+          gap: 2,
+          padding: "6px 8px",
           borderTop: "1px solid var(--border)",
           flexShrink: 0,
         }}>
-          {(["events", "notifications", "skills", "health"] as const).map((tab) => {
+          {(["events", "notifications", "skills", "health", "agents"] as const).map((tab) => {
             const active = panelTab === tab;
-            let label = tab === "events" ? "Events" : tab === "notifications" ? "Notifs" : tab === "health" ? "Health" : "Skills";
-            if (tab === "notifications" && notificationCounts) {
-              let total = 0;
-              for (const c of notificationCounts.values()) total += c;
-              if (total > 0) label += ` (${total})`;
-            }
             return (
               <button
                 key={tab}
                 onClick={() => onPanelTab(active ? null : tab)}
                 style={{
-                  flex: 1,
-                  background: active ? "var(--accent)" : "transparent",
+                  background: active ? "var(--accent)" : "none",
                   border: "none",
                   color: active ? "#fff" : "var(--text-muted)",
                   cursor: "pointer",
-                  fontSize: 11,
-                  padding: "6px 0",
-                  fontWeight: active ? 600 : 400,
+                  padding: "4px 8px",
+                  borderRadius: 4,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 2,
+                  ...(tab === "agents" ? { marginLeft: "auto" } : {}),
                 }}
               >
-                {label}
+                {tab === "events" ? <ClipboardList size={16} /> : tab === "notifications" ? (() => {
+                  let total = 0;
+                  if (notificationCounts) for (const c of notificationCounts.values()) total += c;
+                  return <><Bell size={16} />{total > 0 && <span style={{ fontSize: 11, fontWeight: 600 }}>{total}</span>}</>;
+                })() : tab === "health" ? <Activity size={16} /> : tab === "agents" ? <Plug size={16} /> : <Settings size={16} />}
               </button>
             );
           })}

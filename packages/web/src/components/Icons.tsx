@@ -170,6 +170,32 @@ export function Minus(props: IconProps) {
 }
 
 /** >_ Terminal prompt icon */
+/** ⚡ Activity / health pulse */
+export function Activity(props: IconProps) {
+  return svg(24, props, <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />);
+}
+
+/** ⊞ Layout grid / split view */
+export function LayoutGrid(props: IconProps) {
+  return svg(24, props, <>
+    <rect x="3" y="3" width="8" height="8" rx="1" />
+    <rect x="13" y="3" width="8" height="8" rx="1" />
+    <rect x="3" y="13" width="8" height="8" rx="1" />
+    <rect x="13" y="13" width="8" height="8" rx="1" />
+  </>);
+}
+
+/** 🔌 Plug / connect agent */
+export function Plug(props: IconProps) {
+  return svg(24, props, <>
+    <path d="M12 22v-5" />
+    <path d="M9 17h6" />
+    <path d="M9 8V2" />
+    <path d="M15 8V2" />
+    <rect x="7" y="8" width="10" height="5" rx="1" />
+  </>);
+}
+
 export function TerminalSquare(props: IconProps) {
   return svg(24, props, <>
     <rect x="3" y="3" width="18" height="18" rx="2" />

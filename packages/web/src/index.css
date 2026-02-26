@@ -297,6 +297,23 @@ html, body, #root {
   background: rgba(88,166,255,0.15) !important;
 }
 
+/* During pane drag: disable pointer-events on xterm so drag events
+   only hit pane wrapper divs — prevents forbidden cursor and lag */
+.split-dragging .xterm {
+  pointer-events: none !important;
+}
+
+/* Pane swap target highlight during drag (applied via DOM, not React state) */
+.pane-swap-target::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(88,166,255,0.15);
+  border: 2px solid var(--accent);
+  z-index: 10;
+  pointer-events: none;
+}
+
 /* Hover-reveal action buttons on session rows */
 .session-actions {
   display: flex;
@@ -304,7 +321,12 @@ html, body, #root {
   opacity: 0;
   transition: opacity 0.15s;
 }
-.sidebar-session-row:hover .session-actions,
+/* Only hover-reveal on devices with a real pointer to avoid mobile double-tap */
+@media (hover: hover) {
+  .sidebar-session-row:hover .session-actions {
+    opacity: 1;
+  }
+}
 .sidebar-session-row.selected .session-actions {
   opacity: 1;
 }
