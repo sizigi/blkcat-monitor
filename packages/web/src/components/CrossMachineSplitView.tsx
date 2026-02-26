@@ -1,9 +1,9 @@
-import React, { useState, useCallback, useRef, useEffect, type Ref } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import type { MachineSnapshot, View, ViewPane } from "@blkcat/shared";
 import type { OutputLine } from "../hooks/useSocket";
 import { useSessionOutput } from "../hooks/useSessionOutput";
 import { TerminalOutput } from "./TerminalOutput";
-import { ChatInput } from "./ChatInput";
+import { FloatingChatInput } from "./FloatingChatInput";
 import { X } from "./Icons";
 
 interface CrossMachineSplitViewProps {
@@ -182,7 +182,6 @@ export function CrossMachineSplitView({
 }: CrossMachineSplitViewProps) {
   const firstPane = view.panes[0];
   const [focusedKey, setFocusedKey] = useState(firstPane ? `${firstPane.machineId}:${firstPane.sessionId}` : "");
-  const [mobileInputOpen, setMobileInputOpen] = useState(false);
 
   // Sync focus when requested externally (e.g. sidebar click)
   // Uses focusSeq as trigger so repeated clicks on the same session still work
@@ -371,88 +370,16 @@ export function CrossMachineSplitView({
           );
         })}
       </div>
-      {/* Desktop: inline ChatInput at bottom */}
-      {!isMobile && (
-        <div style={{ borderTop: "1px solid var(--border)", flexShrink: 0, overflowY: "auto", maxHeight: "40vh" }}>
-          <ChatInput
-            key={activeKey}
-            onSendText={handleSendText}
-            onSendKey={handleSendKey}
-            onSendData={handleSendData}
-            initialValue={inputCacheRef.current.get(activeKey) ?? ""}
-            onInputChange={(value) => {
-              if (activeKey) inputCacheRef.current.set(activeKey, value);
-            }}
-          />
-        </div>
-      )}
-      {/* Mobile: floating keyboard button + slide-up ChatInput */}
-      {isMobile && !mobileInputOpen && (
-        <button
-          onClick={() => setMobileInputOpen(true)}
-          style={{
-            position: "absolute",
-            bottom: 16,
-            right: 16,
-            width: 48,
-            height: 48,
-            borderRadius: "50%",
-            background: "var(--accent)",
-            color: "#fff",
-            border: "none",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 20,
-            boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
-            zIndex: 30,
-          }}
-          title="Show keyboard"
-        >
-          {"\u2328"}
-        </button>
-      )}
-      {isMobile && mobileInputOpen && (
-        <div style={{
-          position: "absolute",
-          bottom: 0,
-          left: 0,
-          right: 0,
-          background: "var(--bg-secondary)",
-          borderTop: "1px solid var(--border)",
-          zIndex: 30,
-          maxHeight: "50vh",
-          overflowY: "auto",
-        }}>
-          <div style={{ display: "flex", justifyContent: "flex-end", padding: "4px 8px 0" }}>
-            <button
-              onClick={() => setMobileInputOpen(false)}
-              style={{
-                background: "none",
-                border: "none",
-                color: "var(--text-muted)",
-                cursor: "pointer",
-                fontSize: 18,
-                lineHeight: 1,
-                padding: "2px 6px",
-              }}
-            >
-              {"\u2715"}
-            </button>
-          </div>
-          <ChatInput
-            key={activeKey}
-            onSendText={handleSendText}
-            onSendKey={handleSendKey}
-            onSendData={handleSendData}
-            initialValue={inputCacheRef.current.get(activeKey) ?? ""}
-            onInputChange={(value) => {
-              if (activeKey) inputCacheRef.current.set(activeKey, value);
-            }}
-          />
-        </div>
-      )}
+      <FloatingChatInput
+        inputKey={activeKey}
+        onSendText={handleSendText}
+        onSendKey={handleSendKey}
+        onSendData={handleSendData}
+        initialValue={inputCacheRef.current.get(activeKey) ?? ""}
+        onInputChange={(value) => {
+          if (activeKey) inputCacheRef.current.set(activeKey, value);
+        }}
+      />
     </div>
   );
 }

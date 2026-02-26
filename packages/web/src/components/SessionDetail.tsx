@@ -1,6 +1,6 @@
 import React from "react";
 import { TerminalOutput } from "./TerminalOutput";
-import { ChatInput } from "./ChatInput";
+import { FloatingChatInput } from "./FloatingChatInput";
 import { Folder } from "./Icons";
 
 interface SessionDetailProps {
@@ -40,7 +40,7 @@ export function SessionDetail({
   const displayCwd = cwd?.replace(/^\/home\/[^/]+/, "~")?.replace(/^\/root/, "~");
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, position: "relative" }}>
       <div
         style={{
           padding: "8px 16px",
@@ -68,9 +68,12 @@ export function SessionDetail({
         )}
       </div>
       <TerminalOutput sessionKey={`${machineId}:${sessionId}`} lines={lines} cursor={cursor} logMapRef={logMapRef} scrollbackMapRef={scrollbackMapRef} subscribeScrollback={subscribeScrollback} onRequestScrollback={onRequestScrollback} onData={onSendData} onResize={onResize} />
-      <div style={{ borderTop: "1px solid var(--border)", flexShrink: 0, overflowY: "auto", maxHeight: "40vh" }}>
-        <ChatInput onSendText={onSendText} onSendKey={onSendKey} onSendData={onSendData} />
-      </div>
+      <FloatingChatInput
+        inputKey={`${machineId}:${sessionId}`}
+        onSendText={onSendText}
+        onSendKey={onSendKey}
+        onSendData={onSendData}
+      />
     </div>
   );
 }

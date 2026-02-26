@@ -168,3 +168,12 @@ export function ArrowUpDown(props: IconProps) {
 export function Minus(props: IconProps) {
   return svg(24, props, <line x1="5" y1="12" x2="19" y2="12" />);
 }
+
+/** >_ Terminal prompt icon */
+export function TerminalSquare(props: IconProps) {
+  return svg(24, props, <>
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+    <polyline points="7 15 10 12 7 9" />
+    <line x1="13" y1="15" x2="17" y2="15" />
+  </>);
+}
