@@ -592,6 +592,15 @@ export function createServer(opts: ServerOptions) {
                 sessionId2: msg.sessionId2,
               }));
             }
+          } else if (msg.type === "swap_window") {
+            const machine = machines.get(msg.machineId);
+            if (machine) {
+              machine.agent.send(JSON.stringify({
+                type: "swap_window",
+                sessionId1: msg.sessionId1,
+                sessionId2: msg.sessionId2,
+              }));
+            }
           }
         }
       },

@@ -3,7 +3,7 @@ import type { MachineSnapshot, OutboundAgentInfo, SessionInfo, CliTool } from "@
 import { AgentManager } from "./AgentManager";
 import { StartSessionModal } from "./StartSessionModal";
 import { ReloadSessionModal } from "./ReloadSessionModal";
-import { ChevronsLeft, ChevronDown, GripDots, Settings, Check, X, RotateCw, Plus } from "./Icons";
+import { ChevronsLeft, ChevronDown, Settings, Check, X, RotateCw, Plus } from "./Icons";
 
 interface SidebarProps {
   width?: number;
@@ -30,8 +30,6 @@ interface SidebarProps {
   createDirectory?: (machineId: string, path: string) => Promise<{ path: string; success: boolean; error?: string }>;
   onSessionSettings?: (machineId: string, sessionId: string) => void;
   subscribeReloadResult?: (cb: (msg: { machineId: string; sessionId: string; success: boolean; error?: string }) => void) => () => void;
-  onReorderMachine?: (fromIndex: number, toIndex: number) => void;
-  onReorderSession?: (machineId: string, fromIndex: number, toIndex: number) => void;
   className?: string;
   currentTheme?: string;
   onThemeChange?: (id: string) => void;
@@ -42,6 +40,8 @@ interface SidebarProps {
   onSelectGroup?: (machineId: string, windowId: string) => void;
   onJoinPane?: (machineId: string, sourceSessionId: string, targetSessionId: string) => void;
   onBreakPane?: (machineId: string, sessionId: string) => void;
+  onSwapPane?: (machineId: string, sessionId1: string, sessionId2: string) => void;
+  onSwapWindow?: (machineId: string, sessionId1: string, sessionId2: string) => void;
 }
 
 export function Sidebar({
@@ -69,8 +69,6 @@ export function Sidebar({
   createDirectory,
   onSessionSettings,
   subscribeReloadResult,
-  onReorderMachine,
-  onReorderSession,
   className,
   currentTheme,
   onThemeChange,
@@ -81,20 +79,17 @@ export function Sidebar({
   onSelectGroup,
   onJoinPane,
   onBreakPane,
+  onSwapPane,
+  onSwapWindow,
 }: SidebarProps) {
   const [modalMachineId, setModalMachineId] = useState<string | null>(null);
   const [reloadTarget, setReloadTarget] = useState<{ machineId: string; session: SessionInfo } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [themeOpen, setThemeOpen] = useState(false);
   const [editValue, setEditValue] = useState("");
-  // Drag-to-reorder state (refs to avoid re-renders during drag)
-  const dragMachineRef = useRef<{ index: number } | null>(null);
-  const dragSessionRef = useRef<{ machineId: string; index: number; sessionId?: string; windowId?: string; isCli?: boolean } | null>(null);
-  const [dropIndicator, setDropIndicator] = useState<
-    | { kind: "machine"; toIndex: number }
-    | { kind: "session"; machineId: string; toIndex: number }
-    | null
-  >(null);
+  // Drag-to-reorder state
+  const dragRef = useRef<{ machineId: string; sessionId: string; windowId?: string; group: string } | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ sessionId: string } | null>(null);
   // Track reload status per session: "success" | "error:message"
   const [reloadStatus, setReloadStatus] = useState<Map<string, string>>(new Map());
   // Collapsed machines: sessions hidden when machine is collapsed
@@ -242,38 +237,8 @@ export function Sidebar({
       )}
       {machines.map((machine, machineIndex) => (
         <div key={machine.machineId}>
-          {dropIndicator?.kind === "machine" && dropIndicator.toIndex === machineIndex && (
-            <div style={{ height: 2, background: "var(--accent)", margin: "0 8px" }} />
-          )}
           <div
             className="sidebar-machine-row"
-            draggable={!!onReorderMachine}
-            onDragStart={(e) => {
-              dragMachineRef.current = { index: machineIndex };
-              dragSessionRef.current = null;
-              e.dataTransfer.effectAllowed = "move";
-              e.dataTransfer.setData("text/plain", machine.machineId);
-            }}
-            onDragOver={(e) => {
-              if (!dragMachineRef.current) return;
-              e.preventDefault();
-              e.dataTransfer.dropEffect = "move";
-              if (dropIndicator?.kind !== "machine" || dropIndicator.toIndex !== machineIndex) {
-                setDropIndicator({ kind: "machine", toIndex: machineIndex });
-              }
-            }}
-            onDrop={(e) => {
-              e.preventDefault();
-              if (!dragMachineRef.current) return;
-              const from = dragMachineRef.current.index;
-              dragMachineRef.current = null;
-              setDropIndicator(null);
-              if (from !== machineIndex) onReorderMachine?.(from, machineIndex);
-            }}
-            onDragEnd={() => {
-              dragMachineRef.current = null;
-              setDropIndicator(null);
-            }}
             style={{
               padding: "8px 12px",
               fontSize: 13,
@@ -309,11 +274,6 @@ export function Sidebar({
             </span>
             {machineIndex < 9 && (
               <span className="shortcut-badge shortcut-badge-machine">{machineIndex + 1}</span>
-            )}
-            {onReorderMachine && (
-              <span className="drag-handle" style={{ lineHeight: 1, userSelect: "none", flexShrink: 0 }}>
-                <GripDots size={10} />
-              </span>
             )}
             <span
               style={{
@@ -393,7 +353,7 @@ export function Sidebar({
             const tmuxSessions = machine.sessions.filter((s) => !s.cliTool);
             const showGroupLabels = cliSessions.length > 0 && tmuxSessions.length > 0;
 
-            function renderSession(session: SessionInfo, sessionIndex: number) {
+            function renderSession(session: SessionInfo, sessionIndex: number, group: "cli" | "terminal" | string) {
               const isSelected =
                 selectedMachine === machine.machineId &&
                 selectedSession === session.id;
@@ -401,71 +361,60 @@ export function Sidebar({
               const isActive = activeSessions?.has(`${machine.machineId}:${session.id}`);
               const isDangerous = session.args?.includes("--dangerously-skip-permissions");
               const isCli = !!session.cliTool;
+              const canDrag = !!(onSwapPane || onSwapWindow);
+              const isDropTarget = dropTarget?.sessionId === session.id;
               return (
-                <React.Fragment key={session.id}>
-                  {dropIndicator?.kind === "session" &&
-                    dropIndicator.machineId === machine.machineId &&
-                    dropIndicator.toIndex === sessionIndex && (
-                    <div style={{ height: 2, background: "var(--accent)", margin: "0 8px 0 20px" }} />
-                  )}
                 <div
+                  key={session.id}
                   className="sidebar-session-row"
-                  draggable={!!onReorderSession || !!onJoinPane}
+                  draggable={canDrag}
                   onDragStart={(e) => {
                     e.stopPropagation();
-                    dragSessionRef.current = {
-                      machineId: machine.machineId,
-                      index: sessionIndex,
-                      sessionId: session.id,
-                      windowId: session.windowId,
-                      isCli: !!session.cliTool,
-                    };
-                    dragMachineRef.current = null;
+                    dragRef.current = { machineId: machine.machineId, sessionId: session.id, windowId: session.windowId, group };
                     e.dataTransfer.effectAllowed = "move";
                     e.dataTransfer.setData("text/plain", session.id);
                   }}
+                  onDragEnter={(e) => {
+                    const src = dragRef.current;
+                    if (!src || src.machineId !== machine.machineId || src.group !== group || src.sessionId === session.id) return;
+                    e.preventDefault();
+                  }}
                   onDragOver={(e) => {
-                    if (!dragSessionRef.current) return;
-                    if (dragSessionRef.current.machineId !== machine.machineId) return;
+                    const src = dragRef.current;
+                    if (!src || src.machineId !== machine.machineId || src.group !== group || src.sessionId === session.id) return;
                     e.preventDefault();
                     e.dataTransfer.dropEffect = "move";
-                    if (dropIndicator?.kind !== "session" || dropIndicator.machineId !== machine.machineId || dropIndicator.toIndex !== sessionIndex) {
-                      setDropIndicator({ kind: "session", machineId: machine.machineId, toIndex: sessionIndex });
-                    }
+                    if (dropTarget?.sessionId !== session.id) setDropTarget({ sessionId: session.id });
                   }}
                   onDrop={(e) => {
                     e.preventDefault();
-                    setDropIndicator(null);
-                    const source = dragSessionRef.current;
-                    if (!source) return;
-                    if (source.machineId !== machine.machineId) return;
-                    dragSessionRef.current = null;
-                    // Join: different window, same type → tmux join-pane
-                    if (onJoinPane
-                      && source.windowId !== session.windowId
-                      && source.isCli === isCli
-                      && source.sessionId !== session.id) {
-                      onJoinPane(machine.machineId, source.sessionId!, session.id);
-                      return;
-                    }
-                    // Reorder within same list
-                    if (source.index !== sessionIndex) {
-                      onReorderSession?.(machine.machineId, source.index, sessionIndex);
+                    setDropTarget(null);
+                    const src = dragRef.current;
+                    if (!src || src.machineId !== machine.machineId || src.group !== group || src.sessionId === session.id) return;
+                    dragRef.current = null;
+                    if (src.windowId === session.windowId) {
+                      // Same window → swap panes
+                      onSwapPane?.(machine.machineId, src.sessionId, session.id);
+                    } else {
+                      // Different windows → swap windows
+                      onSwapWindow?.(machine.machineId, src.sessionId, session.id);
                     }
                   }}
                   onDragEnd={() => {
-                    dragSessionRef.current = null;
-                    setDropIndicator(null);
+                    dragRef.current = null;
+                    setDropTarget(null);
                   }}
                   style={{
                     display: "flex",
                     alignItems: "center",
-                    background: isSelected ? "var(--bg-tertiary)" : "transparent",
+                    background: isDropTarget ? "rgba(88,166,255,0.15)" : isSelected ? "var(--bg-tertiary)" : "transparent",
+                    outline: isDropTarget ? "1px solid var(--accent)" : "none",
+                    outlineOffset: "-1px",
+                    borderRadius: isDropTarget ? 4 : 0,
                     userSelect: "none",
                   }}
                 >
                   <button
-                    draggable={false}
                     onClick={() => onSelectSession(machine.machineId, session.id)}
                     data-testid={`session-${session.id}`}
                     style={{
@@ -487,11 +436,6 @@ export function Sidebar({
                   >
                     {sessionIndex < 9 && (
                       <span className="shortcut-badge shortcut-badge-session">{sessionIndex + 1}</span>
-                    )}
-                    {(onReorderSession || onJoinPane) && (
-                      <span className="drag-handle" style={{ lineHeight: 1, userSelect: "none", flexShrink: 0 }}>
-                        <GripDots size={10} />
-                      </span>
                     )}
                     <span
                       className={isActive ? "active-indicator" : isWaiting ? "waiting-indicator" : undefined}
@@ -595,7 +539,6 @@ export function Sidebar({
                   </button>
                   {isCli && onSessionSettings && (
                     <button
-                      draggable={false}
                       onClick={(e) => {
                         e.stopPropagation();
                         onSessionSettings(machine.machineId, session.id);
@@ -635,7 +578,6 @@ export function Sidebar({
                     }
                     return (
                       <button
-                        draggable={false}
                         onClick={(e) => {
                           e.stopPropagation();
                           setReloadTarget({ machineId: machine.machineId, session });
@@ -659,7 +601,6 @@ export function Sidebar({
                   })()}
                   {onCloseSession && (
                     <button
-                      draggable={false}
                       data-testid={`close-session-${session.id}`}
                       onClick={(e) => {
                         e.stopPropagation();
@@ -684,9 +625,120 @@ export function Sidebar({
                     </button>
                   )}
                 </div>
-                </React.Fragment>
               );
             }
+
+            interface WindowGroup { windowId: string; windowName?: string; panes: SessionInfo[] }
+            function buildWindowGroups(sessions: SessionInfo[]): WindowGroup[] {
+              const groups: WindowGroup[] = [];
+              const windowMap = new Map<string, WindowGroup>();
+              for (const session of sessions) {
+                const wid = session.windowId;
+                if (!wid) {
+                  groups.push({ windowId: session.id, panes: [session] });
+                  continue;
+                }
+                let group = windowMap.get(wid);
+                if (!group) {
+                  group = { windowId: wid, windowName: session.windowName, panes: [] };
+                  windowMap.set(wid, group);
+                  groups.push(group);
+                }
+                group.panes.push(session);
+              }
+              return groups;
+            }
+
+            function renderGroup(group: WindowGroup, defaultGroup: string) {
+              if (group.panes.length === 1) {
+                const idx = machine.sessions.indexOf(group.panes[0]);
+                return renderSession(group.panes[0], idx, defaultGroup);
+              }
+              const isGroupSelected = selectedGroup === group.windowId && selectedMachine === machine.machineId;
+              return (
+                <div key={group.windowId}>
+                  <div
+                    onClick={() => onSelectGroup?.(machine.machineId, group.windowId)}
+                    style={{
+                      padding: "4px 16px",
+                      fontSize: 12,
+                      fontWeight: 600,
+                      color: isGroupSelected ? "var(--accent)" : "var(--text-muted)",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      background: isGroupSelected ? "var(--bg-tertiary)" : "transparent",
+                    }}
+                  >
+                    <span style={{ fontSize: 10 }}>{"\u25E8"}</span>
+                    {editingId === `group:${group.windowId}` ? (
+                      <input
+                        autoFocus
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        onBlur={() => {
+                          const trimmed = editValue.trim();
+                          if (trimmed && trimmed !== (group.windowName || group.windowId)) {
+                            onRenameSession?.(machine.machineId, group.panes[0].id, trimmed);
+                          }
+                          setEditingId(null);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            const trimmed = editValue.trim();
+                            if (trimmed) onRenameSession?.(machine.machineId, group.panes[0].id, trimmed);
+                            setEditingId(null);
+                          } else if (e.key === "Escape") {
+                            setEditingId(null);
+                          }
+                        }}
+                        style={{
+                          flex: 1,
+                          background: "var(--bg)",
+                          color: "var(--text)",
+                          border: "1px solid var(--accent)",
+                          borderRadius: 3,
+                          padding: "1px 4px",
+                          fontSize: 12,
+                          fontWeight: 600,
+                          outline: "none",
+                        }}
+                      />
+                    ) : (
+                    <span
+                      style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                      onDoubleClick={(e) => {
+                        if (!onRenameSession) return;
+                        e.stopPropagation();
+                        setEditingId(`group:${group.windowId}`);
+                        setEditValue(group.windowName || group.windowId);
+                      }}
+                      title="Double-click to rename"
+                    >
+                      {group.windowName || group.windowId}
+                    </span>
+                    )}
+                    <span style={{ fontSize: 10, color: "var(--text-muted)" }}>
+                      {group.panes.length}
+                    </span>
+                  </div>
+                  {group.panes.map((pane) => {
+                    const idx = machine.sessions.indexOf(pane);
+                    const groupedPane = { ...pane, windowName: pane.paneCommand ?? pane.windowName };
+                    return (
+                      <div key={pane.id} style={{ paddingLeft: 12 }}>
+                        {renderSession(groupedPane, idx, group.windowId)}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            }
+
+            const cliGroups = buildWindowGroups(cliSessions);
+            const terminalGroups = buildWindowGroups(tmuxSessions);
 
             return (
               <>
@@ -695,130 +747,17 @@ export function Sidebar({
                     Vibe Coding
                   </div>
                 )}
-                {cliSessions.map((session) => {
-                  const idx = machine.sessions.indexOf(session);
-                  return renderSession(session, idx);
-                })}
-                {!hideTmuxSessions && tmuxSessions.length > 0 && (() => {
-                  // Group terminal sessions by windowId
-                  interface WindowGroup { windowId: string; windowName?: string; panes: SessionInfo[] }
-                  const windowGroups: WindowGroup[] = [];
-                  const windowMap = new Map<string, WindowGroup>();
-                  for (const session of tmuxSessions) {
-                    const wid = session.windowId;
-                    if (!wid) {
-                      windowGroups.push({ windowId: session.id, panes: [session] });
-                      continue;
-                    }
-                    let group = windowMap.get(wid);
-                    if (!group) {
-                      group = { windowId: wid, windowName: session.windowName, panes: [] };
-                      windowMap.set(wid, group);
-                      windowGroups.push(group);
-                    }
-                    group.panes.push(session);
-                  }
-
-                  return (
-                    <>
-                      {showGroupLabels && (
-                        <div style={{ padding: "4px 16px 2px", fontSize: 10, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                          Terminals
-                        </div>
-                      )}
-                      {windowGroups.map((group) => {
-                        if (group.panes.length === 1) {
-                          // Single-pane window: render flat
-                          const idx = machine.sessions.indexOf(group.panes[0]);
-                          return renderSession(group.panes[0], idx);
-                        }
-                        // Multi-pane window group
-                        const isGroupSelected = selectedGroup === group.windowId && selectedMachine === machine.machineId;
-                        return (
-                          <div key={group.windowId}>
-                            <div
-                              onClick={() => onSelectGroup?.(machine.machineId, group.windowId)}
-                              style={{
-                                padding: "4px 16px",
-                                fontSize: 12,
-                                fontWeight: 600,
-                                color: isGroupSelected ? "var(--accent)" : "var(--text-muted)",
-                                cursor: "pointer",
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 6,
-                                background: isGroupSelected ? "var(--bg-tertiary)" : "transparent",
-                              }}
-                            >
-                              <span style={{ fontSize: 10 }}>{"\u25E8"}</span>
-                              {editingId === `group:${group.windowId}` ? (
-                                <input
-                                  autoFocus
-                                  value={editValue}
-                                  onChange={(e) => setEditValue(e.target.value)}
-                                  onClick={(e) => e.stopPropagation()}
-                                  onBlur={() => {
-                                    const trimmed = editValue.trim();
-                                    if (trimmed && trimmed !== (group.windowName || group.windowId)) {
-                                      onRenameSession?.(machine.machineId, group.panes[0].id, trimmed);
-                                    }
-                                    setEditingId(null);
-                                  }}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter") {
-                                      const trimmed = editValue.trim();
-                                      if (trimmed) onRenameSession?.(machine.machineId, group.panes[0].id, trimmed);
-                                      setEditingId(null);
-                                    } else if (e.key === "Escape") {
-                                      setEditingId(null);
-                                    }
-                                  }}
-                                  style={{
-                                    flex: 1,
-                                    background: "var(--bg)",
-                                    color: "var(--text)",
-                                    border: "1px solid var(--accent)",
-                                    borderRadius: 3,
-                                    padding: "1px 4px",
-                                    fontSize: 12,
-                                    fontWeight: 600,
-                                    outline: "none",
-                                  }}
-                                />
-                              ) : (
-                              <span
-                                style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                                onDoubleClick={(e) => {
-                                  if (!onRenameSession) return;
-                                  e.stopPropagation();
-                                  setEditingId(`group:${group.windowId}`);
-                                  setEditValue(group.windowName || group.windowId);
-                                }}
-                                title="Double-click to rename"
-                              >
-                                {group.windowName || group.windowId}
-                              </span>
-                              )}
-                              <span style={{ fontSize: 10, color: "var(--text-muted)" }}>
-                                {group.panes.length}
-                              </span>
-                            </div>
-                            {group.panes.map((pane) => {
-                              const idx = machine.sessions.indexOf(pane);
-                              // For panes in a group, show paneCommand as the name
-                              const groupedPane = { ...pane, windowName: pane.paneCommand ?? pane.windowName };
-                              return (
-                                <div key={pane.id} style={{ paddingLeft: 12 }}>
-                                  {renderSession(groupedPane, idx)}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        );
-                      })}
-                    </>
-                  );
-                })()}
+                {cliGroups.map((g) => renderGroup(g, "cli"))}
+                {!hideTmuxSessions && terminalGroups.length > 0 && (
+                  <>
+                    {showGroupLabels && (
+                      <div style={{ padding: "4px 16px 2px", fontSize: 10, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                        Terminals
+                      </div>
+                    )}
+                    {terminalGroups.map((g) => renderGroup(g, "terminal"))}
+                  </>
+                )}
               </>
             );
           })()}

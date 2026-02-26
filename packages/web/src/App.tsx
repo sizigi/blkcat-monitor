@@ -4,7 +4,6 @@ import { useSessionOutput } from "./hooks/useSessionOutput";
 import { useAgents } from "./hooks/useAgents";
 import { useDisplayNames } from "./hooks/useDisplayNames";
 import { useIsMobile } from "./hooks/useIsMobile";
-import { useSidebarOrder } from "./hooks/useSidebarOrder";
 import { useTheme } from "./hooks/useTheme";
 import { Sidebar } from "./components/Sidebar";
 import { SessionDetail } from "./components/SessionDetail";
@@ -25,13 +24,12 @@ const MIN_SIDEBAR_WIDTH = 160;
 const MAX_SIDEBAR_WIDTH = 500;
 
 export default function App() {
-  const { connected, machines, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory, createDirectory, deploySkills, removeSkills, getSettings, updateSettings, subscribeDeployResult, subscribeSettingsSnapshot, subscribeSettingsResult, setDisplayName, subscribeDisplayNames, subscribeReloadResult, joinPane, breakPane, swapPane } = useSocket(WS_URL);
+  const { connected, machines, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory, createDirectory, deploySkills, removeSkills, getSettings, updateSettings, subscribeDeployResult, subscribeSettingsSnapshot, subscribeSettingsResult, setDisplayName, subscribeDisplayNames, subscribeReloadResult, joinPane, breakPane, swapPane, swapWindow } = useSocket(WS_URL);
   const { agents, addAgent, removeAgent } = useAgents();
   const { getMachineName, getSessionName, setMachineName, setSessionName } = useDisplayNames({
     sendDisplayName: setDisplayName,
     subscribeDisplayNames,
   });
-  const { applyOrder, reorderMachine, reorderSession, syncOrder } = useSidebarOrder();
   const { theme, setTheme, themes } = useTheme();
   const isMobile = useIsMobile();
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -95,11 +93,8 @@ export default function App() {
     return machine.sessions.filter((s) => s.windowId === selectedGroup);
   }, [machines, selectedMachine, selectedGroup]);
 
-  // Keep sidebar order in sync with server-provided machines
-  const orderedMachines = useMemo(() => applyOrder(machines), [applyOrder, machines]);
-  const orderedMachinesRef = useRef(orderedMachines);
-  orderedMachinesRef.current = orderedMachines;
-  useEffect(() => { if (machines.length > 0) syncOrder(machines); }, [machines, syncOrder]);
+  const machinesRef = useRef(machines);
+  machinesRef.current = machines;
 
   // Navigation mode: backtick (`) as leader key, works in xterm and input fields.
   // Uses refs so the keydown listener registers once and never re-attaches.
@@ -108,7 +103,7 @@ export default function App() {
     function setNav(v: boolean) { navModeRef.current = v; setNavMode(v); }
 
     function selectMachine(idx: number) {
-      const machine = orderedMachinesRef.current[idx];
+      const machine = machinesRef.current[idx];
       if (!machine) return;
       setSelectedMachine(machine.machineId);
       if (machine.sessions.length > 0) {
@@ -117,7 +112,7 @@ export default function App() {
       }
     }
     function cycleMachine(delta: number) {
-      const machines = orderedMachinesRef.current;
+      const machines = machinesRef.current;
       const idx = machines.findIndex((m) => m.machineId === selectedMachineRef.current);
       const next = (idx + delta + machines.length) % machines.length;
       selectMachine(next);
@@ -125,7 +120,7 @@ export default function App() {
     function selectSession(idx: number) {
       const mid = selectedMachineRef.current;
       if (!mid) return;
-      const machine = orderedMachinesRef.current.find((m) => m.machineId === mid);
+      const machine = machinesRef.current.find((m) => m.machineId === mid);
       const session = machine?.sessions[idx];
       if (session) {
         setSelectedSession(session.id);
@@ -135,7 +130,7 @@ export default function App() {
     function cycleSession(delta: number) {
       const mid = selectedMachineRef.current;
       if (!mid) return;
-      const machine = orderedMachinesRef.current.find((m) => m.machineId === mid);
+      const machine = machinesRef.current.find((m) => m.machineId === mid);
       if (!machine || machine.sessions.length === 0) return;
       const idx = machine.sessions.findIndex((s) => s.id === selectedSessionRef.current);
       const next = (idx + delta + machine.sessions.length) % machine.sessions.length;
@@ -231,7 +226,7 @@ export default function App() {
   }, [sidebarWidth]);
 
   const sidebarBaseProps = {
-    machines: orderedMachines,
+    machines: machines,
     selectedMachine,
     selectedSession,
     notificationCounts,
@@ -257,8 +252,6 @@ export default function App() {
     onRemoveAgent: removeAgent,
     onSessionSettings: (m: string, s: string) => setSettingsSession({ machineId: m, sessionId: s }),
     subscribeReloadResult,
-    onReorderMachine: reorderMachine,
-    onReorderSession: reorderSession,
     currentTheme: theme,
     onThemeChange: setTheme,
     themes,
@@ -273,6 +266,8 @@ export default function App() {
     },
     onJoinPane: joinPane,
     onBreakPane: breakPane,
+    onSwapPane: swapPane,
+    onSwapWindow: swapWindow,
   };
 
   return (

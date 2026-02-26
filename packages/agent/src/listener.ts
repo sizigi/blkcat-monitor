@@ -19,6 +19,7 @@ interface AgentListenerOptions {
   onJoinPane?: (sourceSessionId: string, targetSessionId: string) => void;
   onBreakPane?: (sessionId: string) => void;
   onSwapPane?: (sessionId1: string, sessionId2: string) => void;
+  onSwapWindow?: (sessionId1: string, sessionId2: string) => void;
 }
 
 export class AgentListener {
@@ -87,6 +88,8 @@ export class AgentListener {
               this.opts.onBreakPane?.(msg.sessionId);
             } else if (msg.type === "swap_pane") {
               this.opts.onSwapPane?.(msg.sessionId1, msg.sessionId2);
+            } else if (msg.type === "swap_window") {
+              this.opts.onSwapWindow?.(msg.sessionId1, msg.sessionId2);
             }
           } catch {}
         },

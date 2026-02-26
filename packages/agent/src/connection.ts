@@ -19,6 +19,7 @@ interface AgentConnectionOptions {
   onJoinPane?: (sourceSessionId: string, targetSessionId: string) => void;
   onBreakPane?: (sessionId: string) => void;
   onSwapPane?: (sessionId1: string, sessionId2: string) => void;
+  onSwapWindow?: (sessionId1: string, sessionId2: string) => void;
   /** Called after a successful reconnection (not the initial connect). */
   onReconnect?: () => void;
   /** Returns the current session list so reconnect can re-register with up-to-date data. */
@@ -123,6 +124,8 @@ export class AgentConnection {
           this.opts.onBreakPane?.(msg.sessionId);
         } else if (msg.type === "swap_pane") {
           this.opts.onSwapPane?.(msg.sessionId1, msg.sessionId2);
+        } else if (msg.type === "swap_window") {
+          this.opts.onSwapWindow?.(msg.sessionId1, msg.sessionId2);
         }
       } catch {}
     });

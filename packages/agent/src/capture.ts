@@ -167,6 +167,12 @@ export class TmuxCapture {
     return this.exec(cmd).success;
   }
 
+  /** Swap two tmux windows by their session:window targets (e.g. "main:0", "main:1"). */
+  swapWindow(target1: string, target2: string): boolean {
+    const cmd = [...this.sshPrefix, "tmux", "swap-window", "-s", target1, "-t", target2];
+    return this.exec(cmd).success;
+  }
+
   killPane(target: string): boolean {
     const cmd = [...this.sshPrefix, "tmux", "kill-pane", "-t", target];
     return this.exec(cmd).success;

@@ -214,6 +214,14 @@ async function main() {
     triggerRediscovery();
   }
 
+  function handleSwapWindow(sessionId1: string, sessionId2: string) {
+    // Extract window targets (session:window) from session IDs (session:window.pane)
+    const winTarget = (id: string) => id.replace(/\.\d+$/, "");
+    const cap = captures.get(sessionId1) ?? new TmuxCapture(bunExec);
+    cap.swapWindow(winTarget(sessionId1), winTarget(sessionId2));
+    triggerRediscovery();
+  }
+
   function handleListDirectory(requestId: string, path: string) {
     // Resolve ~ so the web UI receives absolute paths
     const resolved = path.startsWith("~")
@@ -325,6 +333,7 @@ async function main() {
       onJoinPane: handleJoinPane,
       onBreakPane: handleBreakPane,
       onSwapPane: handleSwapPane,
+      onSwapWindow: handleSwapWindow,
     });
     // When a new server connects, clear prevLines so the next poll cycle
     // re-sends the current pane content for all sessions.
@@ -352,6 +361,7 @@ async function main() {
       onJoinPane: handleJoinPane,
       onBreakPane: handleBreakPane,
       onSwapPane: handleSwapPane,
+      onSwapWindow: handleSwapWindow,
       getSessions: () => [...autoSessions, ...manualSessions],
       onReconnect: () => { prevLines.clear(); },
     });
