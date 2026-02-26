@@ -292,9 +292,15 @@ html, body, #root {
   background: rgba(88,166,255,0.06);
 }
 
-/* Drop target indicator */
+/* Drop target indicators */
 .sidebar-session-row.drop-center {
   background: rgba(88,166,255,0.15) !important;
+}
+.sidebar-session-row.drop-above {
+  box-shadow: inset 0 2px 0 0 var(--accent) !important;
+}
+.sidebar-session-row.drop-below {
+  box-shadow: inset 0 -2px 0 0 var(--accent) !important;
 }
 
 /* During pane drag: disable pointer-events on xterm so drag events

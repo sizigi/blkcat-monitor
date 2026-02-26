@@ -59,6 +59,8 @@ interface SidebarProps {
   onRenameGroup?: (machineId: string, cwdRoot: string, name: string) => void;
   getOrderedGroups?: <T extends { cwdRoot: string }>(machineId: string, groups: T[]) => T[];
   onReorderCwdGroups?: (machineId: string, cwdRoots: string[]) => void;
+  getOrderedMachines?: <T extends { machineId: string }>(machines: T[]) => T[];
+  onReorderMachines?: (machineIds: string[]) => void;
   panelTab?: "events" | "notifications" | "skills" | "health" | "agents" | null;
   onPanelTab?: (tab: "events" | "notifications" | "skills" | "health" | "agents" | null) => void;
 }
@@ -114,6 +116,8 @@ export function Sidebar({
   onRenameGroup,
   getOrderedGroups,
   onReorderCwdGroups,
+  getOrderedMachines,
+  onReorderMachines,
   panelTab,
   onPanelTab,
 }: SidebarProps) {
@@ -124,10 +128,13 @@ export function Sidebar({
   const [editValue, setEditValue] = useState("");
   // Drag-to-reorder state
   const dragRef = useRef<{ machineId: string; sessionId: string; windowId?: string; group: string } | null>(null);
-  const [dropTarget, setDropTarget] = useState<{ sessionId: string } | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ sessionId: string; zone: "above" | "below" | "center" } | null>(null);
   // CWD group drag-to-reorder state
   const cwdDragRef = useRef<{ machineId: string; cwdRoot: string } | null>(null);
   const [cwdDropTarget, setCwdDropTarget] = useState<string | null>(null);
+  // Machine drag-to-reorder state
+  const machineDragRef = useRef<string | null>(null);
+  const [machineDropTarget, setMachineDropTarget] = useState<string | null>(null);
   // Terminal dropdown state
   const [terminalMenuOpen, setTerminalMenuOpen] = useState(false);
   // Track Shift key during drag for attach mode
@@ -393,10 +400,46 @@ export function Sidebar({
       {machines.length === 0 && (
         <p style={{ padding: 16, color: "var(--text-muted)" }}>No machines connected</p>
       )}
-      {machines.map((machine, machineIndex) => (
+      {(getOrderedMachines ? getOrderedMachines(machines) : machines).map((machine, machineIndex) => (
         <div key={machine.machineId}>
           <div
             className="sidebar-machine-row"
+            draggable={!!onReorderMachines}
+            onDragStart={(e) => {
+              machineDragRef.current = machine.machineId;
+              e.dataTransfer.effectAllowed = "move";
+              e.dataTransfer.setData("application/x-blkcat-machine", machine.machineId);
+            }}
+            onDragOver={(e) => {
+              const src = machineDragRef.current;
+              if (!src || src === machine.machineId) return;
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "move";
+              if (machineDropTarget !== machine.machineId) setMachineDropTarget(machine.machineId);
+            }}
+            onDragLeave={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                if (machineDropTarget === machine.machineId) setMachineDropTarget(null);
+              }
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              setMachineDropTarget(null);
+              const src = machineDragRef.current;
+              if (!src || src === machine.machineId) return;
+              machineDragRef.current = null;
+              const ordered = getOrderedMachines ? getOrderedMachines(machines) : machines;
+              const ids = ordered.map((m) => m.machineId);
+              const srcIdx = ids.indexOf(src);
+              if (srcIdx >= 0) ids.splice(srcIdx, 1);
+              const insertAt = ids.indexOf(machine.machineId);
+              ids.splice(insertAt >= 0 ? insertAt : ids.length, 0, src);
+              onReorderMachines?.(ids);
+            }}
+            onDragEnd={() => {
+              machineDragRef.current = null;
+              setMachineDropTarget(null);
+            }}
             style={{
               padding: "8px 12px",
               fontSize: 13,
@@ -407,6 +450,8 @@ export function Sidebar({
               gap: 6,
               background: selectedMachine === machine.machineId ? "rgba(88,166,255,0.06)" : "transparent",
               borderBottom: "1px solid var(--border)",
+              ...(machineDropTarget === machine.machineId ? { borderTop: "2px solid var(--accent)" } : {}),
+              cursor: onReorderMachines ? "grab" : undefined,
             }}
           >
             <span
@@ -603,11 +648,11 @@ export function Sidebar({
               const isActive = activeSessions?.has(`${machine.machineId}:${session.id}`);
               const isDangerous = session.args?.includes("--dangerously-skip-permissions");
               const isCli = !!session.cliTool;
-              const isDropTarget = dropTarget?.sessionId === session.id;
+              const dropZone = dropTarget?.sessionId === session.id ? dropTarget.zone : null;
               return (
                 <div
                   key={session.id}
-                  className={`sidebar-session-row${isSelected ? " selected" : ""}${isDropTarget ? " drop-center" : ""}`}
+                  className={`sidebar-session-row${isSelected ? " selected" : ""}${dropZone === "center" ? " drop-center" : ""}${dropZone === "above" ? " drop-above" : ""}${dropZone === "below" ? " drop-below" : ""}`}
                   draggable
                   onDragStart={(e) => {
                     e.stopPropagation();
@@ -620,9 +665,27 @@ export function Sidebar({
                     const src = dragRef.current;
                     if (!src || src.sessionId === session.id) return;
                     e.preventDefault();
-                    e.dataTransfer.dropEffect = "move";
                     dragShiftRef.current = e.shiftKey;
-                    if (dropTarget?.sessionId !== session.id) setDropTarget({ sessionId: session.id });
+                    // Same machine + same group: detect edge vs center for reorder vs split
+                    const sameGroup = src.machineId === machine.machineId && src.group === group;
+                    if (sameGroup) {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      const y = e.clientY - rect.top;
+                      const edgeSize = Math.min(8, rect.height * 0.3);
+                      let zone: "above" | "below" | "center";
+                      if (y < edgeSize) zone = "above";
+                      else if (y > rect.height - edgeSize) zone = "below";
+                      else zone = "center";
+                      e.dataTransfer.dropEffect = zone === "center" ? "copy" : "move";
+                      if (dropTarget?.sessionId !== session.id || dropTarget.zone !== zone) {
+                        setDropTarget({ sessionId: session.id, zone });
+                      }
+                    } else {
+                      e.dataTransfer.dropEffect = "copy";
+                      if (dropTarget?.sessionId !== session.id || dropTarget.zone !== "center") {
+                        setDropTarget({ sessionId: session.id, zone: "center" });
+                      }
+                    }
                   }}
                   onDragLeave={(e) => {
                     if (!e.currentTarget.contains(e.relatedTarget as Node)) {
@@ -631,18 +694,25 @@ export function Sidebar({
                   }}
                   onDrop={(e) => {
                     e.preventDefault();
+                    const zone = dropTarget?.sessionId === session.id ? dropTarget.zone : "center";
                     setDropTarget(null);
                     const src = dragRef.current;
                     if (!src || src.sessionId === session.id) return;
                     dragRef.current = null;
                     // Shift + terminal → CLI = attach under that CLI
-                    // Everything else = create split View
                     const hasShift = dragShiftRef.current || e.shiftKey;
                     const srcSession = machine.sessions.find((s) => s.id === src.sessionId);
                     const srcIsCli = !!srcSession?.cliTool;
                     const tgtIsCli = !!session.cliTool;
                     if (hasShift && !srcIsCli && tgtIsCli && onAttachTerminal) {
                       onAttachTerminal(machine.machineId, src.sessionId, session.id);
+                    } else if (src.machineId === machine.machineId && src.group === group && (zone === "above" || zone === "below")) {
+                      // Edge zone in same group = reorder via tmux swap
+                      if (src.windowId === session.windowId) {
+                        onSwapPane?.(machine.machineId, src.sessionId, session.id);
+                      } else {
+                        onSwapWindow?.(machine.machineId, src.sessionId, session.id);
+                      }
                     } else if (onCreateViewFromDrag) {
                       onCreateViewFromDrag(
                         { machineId: src.machineId, sessionId: src.sessionId },

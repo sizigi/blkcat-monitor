@@ -19,6 +19,7 @@ import { PWAPrompt } from "./components/PWAPrompt";
 import { useHealth } from "./hooks/useHealth";
 import { useAttachedTerminals } from "./hooks/useAttachedTerminals";
 import { useCwdGroupOrder } from "./hooks/useCwdGroupOrder";
+import { useMachineOrder } from "./hooks/useMachineOrder";
 import { Menu, Pencil, ClipboardList, Bell, Settings, Activity, Plug } from "./components/Icons";
 import { AgentManager } from "./components/AgentManager";
 
@@ -41,6 +42,7 @@ export default function App() {
   const { theme, setTheme, themes } = useTheme();
   const attachedTerminals = useAttachedTerminals();
   const { getOrderedGroups, setGroupOrder } = useCwdGroupOrder();
+  const { getOrderedMachines, setMachineOrder } = useMachineOrder();
   const isMobile = useIsMobile();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -375,6 +377,8 @@ export default function App() {
     onRenameGroup: setGroupName,
     getOrderedGroups,
     onReorderCwdGroups: setGroupOrder,
+    getOrderedMachines,
+    onReorderMachines: setMachineOrder,
     panelTab,
     onPanelTab: setPanelTab,
   };
