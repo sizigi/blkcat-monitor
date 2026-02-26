@@ -131,10 +131,10 @@ export function Sidebar({
   const [dropTarget, setDropTarget] = useState<{ sessionId: string; zone: "above" | "below" | "center" } | null>(null);
   // CWD group drag-to-reorder state
   const cwdDragRef = useRef<{ machineId: string; cwdRoot: string } | null>(null);
-  const [cwdDropTarget, setCwdDropTarget] = useState<string | null>(null);
+  const [cwdDropTarget, setCwdDropTarget] = useState<{ cwdRoot: string; half: "top" | "bottom" } | null>(null);
   // Machine drag-to-reorder state
   const machineDragRef = useRef<string | null>(null);
-  const [machineDropTarget, setMachineDropTarget] = useState<string | null>(null);
+  const [machineDropTarget, setMachineDropTarget] = useState<{ id: string; half: "top" | "bottom" } | null>(null);
   // Terminal dropdown state
   const [terminalMenuOpen, setTerminalMenuOpen] = useState(false);
   // Track Shift key during drag for attach mode
@@ -415,15 +415,20 @@ export function Sidebar({
               if (!src || src === machine.machineId) return;
               e.preventDefault();
               e.dataTransfer.dropEffect = "move";
-              if (machineDropTarget !== machine.machineId) setMachineDropTarget(machine.machineId);
+              const rect = e.currentTarget.getBoundingClientRect();
+              const half = (e.clientY - rect.top < rect.height / 2) ? "top" : "bottom";
+              if (machineDropTarget?.id !== machine.machineId || machineDropTarget.half !== half) {
+                setMachineDropTarget({ id: machine.machineId, half });
+              }
             }}
             onDragLeave={(e) => {
               if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                if (machineDropTarget === machine.machineId) setMachineDropTarget(null);
+                if (machineDropTarget?.id === machine.machineId) setMachineDropTarget(null);
               }
             }}
             onDrop={(e) => {
               e.preventDefault();
+              const half = machineDropTarget?.half ?? "top";
               setMachineDropTarget(null);
               const src = machineDragRef.current;
               if (!src || src === machine.machineId) return;
@@ -432,8 +437,9 @@ export function Sidebar({
               const ids = ordered.map((m) => m.machineId);
               const srcIdx = ids.indexOf(src);
               if (srcIdx >= 0) ids.splice(srcIdx, 1);
-              const insertAt = ids.indexOf(machine.machineId);
-              ids.splice(insertAt >= 0 ? insertAt : ids.length, 0, src);
+              const tgtIdx = ids.indexOf(machine.machineId);
+              const insertAt = tgtIdx >= 0 ? (half === "top" ? tgtIdx : tgtIdx + 1) : ids.length;
+              ids.splice(insertAt, 0, src);
               onReorderMachines?.(ids);
             }}
             onDragEnd={() => {
@@ -450,7 +456,7 @@ export function Sidebar({
               gap: 6,
               background: selectedMachine === machine.machineId ? "rgba(88,166,255,0.06)" : "transparent",
               borderBottom: "1px solid var(--border)",
-              ...(machineDropTarget === machine.machineId ? { borderTop: "2px solid var(--accent)" } : {}),
+              ...(machineDropTarget?.id === machine.machineId ? (machineDropTarget.half === "top" ? { boxShadow: "inset 0 2px 0 0 var(--accent)" } : { boxShadow: "inset 0 -2px 0 0 var(--accent)" }) : {}),
               cursor: onReorderMachines ? "grab" : undefined,
             }}
           >
@@ -580,11 +586,11 @@ export function Sidebar({
               // 3. Assign each session to best matching anchor (longest match)
               const groupMap = new Map<string, SessionInfo[]>();
               for (const a of anchors) groupMap.set(a, []);
-              const ungrouped: SessionInfo[] = [];
+              const remaining: SessionInfo[] = [];
 
               for (const s of sessions) {
                 if (!s.cwd) {
-                  ungrouped.push(s);
+                  remaining.push(s);
                   continue;
                 }
                 let bestAnchor: string | null = null;
@@ -596,13 +602,29 @@ export function Sidebar({
                 if (bestAnchor) {
                   groupMap.get(bestAnchor)!.push(s);
                 } else {
+                  remaining.push(s);
+                }
+              }
+
+              // 4. Group remaining sessions by cwd — only truly cwdless sessions stay ungrouped
+              const ungrouped: SessionInfo[] = [];
+              const extraMap = new Map<string, SessionInfo[]>();
+              for (const s of remaining) {
+                if (s.cwd) {
+                  const list = extraMap.get(s.cwd) ?? [];
+                  list.push(s);
+                  extraMap.set(s.cwd, list);
+                } else {
                   ungrouped.push(s);
                 }
               }
 
-              const groups: CwdGroup[] = anchors
-                .map((a) => ({ cwdRoot: a, sessions: groupMap.get(a)! }))
-                .filter((g) => g.sessions.length > 0);
+              const groups: CwdGroup[] = [
+                ...anchors
+                  .map((a) => ({ cwdRoot: a, sessions: groupMap.get(a)! }))
+                  .filter((g) => g.sessions.length > 0),
+                ...[...extraMap.entries()].map(([root, ss]) => ({ cwdRoot: root, sessions: ss })),
+              ];
               return { groups, ungrouped };
             }
 
@@ -1121,7 +1143,7 @@ export function Sidebar({
                     ? getGroupName(machine.machineId, cwdGroup.cwdRoot, defaultLabel)
                     : defaultLabel;
 
-                  const isCwdDropTarget = cwdDropTarget === cwdGroup.cwdRoot;
+                  const cwdDropHalf = cwdDropTarget?.cwdRoot === cwdGroup.cwdRoot ? cwdDropTarget.half : null;
                   return (
                     <div key={cwdGroup.cwdRoot} data-testid={`cwd-group-${cwdGroup.cwdRoot}`}>
                       <div
@@ -1138,26 +1160,30 @@ export function Sidebar({
                           if (!src || src.machineId !== machine.machineId || src.cwdRoot === cwdGroup.cwdRoot) return;
                           e.preventDefault();
                           e.dataTransfer.dropEffect = "move";
-                          if (cwdDropTarget !== cwdGroup.cwdRoot) setCwdDropTarget(cwdGroup.cwdRoot);
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const half = (e.clientY - rect.top < rect.height / 2) ? "top" : "bottom";
+                          if (cwdDropTarget?.cwdRoot !== cwdGroup.cwdRoot || cwdDropTarget.half !== half) {
+                            setCwdDropTarget({ cwdRoot: cwdGroup.cwdRoot, half });
+                          }
                         }}
                         onDragLeave={(e) => {
                           if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                            if (cwdDropTarget === cwdGroup.cwdRoot) setCwdDropTarget(null);
+                            if (cwdDropTarget?.cwdRoot === cwdGroup.cwdRoot) setCwdDropTarget(null);
                           }
                         }}
                         onDrop={(e) => {
                           e.preventDefault();
+                          const half = cwdDropTarget?.half ?? "top";
                           setCwdDropTarget(null);
                           const src = cwdDragRef.current;
                           if (!src || src.machineId !== machine.machineId || src.cwdRoot === cwdGroup.cwdRoot) return;
                           cwdDragRef.current = null;
-                          // Compute new order: move src before target
                           const roots = orderedGroups.map((g) => g.cwdRoot);
                           const srcIdx = roots.indexOf(src.cwdRoot);
-                          const tgtIdx = roots.indexOf(cwdGroup.cwdRoot);
                           if (srcIdx >= 0) roots.splice(srcIdx, 1);
-                          const insertAt = roots.indexOf(cwdGroup.cwdRoot);
-                          roots.splice(insertAt >= 0 ? insertAt : tgtIdx, 0, src.cwdRoot);
+                          const tgtIdx = roots.indexOf(cwdGroup.cwdRoot);
+                          const insertAt = tgtIdx >= 0 ? (half === "top" ? tgtIdx : tgtIdx + 1) : roots.length;
+                          roots.splice(insertAt, 0, src.cwdRoot);
                           onReorderCwdGroups?.(machine.machineId, roots);
                         }}
                         onDragEnd={() => {
@@ -1172,7 +1198,7 @@ export function Sidebar({
                             return next;
                           });
                         }}
-                        style={isCwdDropTarget ? { borderTop: "2px solid var(--accent)" } : undefined}
+                        style={cwdDropHalf ? (cwdDropHalf === "top" ? { boxShadow: "inset 0 2px 0 0 var(--accent)" } : { boxShadow: "inset 0 -2px 0 0 var(--accent)" }) : undefined}
                       >
                         <span
                           style={{

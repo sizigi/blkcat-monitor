@@ -161,7 +161,7 @@ describe("Sidebar", () => {
     expect(screen.getByText("Terminals")).toBeInTheDocument();
   });
 
-  it("renders all sessions ungrouped when no CLI sessions exist", () => {
+  it("groups non-CLI sessions by cwd and leaves cwdless sessions ungrouped", () => {
     const noCliMachines: MachineSnapshot[] = [
       {
         machineId: "m1",
@@ -175,8 +175,9 @@ describe("Sidebar", () => {
     render(<Sidebar machines={noCliMachines} onSelectSession={() => {}} />);
     expect(screen.getByText("shell1")).toBeInTheDocument();
     expect(screen.getByText("shell2")).toBeInTheDocument();
-    // No CWD group headers should be shown (no anchors since no CLI sessions)
-    expect(screen.queryByText("Terminals")).not.toBeInTheDocument();
+    // shell1 has cwd="/tmp" → gets its own CWD group; shell2 has no cwd → ungrouped
+    // "Terminals" header appears because there are both groups and ungrouped sessions
+    expect(screen.getByText("Terminals")).toBeInTheDocument();
   });
 
   it("hides terminals from CWD groups when hideTmuxSessions is true", () => {

@@ -308,7 +308,7 @@ export default function App() {
     currentTheme: theme,
     onThemeChange: setTheme,
     themes,
-    onDeselect: () => { setSelectedMachine(undefined); setSelectedSession(undefined); },
+    onDeselect: () => { setSelectedMachine(undefined); setSelectedSession(undefined); setSelectedView(undefined); setViewFocusReq(undefined); },
     onSelectSessionDirect: (machineId: string, sessionId: string) => {
       setSelectedMachine(machineId);
       setSelectedSession(sessionId);

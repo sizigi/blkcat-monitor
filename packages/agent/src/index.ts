@@ -189,6 +189,27 @@ async function main() {
       for (const s of newSessions) captures.set(s.id, new TmuxCapture(bunExec));
       for (const s of goneSessions) { captures.delete(s.id); prevLines.delete(s.id); }
     }
+    // Update manual sessions with fresh metadata from discovery (cliTool, cwd, etc.)
+    // while preserving user-set fields like name.
+    // Also remove manual sessions whose tmux panes no longer exist.
+    const freshById = new Map(fresh.map((s) => [s.id, s]));
+    for (let i = manualSessions.length - 1; i >= 0; i--) {
+      const manual = manualSessions[i];
+      const freshData = freshById.get(manual.id);
+      if (freshData) {
+        manual.cliTool = freshData.cliTool;
+        manual.cwd = freshData.cwd;
+        manual.args = freshData.args;
+        manual.paneCommand = freshData.paneCommand;
+        manual.windowId = freshData.windowId;
+        manual.windowName = freshData.windowName;
+      } else if (!reloadGracePanes.has(manual.id)) {
+        // Pane no longer exists in tmux — clean up the ghost session
+        manualSessions.splice(i, 1);
+        captures.delete(manual.id);
+        prevLines.delete(manual.id);
+      }
+    }
     const manualIds = new Set(manualSessions.map((s) => s.id));
     autoSessions = fresh.filter((s) => !manualIds.has(s.id));
     const all = [...autoSessions, ...manualSessions];
@@ -460,7 +481,7 @@ async function main() {
   }, config.pollInterval);
 
   if (hasAutoTarget) {
-    setInterval(() => triggerRediscovery(), 30000);
+    setInterval(() => triggerRediscovery(), 5000);
   }
 }
 
