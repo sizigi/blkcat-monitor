@@ -215,22 +215,6 @@ describe("TmuxCapture", () => {
     expect(capture.startPlainSession()).toBeNull();
   });
 
-  it("joins a pane into another window", () => {
-    const cmds: string[][] = [];
-    const exec: ExecFn = (cmd) => { cmds.push([...cmd]); return { success: true, stdout: "" }; };
-    const capture = new TmuxCapture(exec);
-    expect(capture.joinPane("dev:1.0", "dev:0.1")).toBe(true);
-    expect(cmds[0]).toEqual(["tmux", "join-pane", "-s", "dev:1.0", "-t", "dev:0"]);
-  });
-
-  it("breaks a pane out to its own window", () => {
-    const cmds: string[][] = [];
-    const exec: ExecFn = (cmd) => { cmds.push([...cmd]); return { success: true, stdout: "" }; };
-    const capture = new TmuxCapture(exec);
-    expect(capture.breakPane("dev:0.1")).toBe(true);
-    expect(cmds[0]).toEqual(["tmux", "break-pane", "-s", "dev:0.1"]);
-  });
-
   it("swaps two panes", () => {
     const cmds: string[][] = [];
     const exec: ExecFn = (cmd) => { cmds.push([...cmd]); return { success: true, stdout: "" }; };

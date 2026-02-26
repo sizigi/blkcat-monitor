@@ -16,8 +16,6 @@ interface AgentConnectionOptions {
   onGetSettings?: (requestId: string, scope: "global" | "project", projectPath?: string) => void;
   onUpdateSettings?: (requestId: string, scope: "global" | "project", settings: Record<string, unknown>, projectPath?: string) => void;
   onRenameSession?: (sessionId: string, name: string) => void;
-  onJoinPane?: (sourceSessionId: string, targetSessionId: string) => void;
-  onBreakPane?: (sessionId: string) => void;
   onSwapPane?: (sessionId1: string, sessionId2: string) => void;
   onSwapWindow?: (sessionId1: string, sessionId2: string) => void;
   /** Called after a successful reconnection (not the initial connect). */
@@ -118,10 +116,6 @@ export class AgentConnection {
           this.opts.onUpdateSettings?.(msg.requestId, msg.scope, msg.settings, msg.projectPath);
         } else if (msg.type === "rename_session") {
           this.opts.onRenameSession?.(msg.sessionId, msg.name);
-        } else if (msg.type === "join_pane") {
-          this.opts.onJoinPane?.(msg.sourceSessionId, msg.targetSessionId);
-        } else if (msg.type === "break_pane") {
-          this.opts.onBreakPane?.(msg.sessionId);
         } else if (msg.type === "swap_pane") {
           this.opts.onSwapPane?.(msg.sessionId1, msg.sessionId2);
         } else if (msg.type === "swap_window") {

@@ -258,17 +258,6 @@ export interface ServerRenameSessionMessage {
   name: string;
 }
 
-export interface ServerJoinPaneMessage {
-  type: "join_pane";
-  sourceSessionId: string;
-  targetSessionId: string;
-}
-
-export interface ServerBreakPaneMessage {
-  type: "break_pane";
-  sessionId: string;
-}
-
 export interface ServerSwapPaneMessage {
   type: "swap_pane";
   sessionId1: string;
@@ -281,7 +270,7 @@ export interface ServerSwapWindowMessage {
   sessionId2: string;
 }
 
-export type ServerToAgentMessage = ServerInputMessage | ServerStartSessionMessage | ServerCloseSessionMessage | ServerResizeMessage | ServerRequestScrollbackMessage | ServerReloadSessionMessage | ServerListDirectoryMessage | ServerDeploySkillsMessage | ServerGetSettingsMessage | ServerUpdateSettingsMessage | ServerRemoveSkillsMessage | ServerCreateDirectoryMessage | ServerRenameSessionMessage | ServerJoinPaneMessage | ServerBreakPaneMessage | ServerSwapPaneMessage | ServerSwapWindowMessage;
+export type ServerToAgentMessage = ServerInputMessage | ServerStartSessionMessage | ServerCloseSessionMessage | ServerResizeMessage | ServerRequestScrollbackMessage | ServerReloadSessionMessage | ServerListDirectoryMessage | ServerDeploySkillsMessage | ServerGetSettingsMessage | ServerUpdateSettingsMessage | ServerRemoveSkillsMessage | ServerCreateDirectoryMessage | ServerRenameSessionMessage | ServerSwapPaneMessage | ServerSwapWindowMessage;
 
 // --- Server -> Dashboard messages ---
 
@@ -506,19 +495,6 @@ export interface DashboardCreateDirectoryMessage {
   path: string;
 }
 
-export interface DashboardJoinPaneMessage {
-  type: "join_pane";
-  machineId: string;
-  sourceSessionId: string;
-  targetSessionId: string;
-}
-
-export interface DashboardBreakPaneMessage {
-  type: "break_pane";
-  machineId: string;
-  sessionId: string;
-}
-
 export interface DashboardSwapPaneMessage {
   type: "swap_pane";
   machineId: string;
@@ -552,7 +528,7 @@ export interface DashboardDeleteViewMessage {
   id: string;
 }
 
-export type DashboardToServerMessage = DashboardInputMessage | DashboardStartSessionMessage | DashboardCloseSessionMessage | DashboardResizeMessage | DashboardRequestScrollbackMessage | DashboardReloadSessionMessage | DashboardListDirectoryMessage | DashboardDeploySkillsMessage | DashboardGetSettingsMessage | DashboardUpdateSettingsMessage | DashboardRemoveSkillsMessage | DashboardSetDisplayNameMessage | DashboardCreateDirectoryMessage | DashboardJoinPaneMessage | DashboardBreakPaneMessage | DashboardSwapPaneMessage | DashboardSwapWindowMessage | DashboardCreateViewMessage | DashboardUpdateViewMessage | DashboardDeleteViewMessage;
+export type DashboardToServerMessage = DashboardInputMessage | DashboardStartSessionMessage | DashboardCloseSessionMessage | DashboardResizeMessage | DashboardRequestScrollbackMessage | DashboardReloadSessionMessage | DashboardListDirectoryMessage | DashboardDeploySkillsMessage | DashboardGetSettingsMessage | DashboardUpdateSettingsMessage | DashboardRemoveSkillsMessage | DashboardSetDisplayNameMessage | DashboardCreateDirectoryMessage | DashboardSwapPaneMessage | DashboardSwapWindowMessage | DashboardCreateViewMessage | DashboardUpdateViewMessage | DashboardDeleteViewMessage;
 
 // --- Outbound agent info ---
 
@@ -568,7 +544,7 @@ export const NOTIFY_HOOK_EVENTS = new Set(["Stop", "Notification", "PermissionRe
 // --- Parsers ---
 
 const AGENT_TYPES = new Set(["register", "output", "sessions", "scrollback", "hook_event", "directory_listing", "deploy_result", "settings_snapshot", "settings_result", "reload_session_result", "create_directory_result"]);
-const DASHBOARD_TYPES = new Set(["input", "start_session", "close_session", "resize", "request_scrollback", "reload_session", "list_directory", "deploy_skills", "get_settings", "update_settings", "remove_skills", "set_display_name", "create_directory", "rename_session", "join_pane", "break_pane", "swap_pane", "swap_window", "create_view", "update_view", "delete_view"]);
+const DASHBOARD_TYPES = new Set(["input", "start_session", "close_session", "resize", "request_scrollback", "reload_session", "list_directory", "deploy_skills", "get_settings", "update_settings", "remove_skills", "set_display_name", "create_directory", "rename_session", "swap_pane", "swap_window", "create_view", "update_view", "delete_view"]);
 
 export function parseAgentMessage(raw: string): AgentToServerMessage | null {
   try {

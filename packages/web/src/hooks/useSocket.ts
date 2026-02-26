@@ -581,14 +581,6 @@ export function useSocket(url: string): UseSocketReturn {
     sendRaw(msg);
   }, [sendRaw]);
 
-  const joinPane = useCallback((machineId: string, sourceSessionId: string, targetSessionId: string) => {
-    sendRaw({ type: "join_pane", machineId, sourceSessionId, targetSessionId });
-  }, [sendRaw]);
-
-  const breakPane = useCallback((machineId: string, sessionId: string) => {
-    sendRaw({ type: "break_pane", machineId, sessionId });
-  }, [sendRaw]);
-
   const swapPane = useCallback((machineId: string, sessionId1: string, sessionId2: string) => {
     sendRaw({ type: "swap_pane", machineId, sessionId1, sessionId2 });
   }, [sendRaw]);
@@ -612,5 +604,5 @@ export function useSocket(url: string): UseSocketReturn {
     sendRaw({ type: "delete_view", id });
   }, [sendRaw]);
 
-  return { connected, machines, views, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory, createDirectory, sendRaw, deploySkills, removeSkills, getSettings, updateSettings, subscribeDeployResult, subscribeSettingsSnapshot, subscribeSettingsResult, setDisplayName, subscribeDisplayNames, subscribeReloadResult, joinPane, breakPane, swapPane, swapWindow, createView, updateView, deleteView };
+  return { connected, machines, views, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory, createDirectory, sendRaw, deploySkills, removeSkills, getSettings, updateSettings, subscribeDeployResult, subscribeSettingsSnapshot, subscribeSettingsResult, setDisplayName, subscribeDisplayNames, subscribeReloadResult, swapPane, swapWindow, createView, updateView, deleteView };
 }

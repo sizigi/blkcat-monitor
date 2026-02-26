@@ -151,17 +151,6 @@ export class TmuxCapture {
     return this.exec(cmd).success;
   }
 
-  joinPane(sourceTarget: string, destTarget: string): boolean {
-    const destWindow = destTarget.replace(/\.\d+$/, "");
-    const cmd = [...this.sshPrefix, "tmux", "join-pane", "-s", sourceTarget, "-t", destWindow];
-    return this.exec(cmd).success;
-  }
-
-  breakPane(target: string): boolean {
-    const cmd = [...this.sshPrefix, "tmux", "break-pane", "-s", target];
-    return this.exec(cmd).success;
-  }
-
   swapPane(target1: string, target2: string): boolean {
     const cmd = [...this.sshPrefix, "tmux", "swap-pane", "-s", target1, "-t", target2];
     return this.exec(cmd).success;

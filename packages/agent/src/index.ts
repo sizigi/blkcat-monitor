@@ -196,18 +196,6 @@ async function main() {
     console.log(`Sessions updated: ${all.length} total`);
   }
 
-  function handleJoinPane(sourceSessionId: string, targetSessionId: string) {
-    const cap = captures.get(sourceSessionId) ?? new TmuxCapture(bunExec);
-    cap.joinPane(sourceSessionId, targetSessionId);
-    triggerRediscovery();
-  }
-
-  function handleBreakPane(sessionId: string) {
-    const cap = captures.get(sessionId) ?? new TmuxCapture(bunExec);
-    cap.breakPane(sessionId);
-    triggerRediscovery();
-  }
-
   function handleSwapPane(sessionId1: string, sessionId2: string) {
     const cap = captures.get(sessionId1) ?? new TmuxCapture(bunExec);
     cap.swapPane(sessionId1, sessionId2);
@@ -330,8 +318,7 @@ async function main() {
       onGetSettings: handleGetSettings,
       onUpdateSettings: handleUpdateSettings,
       onRenameSession: handleRenameSession,
-      onJoinPane: handleJoinPane,
-      onBreakPane: handleBreakPane,
+
       onSwapPane: handleSwapPane,
       onSwapWindow: handleSwapWindow,
     });
@@ -358,8 +345,7 @@ async function main() {
       onGetSettings: handleGetSettings,
       onUpdateSettings: handleUpdateSettings,
       onRenameSession: handleRenameSession,
-      onJoinPane: handleJoinPane,
-      onBreakPane: handleBreakPane,
+
       onSwapPane: handleSwapPane,
       onSwapWindow: handleSwapWindow,
       getSessions: () => [...autoSessions, ...manualSessions],
