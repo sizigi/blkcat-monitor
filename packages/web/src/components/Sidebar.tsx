@@ -235,85 +235,75 @@ export function Sidebar({
           )}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
-        {onToggleHideTmux && (
-          <span style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
-            <button
-              onClick={onToggleHideTmux}
-              title={hideTmuxSessions ? "Show terminal sessions" : "Hide terminal sessions"}
-              style={{
-                background: "none",
-                border: "none",
-                color: hideTmuxSessions ? "var(--accent)" : "var(--text-muted)",
-                cursor: "pointer",
-                fontSize: 13,
-                lineHeight: 1,
-                padding: "2px 4px",
-                fontFamily: "monospace",
-              }}
-            >
-              {">_"}
-            </button>
-            {attachedTerminals && (
+        {onToggleHideTmux && (() => {
+          // Collect individually hidden (non-attached) terminals
+          const hiddenItems: { machineId: string; terminalId: string; name: string }[] = [];
+          for (const m of machines) {
+            for (const s of m.sessions) {
+              if (!s.cliTool && attachedTerminals?.isHidden(m.machineId, s.id)
+                  && !(attachedTerminals?.isAttached(m.machineId, s.id))) {
+                const name = getSessionName ? getSessionName(m.machineId, s.id, s.windowName ?? s.name) : (s.windowName ?? s.name);
+                hiddenItems.push({ machineId: m.machineId, terminalId: s.id, name });
+              }
+            }
+          }
+          const hasHidden = hiddenItems.length > 0 || hideTmuxSessions;
+          return (
+            <span style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
               <button
-                onClick={(e) => { e.stopPropagation(); setTerminalMenuOpen((v) => !v); }}
-                title="Terminal options"
+                onClick={() => {
+                  if (hasHidden) {
+                    setTerminalMenuOpen((v) => !v);
+                  } else {
+                    onToggleHideTmux();
+                  }
+                }}
+                title={hasHidden ? "Terminal options" : "Hide terminal sessions"}
                 style={{
                   background: "none",
                   border: "none",
-                  color: "var(--text-muted)",
+                  color: hasHidden ? "var(--accent)" : "var(--text-muted)",
                   cursor: "pointer",
-                  fontSize: 9,
+                  fontSize: 13,
                   lineHeight: 1,
-                  padding: "2px 2px",
+                  padding: "2px 4px",
+                  fontFamily: "monospace",
                 }}
               >
-                {"\u25BE"}
+                {">_"}
               </button>
-            )}
-            {terminalMenuOpen && (
-              <div style={{
-                position: "absolute",
-                top: "100%",
-                right: 0,
-                marginTop: 4,
-                background: "var(--bg-secondary)",
-                border: "1px solid var(--border)",
-                borderRadius: 6,
-                padding: 4,
-                zIndex: 50,
-                boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
-                minWidth: 160,
-              }}>
-                <button
-                  onClick={() => { onToggleHideTmux(); setTerminalMenuOpen(false); }}
-                  style={{
-                    display: "block",
-                    width: "100%",
-                    padding: "6px 8px",
-                    background: "transparent",
-                    border: "none",
-                    borderRadius: 4,
-                    color: "var(--text-muted)",
-                    cursor: "pointer",
-                    fontSize: 12,
-                    textAlign: "left",
-                  }}
-                >
-                  {hideTmuxSessions ? "Show all terminals" : "Hide all terminals"}
-                </button>
-                {(() => {
-                  // Find all hidden terminals across all machines
-                  const hiddenItems: { machineId: string; terminalId: string; name: string }[] = [];
-                  for (const m of machines) {
-                    for (const s of m.sessions) {
-                      if (!s.cliTool && attachedTerminals?.isHidden(m.machineId, s.id)) {
-                        const name = getSessionName ? getSessionName(m.machineId, s.id, s.windowName ?? s.name) : (s.windowName ?? s.name);
-                        hiddenItems.push({ machineId: m.machineId, terminalId: s.id, name });
-                      }
-                    }
-                  }
-                  if (hiddenItems.length === 0) return null;
-                  return (
+              {terminalMenuOpen && (
+                <div style={{
+                  position: "absolute",
+                  top: "100%",
+                  right: 0,
+                  marginTop: 4,
+                  background: "var(--bg-secondary)",
+                  border: "1px solid var(--border)",
+                  borderRadius: 6,
+                  padding: 4,
+                  zIndex: 50,
+                  boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+                  minWidth: 160,
+                }}>
+                  <button
+                    onClick={() => { onToggleHideTmux(); setTerminalMenuOpen(false); }}
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      padding: "6px 8px",
+                      background: "transparent",
+                      border: "none",
+                      borderRadius: 4,
+                      color: "var(--text-muted)",
+                      cursor: "pointer",
+                      fontSize: 12,
+                      textAlign: "left",
+                    }}
+                  >
+                    {hideTmuxSessions ? "Show all terminals" : "Hide all terminals"}
+                  </button>
+                  {hiddenItems.length > 0 && (
                     <>
                       <div style={{ height: 1, background: "var(--border)", margin: "4px 0" }} />
                       <div style={{ padding: "4px 8px", fontSize: 10, color: "var(--text-muted)", fontWeight: 600 }}>
@@ -341,18 +331,18 @@ export function Sidebar({
                             gap: 4,
                           }}
                         >
-                          <span style={{ fontFamily: "monospace", fontSize: 10 }}>{">_"}</span>
+                          <span className="terminal-badge" style={{ fontSize: 8, minWidth: 16, height: 13, padding: "0 3px" }}>{">_"}</span>
                           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</span>
                           <span style={{ marginLeft: "auto", fontSize: 10, opacity: 0.6 }}>show</span>
                         </button>
                       ))}
                     </>
-                  );
-                })()}
-              </div>
-            )}
-          </span>
-        )}
+                  )}
+                </div>
+              )}
+            </span>
+          );
+        })()}
         {onCollapse && (
           <button
             onClick={onCollapse}
@@ -1004,6 +994,29 @@ export function Sidebar({
                       </button>
                     );
                   })()}
+                  {!isCli && onHideTerminal && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onHideTerminal(machine.machineId, session.id);
+                      }}
+                      title="Hide terminal"
+                      style={{
+                        background: "none",
+                        border: "none",
+                        color: "var(--text-muted)",
+                        cursor: "pointer",
+                        padding: "4px 6px",
+                        lineHeight: 1,
+                        opacity: 0.5,
+                        fontSize: 12,
+                      }}
+                      onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; }}
+                      onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.5"; }}
+                    >
+                      {"\u2212"}
+                    </button>
+                  )}
                   {onCloseSession && (
                     <button
                       data-testid={`close-session-${session.id}`}
@@ -1027,29 +1040,6 @@ export function Sidebar({
                       onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.5"; (e.target as HTMLElement).style.color = "var(--text-muted)"; }}
                     >
                       <X size={12} />
-                    </button>
-                  )}
-                  {!isCli && onHideTerminal && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onHideTerminal(machine.machineId, session.id);
-                      }}
-                      title="Hide terminal"
-                      style={{
-                        background: "none",
-                        border: "none",
-                        color: "var(--text-muted)",
-                        cursor: "pointer",
-                        padding: "4px 6px",
-                        lineHeight: 1,
-                        opacity: 0.5,
-                        fontSize: 12,
-                      }}
-                      onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; }}
-                      onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.5"; }}
-                    >
-                      {"\u2212"}
                     </button>
                   )}
                   </div>
