@@ -23,6 +23,9 @@ async function main() {
   // Grace period: recently reloaded panes are protected from auto-discovery removal
   const reloadGracePanes = new Map<string, number>();
   const RELOAD_GRACE_MS = 10_000;
+  // Sticky CLI detection: once a session is detected as a CLI tool, lock it in.
+  // CLI sessions don't fall back to terminal, so re-checking is unnecessary.
+  const stickyCliMap = new Map<string, { cliTool: CliTool; args?: string }>();
 
   for (const target of config.targets) {
     if (target.type === "local" && target.session) {
@@ -177,6 +180,21 @@ async function main() {
   function triggerRediscovery() {
     if (!hasAutoTarget) return;
     const fresh = discoverAllSessions();
+
+    // Apply sticky CLI detection: once detected as CLI, lock it in permanently.
+    // Update sticky map from fresh detections, then apply to sessions that lost theirs.
+    for (const s of fresh) {
+      if (s.cliTool) {
+        stickyCliMap.set(s.id, { cliTool: s.cliTool, args: s.args });
+      } else {
+        const sticky = stickyCliMap.get(s.id);
+        if (sticky) {
+          s.cliTool = sticky.cliTool;
+          s.args = sticky.args;
+        }
+      }
+    }
+
     const newSessions = fresh.filter((s) => !captures.has(s.id));
     const now = Date.now();
     for (const [id, ts] of reloadGracePanes) {
@@ -189,6 +207,11 @@ async function main() {
       for (const s of newSessions) captures.set(s.id, new TmuxCapture(bunExec));
       for (const s of goneSessions) { captures.delete(s.id); prevLines.delete(s.id); }
     }
+    // Clean up sticky entries for sessions no longer in tmux
+    const freshIds = new Set(fresh.map((s) => s.id));
+    for (const id of stickyCliMap.keys()) {
+      if (!freshIds.has(id)) stickyCliMap.delete(id);
+    }
     // Update manual sessions with fresh metadata from discovery (cliTool, cwd, etc.)
     // while preserving user-set fields like name.
     // Also remove manual sessions whose tmux panes no longer exist.
@@ -197,6 +220,7 @@ async function main() {
       const manual = manualSessions[i];
       const freshData = freshById.get(manual.id);
       if (freshData) {
+        // Only promote cliTool, never demote (sticky handles this via fresh data)
         manual.cliTool = freshData.cliTool;
         manual.cwd = freshData.cwd;
         manual.args = freshData.args;
@@ -481,7 +505,7 @@ async function main() {
   }, config.pollInterval);
 
   if (hasAutoTarget) {
-    setInterval(() => triggerRediscovery(), 5000);
+    setInterval(() => triggerRediscovery(), 10_000);
   }
 }
 
