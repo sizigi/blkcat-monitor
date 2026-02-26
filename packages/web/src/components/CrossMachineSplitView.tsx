@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import type { MachineSnapshot, View, ViewPane } from "@blkcat/shared";
 import type { OutputLine } from "../hooks/useSocket";
 import { useSessionOutput } from "../hooks/useSessionOutput";
@@ -21,6 +21,8 @@ interface CrossMachineSplitViewProps {
   getMachineName: (machineId: string) => string;
   getSessionName: (machineId: string, sessionId: string, defaultName: string) => string;
   onUpdateView: (id: string, name?: string, panes?: ViewPane[]) => void;
+  /** When set, focus this pane (format: "machineId:sessionId") */
+  focusSessionKey?: string;
 }
 
 function ViewPane({
@@ -161,9 +163,17 @@ export function CrossMachineSplitView({
   getMachineName,
   getSessionName,
   onUpdateView,
+  focusSessionKey,
 }: CrossMachineSplitViewProps) {
   const firstPane = view.panes[0];
   const [focusedKey, setFocusedKey] = useState(firstPane ? `${firstPane.machineId}:${firstPane.sessionId}` : "");
+
+  // Sync focus when requested externally (e.g. sidebar click)
+  useEffect(() => {
+    if (focusSessionKey && view.panes.some((p) => `${p.machineId}:${p.sessionId}` === focusSessionKey)) {
+      setFocusedKey(focusSessionKey);
+    }
+  }, [focusSessionKey, view.panes]);
   const inputCacheRef = useRef(new Map<string, string>());
   const dragRef = useRef<number | null>(null);
   const [dropTarget, setDropTarget] = useState<number | null>(null);
