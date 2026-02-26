@@ -260,6 +260,55 @@ html, body, #root {
   opacity: 0.15;
 }
 
+/* DPad visual pulse — substitute for haptic on iOS (no navigator.vibrate) */
+@keyframes dpad-pulse {
+  0% { transform: scale(1); }
+  30% { transform: scale(0.88); }
+  100% { transform: scale(1); }
+}
+.dpad-pulse {
+  animation: dpad-pulse 0.15s ease-out;
+}
+
+/* Sidebar section headers ("Vibe Coding" / "Terminals") */
+.sidebar-section-header {
+  padding: 6px 12px 4px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-left: 2px solid var(--accent);
+  margin-left: 8px;
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sidebar-section-header.section-terminals {
+  border-left-color: var(--text-muted);
+}
+
+/* Hover-reveal action buttons on session rows */
+.session-actions {
+  display: flex;
+  align-items: center;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.sidebar-session-row:hover .session-actions,
+.sidebar-session-row.selected .session-actions {
+  opacity: 1;
+}
+
+/* CLI tool type icon before session name */
+.cli-type-icon {
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  line-height: 1;
+}
+
 /* Sidebar fonts: monospace for all content, thin serif for title */
 .sidebar, .sidebar button, .sidebar input, .sidebar select {
   font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;

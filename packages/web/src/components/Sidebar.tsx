@@ -535,7 +535,7 @@ export function Sidebar({
               return (
                 <div
                   key={session.id}
-                  className="sidebar-session-row"
+                  className={`sidebar-session-row${isSelected ? " selected" : ""}`}
                   draggable={canDrag}
                   onDragStart={(e) => {
                     e.stopPropagation();
@@ -590,7 +590,7 @@ export function Sidebar({
                     style={{
                       flex: 1,
                       textAlign: "left",
-                      padding: "6px 4px 6px 16px",
+                      padding: "6px 4px 6px 24px",
                       display: "flex",
                       alignItems: "center",
                       gap: 6,
@@ -607,19 +607,23 @@ export function Sidebar({
                     {sessionIndex < 9 && (
                       <span className="shortcut-badge shortcut-badge-session">{sessionIndex + 1}</span>
                     )}
-                    <span
-                      className={isActive ? "active-indicator" : isWaiting ? "waiting-indicator" : undefined}
-                      style={{
-                        width: 6,
-                        height: 6,
-                        borderRadius: "50%",
-                        background: isActive ? "var(--green)" : isWaiting ? "var(--accent)" : "var(--text-muted)",
-                        display: "inline-block",
-                        flexShrink: 0,
-                        opacity: isActive || isWaiting ? 1 : 0.3,
-                      }}
-                      title={isActive ? "Active" : isWaiting ? "Waiting for input" : ""}
-                    />
+                    {isCli ? (
+                      <span
+                        className={isActive ? "active-indicator" : isWaiting ? "waiting-indicator" : undefined}
+                        style={{
+                          width: 6,
+                          height: 6,
+                          borderRadius: "50%",
+                          background: isActive ? "var(--green)" : isWaiting ? "var(--accent)" : "var(--text-muted)",
+                          display: "inline-block",
+                          flexShrink: 0,
+                          opacity: isActive || isWaiting ? 1 : 0.3,
+                        }}
+                        title={isActive ? "Active" : isWaiting ? "Waiting for input" : ""}
+                      />
+                    ) : (
+                      <span className="cli-type-icon" style={{ fontFamily: "monospace" }}>{">_"}</span>
+                    )}
                     {editingId === `session:${session.id}` ? (
                       <input
                         autoFocus
@@ -673,16 +677,6 @@ export function Sidebar({
                             (ssh)
                           </span>
                         )}
-                        {session.cliTool === "codex" && (
-                          <span style={{ color: "var(--text-muted)", marginLeft: 4 }}>
-                            (codex)
-                          </span>
-                        )}
-                        {session.cliTool === "gemini" && (
-                          <span style={{ color: "var(--text-muted)", marginLeft: 4 }}>
-                            (gemini)
-                          </span>
-                        )}
                       </span>
                     )}
                     {(() => {
@@ -707,6 +701,7 @@ export function Sidebar({
                       );
                     })()}
                   </button>
+                  <div className="session-actions">
                   {isCli && onSessionSettings && (
                     <button
                       onClick={(e) => {
@@ -794,6 +789,7 @@ export function Sidebar({
                       <X size={12} />
                     </button>
                   )}
+                  </div>
                 </div>
               );
             }
@@ -898,7 +894,7 @@ export function Sidebar({
                     const idx = machine.sessions.indexOf(pane);
                     const groupedPane = { ...pane, windowName: pane.paneCommand ?? pane.windowName };
                     return (
-                      <div key={pane.id} style={{ paddingLeft: 12 }}>
+                      <div key={pane.id} style={{ paddingLeft: 12, marginLeft: 12 }}>
                         {renderSession(groupedPane, idx, group.windowId)}
                       </div>
                     );
@@ -913,7 +909,8 @@ export function Sidebar({
             return (
               <>
                 {showGroupLabels && cliSessions.length > 0 && (
-                  <div style={{ padding: "4px 16px 2px", fontSize: 10, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  <div className="sidebar-section-header">
+                    <span style={{ fontSize: 11 }}>✦</span>
                     Vibe Coding
                   </div>
                 )}
@@ -921,9 +918,13 @@ export function Sidebar({
                 {!hideTmuxSessions && terminalGroups.length > 0 && (
                   <>
                     {showGroupLabels && (
-                      <div style={{ padding: "4px 16px 2px", fontSize: 10, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                        Terminals
-                      </div>
+                      <>
+                        <div style={{ height: 1, background: "var(--border)", margin: "4px 16px 0", opacity: 0.5 }} />
+                        <div className="sidebar-section-header section-terminals">
+                          <span style={{ fontSize: 11, fontFamily: "monospace" }}>{">_"}</span>
+                          Terminals
+                        </div>
+                      </>
                     )}
                     {terminalGroups.map((g) => renderGroup(g, "terminal"))}
                   </>

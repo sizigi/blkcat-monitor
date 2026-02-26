@@ -39,8 +39,8 @@ function vibrate(ms = 10) {
 
 // --- D-Pad component: swipe-based directional pad with repeat and haptics ---
 
-const DPAD_SIZE = 32;
-const SWIPE_THRESHOLD = 12;
+const DPAD_SIZE = 44;
+const SWIPE_THRESHOLD = 10;
 const REPEAT_DELAY = 400; // ms before repeat starts
 const REPEAT_INTERVAL = 80; // ms between repeats
 
@@ -51,6 +51,16 @@ function DPad({ onDirection }: { onDirection: (dir: "Up" | "Down" | "Left" | "Ri
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const repeatTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const repeatIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const dpadRef = useRef<HTMLDivElement>(null);
+
+  // Restart CSS pulse animation without remounting (preserves touch event lifecycle)
+  const triggerPulse = useCallback(() => {
+    const el = dpadRef.current;
+    if (!el) return;
+    el.classList.remove("dpad-pulse");
+    void el.offsetWidth; // force reflow to restart animation
+    el.classList.add("dpad-pulse");
+  }, []);
 
   const stopRepeat = useCallback(() => {
     if (repeatTimerRef.current) { clearTimeout(repeatTimerRef.current); repeatTimerRef.current = null; }
@@ -72,6 +82,7 @@ function DPad({ onDirection }: { onDirection: (dir: "Up" | "Down" | "Left" | "Ri
     activeDirRef.current = dir;
     onDirection(dir);
     vibrate(10);
+    triggerPulse();
     startRepeat(dir);
   }, [onDirection, startRepeat]);
 
@@ -85,6 +96,7 @@ function DPad({ onDirection }: { onDirection: (dir: "Up" | "Down" | "Left" | "Ri
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     if (!startRef.current) return;
+    e.preventDefault(); // prevent scroll on old iOS
     const t = e.touches[0];
     const dx = t.clientX - startRef.current.x;
     const dy = t.clientY - startRef.current.y;
@@ -106,12 +118,27 @@ function DPad({ onDirection }: { onDirection: (dir: "Up" | "Down" | "Left" | "Ri
     }
   }, [fireDirection]);
 
-  const handleTouchEnd = useCallback(() => {
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    // Tap fallback: if no swipe was detected, treat as quadrant tap
+    if (!activeDirRef.current && e.changedTouches.length > 0) {
+      const t = e.changedTouches[0];
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const dx = t.clientX - cx;
+      const dy = t.clientY - cy;
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+        const dir: "Up" | "Down" | "Left" | "Right" = Math.abs(dx) > Math.abs(dy)
+          ? (dx > 0 ? "Right" : "Left")
+          : (dy > 0 ? "Down" : "Up");
+        fireDirection(dir);
+      }
+    }
     startRef.current = null;
     stopRepeat();
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => { setActiveDir(null); activeDirRef.current = null; }, 150);
-  }, [stopRepeat]);
+  }, [stopRepeat, fireDirection]);
 
   // Also support mouse drag for desktop
   const mouseDownRef = useRef(false);
@@ -159,6 +186,7 @@ function DPad({ onDirection }: { onDirection: (dir: "Up" | "Down" | "Left" | "Ri
 
   return (
     <div
+      ref={dpadRef}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
@@ -170,7 +198,7 @@ function DPad({ onDirection }: { onDirection: (dir: "Up" | "Down" | "Left" | "Ri
         width: DPAD_SIZE,
         height: DPAD_SIZE,
         borderRadius: "50%",
-        background: activeDir ? "var(--bg-tertiary)" : "var(--bg-tertiary)",
+        background: "var(--bg-tertiary)",
         border: `1px solid ${activeDir ? "var(--accent)" : "var(--border)"}`,
         cursor: "pointer",
         display: "flex",
@@ -178,13 +206,14 @@ function DPad({ onDirection }: { onDirection: (dir: "Up" | "Down" | "Left" | "Ri
         justifyContent: "center",
         userSelect: "none",
         touchAction: "none",
+        WebkitTouchCallout: "none",
         flexShrink: 0,
         transition: "border-color 0.1s",
       }}
-      title="Swipe for arrow keys"
+      title="Swipe or tap for arrow keys"
     >
       {/* Cross-arrow icon */}
-      <svg width={18} height={18} viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+      <svg width={24} height={24} viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
         {/* Up */}
         <polyline points="9,2 9,7" stroke={arrowColor("Up")} />
         <polyline points="7,4 9,2 11,4" stroke={arrowColor("Up")} />

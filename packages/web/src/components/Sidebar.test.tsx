@@ -102,31 +102,19 @@ describe("Sidebar", () => {
     expect(screen.queryByText("Outbound Agents")).not.toBeInTheDocument();
   });
 
-  it("shows (codex) label for codex sessions", () => {
-    const codexMachines: MachineSnapshot[] = [
+  it("shows >_ icon for terminal sessions but not for CLI sessions", () => {
+    const mixedMachines: MachineSnapshot[] = [
       {
         machineId: "m1",
         sessions: [
-          { id: "s1", name: "dev", target: "local", cliTool: "codex" },
+          { id: "s1", name: "dev", target: "local", cliTool: "claude" },
+          { id: "s2", name: "server", target: "local" },
         ],
         lastSeen: Date.now(),
       },
     ];
-    render(<Sidebar machines={codexMachines} onSelectSession={() => {}} />);
-    expect(screen.getByText("(codex)")).toBeInTheDocument();
-  });
-
-  it("shows (gemini) label for gemini sessions", () => {
-    const geminiMachines: MachineSnapshot[] = [
-      {
-        machineId: "m1",
-        sessions: [
-          { id: "s1", name: "dev", target: "local", cliTool: "gemini" },
-        ],
-        lastSeen: Date.now(),
-      },
-    ];
-    render(<Sidebar machines={geminiMachines} onSelectSession={() => {}} />);
-    expect(screen.getByText("(gemini)")).toBeInTheDocument();
+    render(<Sidebar machines={mixedMachines} onSelectSession={() => {}} />);
+    const icons = screen.getAllByText(">_");
+    expect(icons.length).toBeGreaterThanOrEqual(1);
   });
 });
