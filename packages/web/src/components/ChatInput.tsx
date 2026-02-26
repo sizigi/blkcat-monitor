@@ -260,18 +260,26 @@ export function ChatInput({ onSendText, onSendKey, onSendData, initialValue, onI
     setShiftActive(false);
   }, []);
 
-  // Wrap onSendKey to apply modifier prefixes
+  // Wrap onSendKey to apply modifier prefixes, translating to tmux key names.
+  // tmux `S-` prefix only works with arrows/function keys. For others we use
+  // the canonical tmux names (e.g. BTab for Shift+Tab).
   const sendKeyWithModifiers = useCallback((key: string) => {
     const ctrl = ctrlRef.current;
     const shift = shiftRef.current;
     let finalKey = key;
 
-    if (ctrl && shift) {
-      finalKey = `C-S-${key}`;
+    if (shift) {
+      // Translate Shift+key to tmux-compatible names
+      const shiftMap: Record<string, string> = {
+        Tab: "BTab",
+        BSpace: "BSpace",   // shift doesn't change backspace
+        Enter: "Enter",     // shift doesn't change enter in terminals
+        Escape: "Escape",   // shift doesn't change escape
+      };
+      finalKey = shiftMap[key] ?? `S-${key}`;
+      if (ctrl) finalKey = `C-${finalKey}`;
     } else if (ctrl) {
       finalKey = `C-${key}`;
-    } else if (shift) {
-      finalKey = `S-${key}`;
     }
 
     onSendKey(finalKey);
