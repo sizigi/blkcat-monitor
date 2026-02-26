@@ -523,9 +523,12 @@ html, body, #root {
 .mobile-topbar {
   display: none;
 }
-/* Function key buttons: hidden on desktop, shown on mobile */
+/* Function key buttons: hidden by default, shown inside floating panel and on mobile */
 .chat-key-buttons {
   display: none;
+}
+.floating-input-panel .chat-key-buttons {
+  display: flex !important;
 }
 
 /* ── Mobile responsive (≤768px) ── */
