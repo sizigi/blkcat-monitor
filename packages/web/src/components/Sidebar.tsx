@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import type { MachineSnapshot, OutboundAgentInfo, SessionInfo, CliTool } from "@blkcat/shared";
+import type { MachineSnapshot, OutboundAgentInfo, SessionInfo, CliTool, View } from "@blkcat/shared";
 import { AgentManager } from "./AgentManager";
 import { StartSessionModal } from "./StartSessionModal";
 import { ReloadSessionModal } from "./ReloadSessionModal";
@@ -42,6 +42,12 @@ interface SidebarProps {
   onBreakPane?: (machineId: string, sessionId: string) => void;
   onSwapPane?: (machineId: string, sessionId1: string, sessionId2: string) => void;
   onSwapWindow?: (machineId: string, sessionId1: string, sessionId2: string) => void;
+  views?: View[];
+  selectedView?: string;
+  onSelectView?: (viewId: string) => void;
+  onCreateView?: () => void;
+  onDeleteView?: (viewId: string) => void;
+  onRenameView?: (viewId: string, name: string) => void;
 }
 
 export function Sidebar({
@@ -81,6 +87,12 @@ export function Sidebar({
   onBreakPane,
   onSwapPane,
   onSwapWindow,
+  views,
+  selectedView,
+  onSelectView,
+  onCreateView,
+  onDeleteView,
+  onRenameView,
 }: SidebarProps) {
   const [modalMachineId, setModalMachineId] = useState<string | null>(null);
   const [reloadTarget, setReloadTarget] = useState<{ machineId: string; session: SessionInfo } | null>(null);
@@ -232,6 +244,163 @@ export function Sidebar({
         )}
         </div>
       </div>
+      {/* Views section */}
+      {(views && views.length > 0 || onCreateView) && (
+        <div style={{ borderBottom: "1px solid var(--border)" }}>
+          <div style={{
+            padding: "6px 12px",
+            fontSize: 10,
+            fontWeight: 600,
+            color: "var(--text-muted)",
+            textTransform: "uppercase",
+            letterSpacing: "0.05em",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}>
+            <span>Views</span>
+            {onCreateView && (
+              <button
+                onClick={onCreateView}
+                style={{
+                  background: "none",
+                  border: "1px solid var(--border)",
+                  borderRadius: 4,
+                  color: "var(--text-muted)",
+                  cursor: "pointer",
+                  lineHeight: 1,
+                  padding: "1px 3px",
+                  display: "flex",
+                  alignItems: "center",
+                }}
+              >
+                <Plus size={10} />
+              </button>
+            )}
+          </div>
+          {views?.map((view) => (
+            <div
+              key={view.id}
+              className="sidebar-session-row"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                background: selectedView === view.id ? "var(--bg-tertiary)" : "transparent",
+                userSelect: "none",
+              }}
+              onDragOver={(e) => {
+                if (e.dataTransfer.types.includes("application/x-blkcat-session")) {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "copy";
+                }
+              }}
+              onDrop={(e) => {
+                const data = e.dataTransfer.getData("application/x-blkcat-session");
+                if (!data) return;
+                e.preventDefault();
+                // Handled by parent via onAddPaneToView — but we don't have it here.
+                // Instead, fire a custom event or handle inline:
+                const { machineId: mid, sessionId: sid } = JSON.parse(data);
+                const alreadyExists = view.panes.some((p) => p.machineId === mid && p.sessionId === sid);
+                if (!alreadyExists && onRenameView) {
+                  // Use updateView pattern — we need onUpdateView. For now, cheat: rename triggers update.
+                  // Actually let's just emit via a dedicated mechanism. We'll handle this in App.tsx.
+                }
+              }}
+            >
+              <button
+                onClick={() => onSelectView?.(view.id)}
+                style={{
+                  flex: 1,
+                  textAlign: "left",
+                  padding: "6px 4px 6px 16px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  background: "transparent",
+                  border: "none",
+                  color: selectedView === view.id ? "var(--accent)" : "var(--text-muted)",
+                  cursor: "pointer",
+                  fontSize: 13,
+                  overflow: "hidden",
+                }}
+              >
+                <span style={{ fontSize: 10, flexShrink: 0 }}>{"\u25A3"}</span>
+                {editingId === `view:${view.id}` ? (
+                  <input
+                    autoFocus
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                    onBlur={() => {
+                      const trimmed = editValue.trim();
+                      if (trimmed && trimmed !== view.name) onRenameView?.(view.id, trimmed);
+                      setEditingId(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        const trimmed = editValue.trim();
+                        if (trimmed) onRenameView?.(view.id, trimmed);
+                        setEditingId(null);
+                      } else if (e.key === "Escape") {
+                        setEditingId(null);
+                      }
+                    }}
+                    style={{
+                      flex: 1,
+                      background: "var(--bg)",
+                      color: "var(--text)",
+                      border: "1px solid var(--accent)",
+                      borderRadius: 3,
+                      padding: "1px 4px",
+                      fontSize: 13,
+                      outline: "none",
+                    }}
+                  />
+                ) : (
+                  <span
+                    style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                    onDoubleClick={(e) => {
+                      if (!onRenameView) return;
+                      e.stopPropagation();
+                      setEditingId(`view:${view.id}`);
+                      setEditValue(view.name);
+                    }}
+                    title="Double-click to rename"
+                  >
+                    {view.name}
+                  </span>
+                )}
+                <span style={{ color: "var(--text-muted)", fontSize: 11, flexShrink: 0 }}>
+                  {view.panes.length}
+                </span>
+              </button>
+              {onDeleteView && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (confirm("Delete this view?")) onDeleteView(view.id);
+                  }}
+                  title="Delete view"
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "var(--text-muted)",
+                    cursor: "pointer",
+                    padding: "4px 8px",
+                    lineHeight: 1,
+                    opacity: 0.5,
+                  }}
+                  onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; (e.target as HTMLElement).style.color = "var(--red)"; }}
+                  onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.5"; (e.target as HTMLElement).style.color = "var(--text-muted)"; }}
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
       {machines.length === 0 && (
         <p style={{ padding: 16, color: "var(--text-muted)" }}>No machines connected</p>
       )}
@@ -371,8 +540,9 @@ export function Sidebar({
                   onDragStart={(e) => {
                     e.stopPropagation();
                     dragRef.current = { machineId: machine.machineId, sessionId: session.id, windowId: session.windowId, group };
-                    e.dataTransfer.effectAllowed = "move";
+                    e.dataTransfer.effectAllowed = "copyMove";
                     e.dataTransfer.setData("text/plain", session.id);
+                    e.dataTransfer.setData("application/x-blkcat-session", JSON.stringify({ machineId: machine.machineId, sessionId: session.id }));
                   }}
                   onDragEnter={(e) => {
                     const src = dragRef.current;

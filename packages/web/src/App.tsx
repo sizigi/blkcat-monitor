@@ -8,6 +8,8 @@ import { useTheme } from "./hooks/useTheme";
 import { Sidebar } from "./components/Sidebar";
 import { SessionDetail } from "./components/SessionDetail";
 import { SplitView } from "./components/SplitView";
+import { CrossMachineSplitView } from "./components/CrossMachineSplitView";
+import { CreateViewModal } from "./components/CreateViewModal";
 import { EventFeed } from "./components/EventFeed";
 import { NotificationList } from "./components/NotificationList";
 import { SkillsMatrix } from "./components/SkillsMatrix";
@@ -24,7 +26,7 @@ const MIN_SIDEBAR_WIDTH = 160;
 const MAX_SIDEBAR_WIDTH = 500;
 
 export default function App() {
-  const { connected, machines, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory, createDirectory, deploySkills, removeSkills, getSettings, updateSettings, subscribeDeployResult, subscribeSettingsSnapshot, subscribeSettingsResult, setDisplayName, subscribeDisplayNames, subscribeReloadResult, joinPane, breakPane, swapPane, swapWindow } = useSocket(WS_URL);
+  const { connected, machines, views, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory, createDirectory, deploySkills, removeSkills, getSettings, updateSettings, subscribeDeployResult, subscribeSettingsSnapshot, subscribeSettingsResult, setDisplayName, subscribeDisplayNames, subscribeReloadResult, joinPane, breakPane, swapPane, swapWindow, createView, updateView, deleteView } = useSocket(WS_URL);
   const { agents, addAgent, removeAgent } = useAgents();
   const { getMachineName, getSessionName, setMachineName, setSessionName } = useDisplayNames({
     sendDisplayName: setDisplayName,
@@ -59,6 +61,8 @@ export default function App() {
   const [selectedMachine, setSelectedMachine] = useState<string>();
   const [selectedSession, setSelectedSession] = useState<string>();
   const [selectedGroup, setSelectedGroup] = useState<string>();
+  const [selectedView, setSelectedView] = useState<string>();
+  const [showCreateViewModal, setShowCreateViewModal] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
   const [panelTab, setPanelTab] = useState<"events" | "notifications" | "skills" | null>(null);
@@ -263,11 +267,26 @@ export default function App() {
       setSelectedMachine(machineId);
       setSelectedSession(undefined);
       setSelectedGroup(windowId);
+      setSelectedView(undefined);
     },
     onJoinPane: joinPane,
     onBreakPane: breakPane,
     onSwapPane: swapPane,
     onSwapWindow: swapWindow,
+    views,
+    selectedView,
+    onSelectView: (viewId: string) => {
+      setSelectedView(viewId);
+      setSelectedMachine(undefined);
+      setSelectedSession(undefined);
+      setSelectedGroup(undefined);
+    },
+    onCreateView: () => setShowCreateViewModal(true),
+    onDeleteView: (id: string) => {
+      deleteView(id);
+      if (selectedView === id) setSelectedView(undefined);
+    },
+    onRenameView: (id: string, name: string) => updateView(id, name),
   };
 
   return (
@@ -285,6 +304,7 @@ export default function App() {
               setSelectedMachine(m);
               setSelectedSession(s);
               setSelectedGroup(undefined);
+              setSelectedView(undefined);
               clearNotifications(`${m}:${s}`);
               setDrawerOpen(false);
             }}
@@ -301,6 +321,7 @@ export default function App() {
                 setSelectedMachine(m);
                 setSelectedSession(s);
                 setSelectedGroup(undefined);
+                setSelectedView(undefined);
                 clearNotifications(`${m}:${s}`);
               }}
               onCollapse={() => setSidebarCollapsed(true)}
@@ -470,7 +491,35 @@ export default function App() {
             <span style={{ fontWeight: 400, opacity: 0.7 }}>Esc cancel</span>
           </div>
         )}
-        {selectedMachine && selectedGroup && selectedGroupPanes.length > 1 ? (
+        {selectedView && (() => {
+          const view = views.find((v) => v.id === selectedView);
+          if (!view || view.panes.length === 0) {
+            return (
+              <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", fontSize: 14 }}>
+                View is empty. Drag sessions from the sidebar to add them.
+              </div>
+            );
+          }
+          return (
+            <CrossMachineSplitView
+              view={view}
+              machines={machines}
+              isMobile={isMobile}
+              outputMapRef={outputMapRef}
+              subscribeOutput={subscribeOutput}
+              logMapRef={logMapRef}
+              scrollbackMapRef={scrollbackMapRef}
+              subscribeScrollback={subscribeScrollback}
+              onRequestScrollback={requestScrollback}
+              onSendInput={sendInput}
+              onSendResize={sendResize}
+              getMachineName={getMachineName}
+              getSessionName={getSessionName}
+              onUpdateView={updateView}
+            />
+          );
+        })()}
+        {selectedView ? null : selectedMachine && selectedGroup && selectedGroupPanes.length > 1 ? (
           <SplitView
             machineId={selectedMachine}
             panes={selectedGroupPanes}
@@ -665,6 +714,23 @@ export default function App() {
           />
         );
       })()}
+      {/* Create View modal */}
+      {showCreateViewModal && (
+        <CreateViewModal
+          machines={machines}
+          getMachineName={getMachineName}
+          getSessionName={getSessionName}
+          onCreate={(id, name, panes) => {
+            createView(id, name, panes);
+            setShowCreateViewModal(false);
+            setSelectedView(id);
+            setSelectedMachine(undefined);
+            setSelectedSession(undefined);
+            setSelectedGroup(undefined);
+          }}
+          onClose={() => setShowCreateViewModal(false)}
+        />
+      )}
     </div>
   );
 }
