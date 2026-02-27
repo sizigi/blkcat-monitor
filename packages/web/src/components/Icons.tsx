@@ -155,6 +155,15 @@ export function Maximize(props: IconProps) {
   </>);
 }
 
+/** ⤢  Expand / pop out to standalone */
+export function Expand(props: IconProps) {
+  return svg(24, props, <>
+    <polyline points="15 3 21 3 21 9" />
+    <line x1="21" y1="3" x2="13" y2="11" />
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+  </>);
+}
+
 /** ↕  Arrow up-down / scroll history */
 export function ArrowUpDown(props: IconProps) {
   return svg(24, props, <>

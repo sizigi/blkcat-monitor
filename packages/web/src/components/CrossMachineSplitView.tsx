@@ -6,7 +6,7 @@ import { TerminalOutput } from "./TerminalOutput";
 import type { TerminalOutputHandle } from "./TerminalOutput";
 import { FloatingChatInput } from "./FloatingChatInput";
 import { SessionPickerModal } from "./SessionPickerModal";
-import { X, Maximize, ArrowLeftRight } from "./Icons";
+import { X, Maximize, Expand } from "./Icons";
 
 interface CrossMachineSplitViewProps {
   view: View;
@@ -30,6 +30,7 @@ interface CrossMachineSplitViewProps {
   /** Ref callback for direct pane cycling from keyboard shortcuts (bypasses App re-render) */
   cyclePaneRef?: React.MutableRefObject<((delta: number) => void) | undefined>;
   getOrderedGroups?: <T extends { cwdRoot: string }>(machineId: string, groups: T[]) => T[];
+  onSelectSessionDirect?: (machineId: string, sessionId: string) => void;
 }
 
 function ViewPane({
@@ -50,6 +51,7 @@ function ViewPane({
   sessionName,
   onRemove,
   onDoubleClickHeader,
+  onSelectDirect,
 }: {
   machineId: string;
   sessionId: string;
@@ -68,6 +70,7 @@ function ViewPane({
   sessionName: string;
   onRemove: () => void;
   onDoubleClickHeader?: () => void;
+  onSelectDirect?: () => void;
 }) {
   const output = useSessionOutput(outputMapRef, subscribeOutput, machineId, sessionId);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -122,10 +125,10 @@ function ViewPane({
             {sessionName}
           </div>
         </div>
-        {onDoubleClickHeader && (
+        {onSelectDirect && (
           <button
-            onClick={(e) => { e.stopPropagation(); onDoubleClickHeader(); }}
-            title="Switch session"
+            onClick={(e) => { e.stopPropagation(); onSelectDirect(); }}
+            title="Open standalone"
             style={{
               background: "none",
               border: "none",
@@ -139,7 +142,7 @@ function ViewPane({
             onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; }}
             onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.5"; }}
           >
-            <ArrowLeftRight size={10} />
+            <Expand size={10} />
           </button>
         )}
         <button
@@ -229,6 +232,7 @@ export function CrossMachineSplitView({
   focusSeq,
   cyclePaneRef,
   getOrderedGroups,
+  onSelectSessionDirect,
 }: CrossMachineSplitViewProps) {
   const firstPane = view.panes[0];
   const [focusedKey, setFocusedKey] = useState(firstPane ? `${firstPane.machineId}:${firstPane.sessionId}` : "");
@@ -562,6 +566,7 @@ export function CrossMachineSplitView({
                   sessionName={resolveSessionName(pane.machineId, pane.sessionId)}
                   onRemove={() => handleRemovePane(i)}
                   onDoubleClickHeader={() => setPickerTarget(i)}
+                  onSelectDirect={onSelectSessionDirect ? () => onSelectSessionDirect(pane.machineId, pane.sessionId) : undefined}
                 />
               </div>
             </React.Fragment>
