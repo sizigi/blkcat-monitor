@@ -372,7 +372,7 @@ html, body, #root {
 /* Floating chat input: collapsed bar with DPad + Enter + toggle */
 .floating-input-bar {
   position: absolute;
-  bottom: 12px;
+  bottom: max(12px, env(safe-area-inset-bottom, 0px));
   right: 12px;
   display: flex;
   align-items: center;
@@ -435,17 +435,58 @@ html, body, #root {
   box-shadow: none;
   z-index: 1;
 }
+/* Desktop: panel is in-flow so xterm shrinks to make room */
 .floating-input-panel {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  position: relative;
   background: var(--bg-secondary);
   border-top: 1px solid var(--border);
   z-index: 30;
-  max-height: 50vh;
-  overflow-y: auto;
-  box-shadow: 0 -2px 12px rgba(0,0,0,0.2);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* Content inside panel fills available height — complete flex chain:
+   panel → container (col) → textarea-row (row, flex:1) → wrapper div (col) → textarea (flex:1) */
+.floating-input-panel .chat-input-container {
+  flex: 1;
+  min-height: 0;
+}
+.floating-input-panel .chat-input-textarea {
+  flex: 1;
+  min-height: 0;
+}
+/* The div wrapping the textarea (or .live-border-wrap) */
+.floating-input-panel .chat-input-textarea > div,
+.floating-input-panel .chat-input-textarea > .live-border-wrap {
+  display: flex;
+  flex-direction: column;
+}
+.floating-input-panel .chat-input-container textarea {
+  flex: 1;
+  min-height: 0;
+  resize: none;
+}
+/* Drag handle at top edge of panel */
+.floating-input-resize-handle {
+  height: 6px;
+  cursor: row-resize;
+  flex-shrink: 0;
+  position: relative;
+}
+.floating-input-resize-handle::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 2px;
+  transform: translateX(-50%);
+  width: 32px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border);
+  transition: background 0.15s;
+}
+.floating-input-resize-handle:hover::after {
+  background: var(--accent);
 }
 
 /* Sidebar fonts: monospace for all content, thin serif for title */
@@ -605,9 +646,7 @@ html, body, #root {
 .chat-key-buttons {
   display: none;
 }
-.floating-input-panel .chat-key-buttons {
-  display: flex !important;
-}
+/* Key buttons inside floating panel: mobile only */
 
 /* ── Mobile responsive (≤768px) ── */
 @media (max-width: 768px) {
@@ -652,6 +691,11 @@ html, body, #root {
   /* Hide desktop resize handle */
   .sidebar-resize-handle {
     display: none !important;
+  }
+
+  /* Move floating bar higher to avoid system gesture zones */
+  .floating-input-bar {
+    bottom: max(48px, calc(env(safe-area-inset-bottom, 0px) + 12px)) !important;
   }
 
   /* Full-screen panel overlay */
@@ -703,5 +747,24 @@ html, body, #root {
      Order: key-buttons (0) → LIVE toggle (1) → textarea (2) */
   .chat-input-textarea {
     order: 2;
+  }
+  /* Mobile: panel overlays terminal instead of pushing it */
+  .floating-input-panel {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: auto !important;
+    max-height: 50vh;
+    overflow-y: auto;
+    box-shadow: 0 -2px 12px rgba(0,0,0,0.2);
+  }
+  /* Hide drag handle on mobile (overlay mode, no resize) */
+  .floating-input-resize-handle {
+    display: none;
+  }
+  /* Restore native textarea resize on mobile */
+  .floating-input-panel .chat-input-container textarea {
+    resize: vertical;
   }
 }

@@ -16,6 +16,10 @@ interface FloatingChatInputProps {
   onObscuredHeight?: (height: number) => void;
 }
 
+const DEFAULT_PANEL_HEIGHT = 120;
+const MIN_PANEL_HEIGHT = 60;
+const MAX_PANEL_HEIGHT = 500;
+
 export function FloatingChatInput({
   onSendText,
   onSendKey,
@@ -28,6 +32,8 @@ export function FloatingChatInput({
 }: FloatingChatInputProps) {
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
+  const [panelHeight, setPanelHeight] = useState(DEFAULT_PANEL_HEIGHT);
+  const dragging = useRef(false);
 
   // Report total obscured height whenever panel size or keyboard changes
   useEffect(() => {
@@ -47,6 +53,38 @@ export function FloatingChatInput({
     report();
     return () => ro.disconnect();
   }, [open, keyboardOffset, onObscuredHeight]);
+
+  // Trigger xterm refit when panel opens/closes (desktop: layout changes)
+  useEffect(() => {
+    const timer = setTimeout(() => window.dispatchEvent(new Event("resize")), 50);
+    return () => clearTimeout(timer);
+  }, [open]);
+
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    dragging.current = true;
+    const startY = e.clientY;
+    const startHeight = panelHeight;
+
+    const onMouseMove = (ev: MouseEvent) => {
+      // Dragging up (negative dy) increases height
+      const dy = ev.clientY - startY;
+      const newHeight = Math.min(MAX_PANEL_HEIGHT, Math.max(MIN_PANEL_HEIGHT, startHeight - dy));
+      setPanelHeight(newHeight);
+    };
+    const onMouseUp = () => {
+      dragging.current = false;
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      window.dispatchEvent(new Event("resize"));
+    };
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+    document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
+  }, [panelHeight]);
 
   const handleDirection = useCallback((dir: "Up" | "Down" | "Left" | "Right") => {
     onSendKey(dir);
@@ -79,7 +117,12 @@ export function FloatingChatInput({
   }
 
   return (
-    <div ref={panelRef} className="floating-input-panel" style={keyboardOffset > 0 ? { bottom: keyboardOffset } : undefined}>
+    <div ref={panelRef} className="floating-input-panel" style={{ height: panelHeight, ...(keyboardOffset > 0 ? { bottom: keyboardOffset } : {}) }}>
+      {/* Drag handle at top edge */}
+      <div
+        className="floating-input-resize-handle"
+        onMouseDown={handleResizeStart}
+      />
       <button
         onClick={() => setOpen(false)}
         className="floating-input-btn floating-input-btn-close"
