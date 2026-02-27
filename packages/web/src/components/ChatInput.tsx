@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, useEffect } from "react";
 
 interface ChatInputProps {
   onSendText: (text: string) => void;
@@ -130,6 +130,13 @@ export function DPad({ onDirection, size }: { onDirection: (dir: "Up" | "Down" |
     }
   }, [fireDirection]);
 
+  const resetDpad = useCallback(() => {
+    startRef.current = null;
+    stopRepeat();
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => { setActiveDir(null); activeDirRef.current = null; }, 150);
+  }, [stopRepeat]);
+
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
     // Tap fallback: if no swipe was detected, treat as quadrant tap
     if (!activeDirRef.current && e.changedTouches.length > 0) {
@@ -146,11 +153,23 @@ export function DPad({ onDirection, size }: { onDirection: (dir: "Up" | "Down" |
         fireDirection(dir);
       }
     }
-    startRef.current = null;
-    stopRepeat();
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => { setActiveDir(null); activeDirRef.current = null; }, 150);
-  }, [stopRepeat, fireDirection]);
+    resetDpad();
+  }, [resetDpad, fireDirection]);
+
+  const handleTouchCancel = useCallback(() => {
+    resetDpad();
+  }, [resetDpad]);
+
+  // Safety: stop repeat on visibility change (user switches apps, locks screen)
+  useEffect(() => {
+    const stop = () => resetDpad();
+    document.addEventListener("visibilitychange", stop);
+    window.addEventListener("blur", stop);
+    return () => {
+      document.removeEventListener("visibilitychange", stop);
+      window.removeEventListener("blur", stop);
+    };
+  }, [resetDpad]);
 
   // Also support mouse drag for desktop
   const mouseDownRef = useRef(false);
@@ -202,6 +221,7 @@ export function DPad({ onDirection, size }: { onDirection: (dir: "Up" | "Down" |
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchCancel}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
