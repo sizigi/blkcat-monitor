@@ -611,10 +611,10 @@ html, body, #root {
 
 /* ── Mobile responsive (≤768px) ── */
 @media (max-width: 768px) {
-  /* Use --app-height (set by visualViewport listener in main.tsx)
-     so the layout shrinks when the soft keyboard opens. */
+  /* Fixed height — keyboard overlays content instead of resizing layout
+     (interactive-widget=overlays-content in index.html). */
   html, body, #root {
-    height: var(--app-height, 100dvh);
+    height: 100dvh;
   }
 
   /* Sidebar as slide-out drawer */
