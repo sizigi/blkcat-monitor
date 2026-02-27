@@ -280,7 +280,10 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
       // Intercept Ctrl+V / Cmd+V: read clipboard ourselves and send as data.
       // Without this, xterm sends raw \x16 which Claude Code interprets as
       // "paste image" rather than receiving the actual clipboard text.
+      // preventDefault stops the browser's native paste event from also firing
+      // (which would cause xterm's onData to deliver the text a second time).
       if ((event.ctrlKey || event.metaKey) && event.key === "v") {
+        event.preventDefault();
         navigator.clipboard.readText().then((text) => {
           if (text) onDataRef.current?.(text);
         }).catch(() => {});
