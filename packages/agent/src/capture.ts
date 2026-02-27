@@ -180,9 +180,11 @@ export class TmuxCapture {
       : cwd;
     const hasTmux = this.exec([...this.sshPrefix, "tmux", "has-session"]).success;
     const tmuxCmd = hasTmux ? "new-window" : "new-session";
+    const shell = process.env.SHELL || "/bin/bash";
     const cmd = [...this.sshPrefix, "tmux", tmuxCmd, "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}"];
     if (!hasTmux) cmd.push("-d");
     if (resolvedCwd) cmd.push("-c", resolvedCwd);
+    cmd.push(shell, "-l");
     const result = this.exec(cmd);
     if (!result.success) return null;
     return result.stdout.trim();
