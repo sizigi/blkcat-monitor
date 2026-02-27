@@ -167,10 +167,22 @@ export class TmuxCapture {
     return this.exec(cmd).success;
   }
 
+  /** Get the current working directory of the process running in the pane. */
+  paneCwd(target: string): string | null {
+    const result = this.exec([...this.sshPrefix, "tmux", "display-message", "-p", "-t", target, "#{pane_current_path}"]);
+    if (!result.success) return null;
+    const cwd = result.stdout.trim();
+    return cwd || null;
+  }
+
   respawnPane(target: string, shellCommand: string): boolean {
+    // Capture CWD before killing — respawn-pane -k loses it
+    const cwd = this.paneCwd(target);
     // Wrap in an interactive shell so ~/.bashrc / ~/.zshrc are sourced
     const shell = process.env.SHELL || "/bin/bash";
-    const cmd = [...this.sshPrefix, "tmux", "respawn-pane", "-k", "-t", target, shell, "-ic", shellCommand];
+    const cmd = [...this.sshPrefix, "tmux", "respawn-pane", "-k"];
+    if (cwd) cmd.push("-c", cwd);
+    cmd.push("-t", target, shell, "-ic", shellCommand);
     return this.exec(cmd).success;
   }
 

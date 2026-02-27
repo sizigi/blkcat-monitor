@@ -47,6 +47,7 @@ export const CLI_TOOLS: Record<CliTool, {
     resumeFlag: (id?: string) => id ? `resume ${id}` : "resume --last",
     flags: [
       { flag: "--full-auto", color: "var(--red)" },
+      { flag: "--dangerously-bypass-approvals-and-sandbox", color: "var(--red)" },
     ],
     configDir: "~/.codex",
   },

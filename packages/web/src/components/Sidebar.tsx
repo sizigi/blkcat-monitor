@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { CLI_TOOLS } from "@blkcat/shared";
 import type { MachineSnapshot, OutboundAgentInfo, SessionInfo, CliTool, View } from "@blkcat/shared";
 import { StartSessionModal } from "./StartSessionModal";
 import { ReloadSessionModal } from "./ReloadSessionModal";
@@ -669,7 +670,9 @@ export function Sidebar({
                 selectedSession === session.id;
               const isWaiting = waitingSessions?.has(`${machine.machineId}:${session.id}`);
               const isActive = activeSessions?.has(`${machine.machineId}:${session.id}`);
-              const isDangerous = session.args?.includes("--dangerously-skip-permissions");
+              const isDangerous = session.cliTool
+                ? CLI_TOOLS[session.cliTool].flags.some(f => f.color === "var(--red)" && session.args?.includes(f.flag))
+                : session.args?.includes("--dangerously-skip-permissions");
               const isCli = !!session.cliTool;
               const dropZone = dropTarget?.sessionId === session.id ? dropTarget.zone : null;
               return (

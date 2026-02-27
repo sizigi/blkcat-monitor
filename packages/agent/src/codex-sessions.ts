@@ -18,7 +18,10 @@ export function findLatestCodexSessionId(sessionsDir: string): string | null {
           const dayPath = join(monthPath, day);
           const files = readdirSync(dayPath).sort().reverse();
           if (files.length > 0) {
-            return files[0].replace(/\.[^.]+$/, "");
+            const name = files[0].replace(/\.[^.]+$/, "");
+            // Extract UUID from filename (format: rollout-YYYY-MM-DDThh-mm-ss-UUID)
+            const uuidMatch = name.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i);
+            return uuidMatch ? uuidMatch[1] : name;
           }
         }
       }

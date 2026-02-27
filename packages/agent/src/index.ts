@@ -117,11 +117,14 @@ async function main() {
     const tool = CLI_TOOLS[session?.cliTool ?? "claude"];
     const toolSessionId = sessionIds.get(sessionId);
     const shouldResume = resume !== false; // default true
+    // Build command: tool [args] [resumeFlag]
+    // Args (e.g. --full-auto) must come before positional resume args
+    // so CLIs don't misinterpret them as prompts.
     let cmd = tool.command;
+    if (args) cmd += ` ${args}`;
     if (shouldResume) {
       cmd += " " + tool.resumeFlag(toolSessionId);
     }
-    if (args) cmd += ` ${args}`;
     const ok = cap.respawnPane(sessionId, cmd);
     if (!ok) {
       console.error(`Reload failed: tmux respawn-pane failed for ${sessionId}`);

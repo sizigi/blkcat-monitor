@@ -27,7 +27,7 @@ function resolveNodeCliTool(panePid: string, exec: ExecFn): CliTool | null {
 }
 
 /** Flags that affect how sessions are displayed (e.g. red indicator for skip-permissions). */
-const NOTABLE_FLAGS = ["--dangerously-skip-permissions", "--full-auto", "--yolo"];
+const NOTABLE_FLAGS = ["--dangerously-skip-permissions", "--full-auto", "--dangerously-bypass-approvals-and-sandbox", "--yolo"];
 
 /**
  * Inspect the pane process (and its children) to extract notable CLI flags.
