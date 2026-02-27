@@ -803,7 +803,7 @@ export function Sidebar({
                       whiteSpace: "nowrap",
                     }}
                   >
-                    {isCli ? (
+                    {isCli ? (<>
                       <span
                         className={isActive ? "active-indicator" : isWaiting ? "waiting-indicator" : undefined}
                         style={{
@@ -817,7 +817,18 @@ export function Sidebar({
                         }}
                         title={isActive ? "Active" : isWaiting ? "Waiting for input" : ""}
                       />
-                    ) : (
+                      {session.cliTool && session.cliTool !== "claude" && (
+                        <span style={{
+                          fontSize: 9,
+                          fontWeight: 700,
+                          color: "var(--text-muted)",
+                          opacity: 0.7,
+                          textTransform: "uppercase",
+                          letterSpacing: "0.5px",
+                          flexShrink: 0,
+                        }}>{session.cliTool}</span>
+                      )}
+                    </>) : (
                       <span className="terminal-badge">{">_"}</span>
                     )}
                     {editingId === `session:${session.id}` ? (
