@@ -18,6 +18,7 @@ interface AgentConnectionOptions {
   onRenameSession?: (sessionId: string, name: string) => void;
   onSwapPane?: (sessionId1: string, sessionId2: string) => void;
   onSwapWindow?: (sessionId1: string, sessionId2: string) => void;
+  onRediscover?: () => void;
   /** Called after a successful reconnection (not the initial connect). */
   onReconnect?: () => void;
   /** Returns the current session list so reconnect can re-register with up-to-date data. */
@@ -120,6 +121,8 @@ export class AgentConnection {
           this.opts.onSwapPane?.(msg.sessionId1, msg.sessionId2);
         } else if (msg.type === "swap_window") {
           this.opts.onSwapWindow?.(msg.sessionId1, msg.sessionId2);
+        } else if (msg.type === "rediscover") {
+          this.opts.onRediscover?.();
         }
       } catch {}
     });

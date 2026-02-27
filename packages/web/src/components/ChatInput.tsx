@@ -33,7 +33,7 @@ const modifierActiveStyle: React.CSSProperties = {
 };
 
 // --- Haptic feedback helper ---
-function vibrate(ms = 10) {
+export function vibrate(ms = 10) {
   try { navigator?.vibrate?.(ms); } catch {}
 }
 
@@ -56,7 +56,7 @@ const SWIPE_THRESHOLD = 10;
 const REPEAT_DELAY = 400; // ms before repeat starts
 const REPEAT_INTERVAL = 80; // ms between repeats
 
-function DPad({ onDirection }: { onDirection: (dir: "Up" | "Down" | "Left" | "Right") => void }) {
+export function DPad({ onDirection, size }: { onDirection: (dir: "Up" | "Down" | "Left" | "Right") => void; size?: number }) {
   const startRef = useRef<{ x: number; y: number } | null>(null);
   const [activeDir, setActiveDir] = useState<string | null>(null);
   const activeDirRef = useRef<string | null>(null);
@@ -207,8 +207,8 @@ function DPad({ onDirection }: { onDirection: (dir: "Up" | "Down" | "Left" | "Ri
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
       style={{
-        width: DPAD_SIZE,
-        height: DPAD_SIZE,
+        width: size ?? DPAD_SIZE,
+        height: size ?? DPAD_SIZE,
         borderRadius: "50%",
         background: "var(--bg-tertiary)",
         border: `1px solid ${activeDir ? "var(--accent)" : "var(--border)"}`,

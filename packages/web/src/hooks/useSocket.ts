@@ -589,6 +589,10 @@ export function useSocket(url: string): UseSocketReturn {
     sendRaw({ type: "swap_window", machineId, sessionId1, sessionId2 });
   }, [sendRaw]);
 
+  const rediscover = useCallback((machineId: string) => {
+    sendRaw({ type: "rediscover", machineId });
+  }, [sendRaw]);
+
   const createView = useCallback((id: string, name: string, panes: ViewPane[]) => {
     sendRaw({ type: "create_view", id, name, panes });
   }, [sendRaw]);
@@ -604,5 +608,5 @@ export function useSocket(url: string): UseSocketReturn {
     sendRaw({ type: "delete_view", id });
   }, [sendRaw]);
 
-  return { connected, machines, views, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory, createDirectory, sendRaw, deploySkills, removeSkills, getSettings, updateSettings, subscribeDeployResult, subscribeSettingsSnapshot, subscribeSettingsResult, setDisplayName, subscribeDisplayNames, subscribeReloadResult, swapPane, swapWindow, createView, updateView, deleteView };
+  return { connected, machines, views, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory, createDirectory, sendRaw, deploySkills, removeSkills, getSettings, updateSettings, subscribeDeployResult, subscribeSettingsSnapshot, subscribeSettingsResult, setDisplayName, subscribeDisplayNames, subscribeReloadResult, swapPane, swapWindow, rediscover, createView, updateView, deleteView };
 }

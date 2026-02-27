@@ -4,6 +4,7 @@ import type { MachineSnapshot, OutboundAgentInfo, SessionInfo, CliTool, View } f
 import { StartSessionModal } from "./StartSessionModal";
 import { ReloadSessionModal } from "./ReloadSessionModal";
 import { ChevronsLeft, ChevronDown, Settings, Check, X, RotateCw, Plus, ClipboardList, Bell, Activity, Plug, LayoutGrid } from "./Icons";
+import { buildCwdGroups, shortenPath } from "../utils/cwdGroups";
 
 interface SidebarProps {
   width?: number;
@@ -39,6 +40,7 @@ interface SidebarProps {
   onToggleHideTmux?: () => void;
   onSwapPane?: (machineId: string, sessionId1: string, sessionId2: string) => void;
   onSwapWindow?: (machineId: string, sessionId1: string, sessionId2: string) => void;
+  onRediscover?: (machineId: string) => void;
   views?: View[];
   selectedView?: string;
   onSelectView?: (viewId: string) => void;
@@ -100,6 +102,7 @@ export function Sidebar({
   onToggleHideTmux,
   onSwapPane,
   onSwapWindow,
+  onRediscover,
   views,
   selectedView,
   onSelectView,
@@ -129,7 +132,7 @@ export function Sidebar({
   const [editValue, setEditValue] = useState("");
   // Drag-to-reorder state
   const dragRef = useRef<{ machineId: string; sessionId: string; windowId?: string; group: string } | null>(null);
-  const [dropTarget, setDropTarget] = useState<{ sessionId: string; zone: "above" | "below" | "center" } | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ machineId: string; sessionId: string; zone: "above" | "below" | "center" } | null>(null);
   // CWD group drag-to-reorder state
   const cwdDragRef = useRef<{ machineId: string; cwdRoot: string } | null>(null);
   const [cwdDropTarget, setCwdDropTarget] = useState<{ cwdRoot: string; half: "top" | "bottom" } | null>(null);
@@ -537,6 +540,28 @@ export function Sidebar({
                 {getMachineName ? getMachineName(machine.machineId) : machine.machineId}
               </span>
             )}
+            {onRediscover && (
+              <button
+                onClick={() => onRediscover(machine.machineId)}
+                title="Refresh sessions"
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "var(--text-muted)",
+                  cursor: "pointer",
+                  lineHeight: 1,
+                  padding: "2px 4px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  opacity: 0.5,
+                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = "1"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.5"; }}
+              >
+                <RotateCw size={12} />
+              </button>
+            )}
             {onStartSession && (
               <button
                 data-testid={`new-session-${machine.machineId}`}
@@ -674,7 +699,7 @@ export function Sidebar({
                 ? CLI_TOOLS[session.cliTool].flags.some(f => f.color === "var(--red)" && session.args?.includes(f.flag))
                 : session.args?.includes("--dangerously-skip-permissions");
               const isCli = !!session.cliTool;
-              const dropZone = dropTarget?.sessionId === session.id ? dropTarget.zone : null;
+              const dropZone = dropTarget?.machineId === machine.machineId && dropTarget?.sessionId === session.id ? dropTarget.zone : null;
               return (
                 <div
                   key={session.id}
@@ -689,7 +714,7 @@ export function Sidebar({
                   }}
                   onDragOver={(e) => {
                     const src = dragRef.current;
-                    if (!src || src.sessionId === session.id) return;
+                    if (!src || (src.machineId === machine.machineId && src.sessionId === session.id)) return;
                     e.preventDefault();
                     dragShiftRef.current = e.shiftKey;
                     // Same machine + same group: detect edge vs center for reorder vs split
@@ -703,27 +728,27 @@ export function Sidebar({
                       else if (y > rect.height - edgeSize) zone = "below";
                       else zone = "center";
                       e.dataTransfer.dropEffect = zone === "center" ? "copy" : "move";
-                      if (dropTarget?.sessionId !== session.id || dropTarget.zone !== zone) {
-                        setDropTarget({ sessionId: session.id, zone });
+                      if (dropTarget?.machineId !== machine.machineId || dropTarget?.sessionId !== session.id || dropTarget.zone !== zone) {
+                        setDropTarget({ machineId: machine.machineId, sessionId: session.id, zone });
                       }
                     } else {
                       e.dataTransfer.dropEffect = "copy";
-                      if (dropTarget?.sessionId !== session.id || dropTarget.zone !== "center") {
-                        setDropTarget({ sessionId: session.id, zone: "center" });
+                      if (dropTarget?.machineId !== machine.machineId || dropTarget?.sessionId !== session.id || dropTarget.zone !== "center") {
+                        setDropTarget({ machineId: machine.machineId, sessionId: session.id, zone: "center" });
                       }
                     }
                   }}
                   onDragLeave={(e) => {
                     if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                      if (dropTarget?.sessionId === session.id) setDropTarget(null);
+                      if (dropTarget?.machineId === machine.machineId && dropTarget?.sessionId === session.id) setDropTarget(null);
                     }
                   }}
                   onDrop={(e) => {
                     e.preventDefault();
-                    const zone = dropTarget?.sessionId === session.id ? dropTarget.zone : "center";
+                    const zone = (dropTarget?.machineId === machine.machineId && dropTarget?.sessionId === session.id) ? dropTarget.zone : "center";
                     setDropTarget(null);
                     const src = dragRef.current;
-                    if (!src || src.sessionId === session.id) return;
+                    if (!src || (src.machineId === machine.machineId && src.sessionId === session.id)) return;
                     dragRef.current = null;
                     // Shift + terminal → CLI = attach under that CLI
                     const hasShift = dragShiftRef.current || e.shiftKey;

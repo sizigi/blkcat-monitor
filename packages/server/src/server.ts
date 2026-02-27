@@ -635,6 +635,11 @@ export function createServer(opts: ServerOptions) {
                 sessionId2: msg.sessionId2,
               }));
             }
+          } else if (msg.type === "rediscover") {
+            const machine = machines.get(msg.machineId);
+            if (machine) {
+              machine.agent.send(JSON.stringify({ type: "rediscover" }));
+            }
           } else if (msg.type === "create_view") {
             views.push({ id: msg.id, name: msg.name, panes: msg.panes });
             broadcastToDashboards({ type: "views_update", views });

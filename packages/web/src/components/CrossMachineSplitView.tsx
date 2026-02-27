@@ -1,11 +1,12 @@
-import React, { useState, useCallback, useRef, useEffect } from "react";
+import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import type { MachineSnapshot, View, ViewPane } from "@blkcat/shared";
 import type { OutputLine } from "../hooks/useSocket";
 import { useSessionOutput } from "../hooks/useSessionOutput";
 import { TerminalOutput } from "./TerminalOutput";
 import type { TerminalOutputHandle } from "./TerminalOutput";
 import { FloatingChatInput } from "./FloatingChatInput";
-import { X, Maximize } from "./Icons";
+import { SessionPickerModal } from "./SessionPickerModal";
+import { X, Maximize, ArrowLeftRight } from "./Icons";
 
 interface CrossMachineSplitViewProps {
   view: View;
@@ -28,6 +29,7 @@ interface CrossMachineSplitViewProps {
   focusSeq?: number;
   /** Ref callback for direct pane cycling from keyboard shortcuts (bypasses App re-render) */
   cyclePaneRef?: React.MutableRefObject<((delta: number) => void) | undefined>;
+  getOrderedGroups?: <T extends { cwdRoot: string }>(machineId: string, groups: T[]) => T[];
 }
 
 function ViewPane({
@@ -47,6 +49,7 @@ function ViewPane({
   machineName,
   sessionName,
   onRemove,
+  onDoubleClickHeader,
 }: {
   machineId: string;
   sessionId: string;
@@ -64,6 +67,7 @@ function ViewPane({
   machineName: string;
   sessionName: string;
   onRemove: () => void;
+  onDoubleClickHeader?: () => void;
 }) {
   const output = useSessionOutput(outputMapRef, subscribeOutput, machineId, sessionId);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -93,6 +97,7 @@ function ViewPane({
       }}
     >
       <div
+        onDoubleClick={onDoubleClickHeader}
         style={{
           padding: "3px 12px",
           fontSize: 11,
@@ -117,6 +122,26 @@ function ViewPane({
             {sessionName}
           </div>
         </div>
+        {onDoubleClickHeader && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onDoubleClickHeader(); }}
+            title="Switch session"
+            style={{
+              background: "none",
+              border: "none",
+              color: "var(--text-muted)",
+              cursor: "pointer",
+              padding: 2,
+              lineHeight: 1,
+              opacity: 0.5,
+              flexShrink: 0,
+            }}
+            onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; }}
+            onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.5"; }}
+          >
+            <ArrowLeftRight size={10} />
+          </button>
+        )}
         <button
           onClick={(e) => { e.stopPropagation(); termRef.current?.forceFit(); }}
           title="Force resize terminal"
@@ -203,9 +228,11 @@ export function CrossMachineSplitView({
   focusSessionKey,
   focusSeq,
   cyclePaneRef,
+  getOrderedGroups,
 }: CrossMachineSplitViewProps) {
   const firstPane = view.panes[0];
   const [focusedKey, setFocusedKey] = useState(firstPane ? `${firstPane.machineId}:${firstPane.sessionId}` : "");
+  const [pickerTarget, setPickerTarget] = useState<number | null>(null);
   const focusedKeyRef = useRef(focusedKey);
   focusedKeyRef.current = focusedKey;
 
@@ -351,6 +378,11 @@ export function CrossMachineSplitView({
   const handleSendData = useCallback((data: string) => {
     if (activePane) onSendInput(activePane.machineId, activePane.sessionId, { data });
   }, [activePane, onSendInput]);
+
+  const existingPaneKeys = useMemo(
+    () => new Set(view.panes.map((p) => `${p.machineId}:${p.sessionId}`)),
+    [view.panes],
+  );
 
   const handleRemovePane = (index: number) => {
     const newPanes = [...view.panes];
@@ -529,6 +561,7 @@ export function CrossMachineSplitView({
                   machineName={getMachineName(pane.machineId)}
                   sessionName={resolveSessionName(pane.machineId, pane.sessionId)}
                   onRemove={() => handleRemovePane(i)}
+                  onDoubleClickHeader={() => setPickerTarget(i)}
                 />
               </div>
             </React.Fragment>
@@ -545,6 +578,29 @@ export function CrossMachineSplitView({
           if (activeKey) inputCacheRef.current.set(activeKey, value);
         }}
       />
+      {pickerTarget !== null && (() => {
+        const targetPane = view.panes[pickerTarget];
+        if (!targetPane) return null;
+        return (
+          <SessionPickerModal
+            machines={machines}
+            currentMachineId={targetPane.machineId}
+            currentSessionId={targetPane.sessionId}
+            existingPaneKeys={existingPaneKeys}
+            getMachineName={getMachineName}
+            getSessionName={getSessionName}
+            getOrderedGroups={getOrderedGroups}
+            onSelect={(machineId, sessionId) => {
+              const newPanes = [...view.panes];
+              newPanes[pickerTarget] = { machineId, sessionId };
+              onUpdateView(view.id, undefined, newPanes);
+              setFocusedKey(`${machineId}:${sessionId}`);
+              setPickerTarget(null);
+            }}
+            onClose={() => setPickerTarget(null)}
+          />
+        );
+      })()}
     </div>
   );
 }

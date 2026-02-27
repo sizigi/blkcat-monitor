@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { ChatInput } from "./ChatInput";
+import React, { useState, useCallback } from "react";
+import { ChatInput, DPad, vibrate } from "./ChatInput";
 import { TerminalSquare, X } from "./Icons";
 
 interface FloatingChatInputProps {
@@ -22,9 +22,25 @@ export function FloatingChatInput({
 }: FloatingChatInputProps) {
   const [open, setOpen] = useState(false);
 
-  return (
-    <>
-      {!open && (
+  const handleDirection = useCallback((dir: "Up" | "Down" | "Left" | "Right") => {
+    onSendKey(dir);
+  }, [onSendKey]);
+
+  if (!open) {
+    return (
+      <div className="floating-input-bar">
+        <DPad onDirection={handleDirection} size={40} />
+        <button
+          onClick={() => { vibrate(10); onSendKey("Enter"); }}
+          onMouseDown={(e) => e.preventDefault()}
+          className="floating-input-bar-circle"
+          title="Send Enter"
+        >
+          <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="9,10 4,15 9,20" />
+            <path d="M20,4 L20,11 C20,13.2 18.2,15 16,15 L4,15" />
+          </svg>
+        </button>
         <button
           onClick={() => setOpen(true)}
           className="floating-input-btn"
@@ -32,34 +48,27 @@ export function FloatingChatInput({
         >
           <TerminalSquare size={22} />
         </button>
-      )}
-      {open && (
-        <div className="floating-input-panel">
-          <div style={{ display: "flex", justifyContent: "flex-end", padding: "4px 8px 0" }}>
-            <button
-              onClick={() => setOpen(false)}
-              style={{
-                background: "none",
-                border: "none",
-                color: "var(--text-muted)",
-                cursor: "pointer",
-                lineHeight: 1,
-                padding: "2px 4px",
-              }}
-            >
-              <X size={14} />
-            </button>
-          </div>
-          <ChatInput
-            key={inputKey}
-            onSendText={onSendText}
-            onSendKey={onSendKey}
-            onSendData={onSendData}
-            initialValue={initialValue}
-            onInputChange={onInputChange}
-          />
-        </div>
-      )}
-    </>
+      </div>
+    );
+  }
+
+  return (
+    <div className="floating-input-panel">
+      <button
+        onClick={() => setOpen(false)}
+        className="floating-input-btn floating-input-btn-close"
+        title="Close input"
+      >
+        <X size={14} />
+      </button>
+      <ChatInput
+        key={inputKey}
+        onSendText={onSendText}
+        onSendKey={onSendKey}
+        onSendData={onSendData}
+        initialValue={initialValue}
+        onInputChange={onInputChange}
+      />
+    </div>
   );
 }

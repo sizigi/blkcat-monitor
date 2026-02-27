@@ -10,6 +10,7 @@ import { Sidebar } from "./components/Sidebar";
 import { SessionDetail } from "./components/SessionDetail";
 import { CrossMachineSplitView } from "./components/CrossMachineSplitView";
 import { CreateViewModal } from "./components/CreateViewModal";
+import { StartSessionModal } from "./components/StartSessionModal";
 import { EventFeed } from "./components/EventFeed";
 import { NotificationList } from "./components/NotificationList";
 import { SkillsMatrix } from "./components/SkillsMatrix";
@@ -32,7 +33,7 @@ const MIN_SIDEBAR_WIDTH = 160;
 const MAX_SIDEBAR_WIDTH = 500;
 
 export default function App() {
-  const { connected, machines, views, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory, createDirectory, deploySkills, removeSkills, getSettings, updateSettings, subscribeDeployResult, subscribeSettingsSnapshot, subscribeSettingsResult, setDisplayName, subscribeDisplayNames, subscribeReloadResult, swapPane, swapWindow, createView, updateView, deleteView } = useSocket(WS_URL);
+  const { connected, machines, views, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory, createDirectory, deploySkills, removeSkills, getSettings, updateSettings, subscribeDeployResult, subscribeSettingsSnapshot, subscribeSettingsResult, setDisplayName, subscribeDisplayNames, subscribeReloadResult, swapPane, swapWindow, rediscover, createView, updateView, deleteView } = useSocket(WS_URL);
   const { agents, addAgent, removeAgent } = useAgents();
   const { getMachineName, getSessionName, setMachineName, setSessionName } = useDisplayNames({
     sendDisplayName: setDisplayName,
@@ -61,6 +62,41 @@ export default function App() {
     return () => { clearTimeout(timer1); clearTimeout(timer2); };
   }, [isMobile]);
 
+  // Mobile: swipe from left edge to open sidebar, swipe left to close
+  useEffect(() => {
+    if (!isMobile) return;
+    const EDGE_WIDTH = 24;
+    const SWIPE_THRESHOLD = 60;
+    let startX = 0;
+    let startY = 0;
+    let edgeSwipe = false;
+
+    function onTouchStart(e: TouchEvent) {
+      const touch = e.touches[0];
+      startX = touch.clientX;
+      startY = touch.clientY;
+      edgeSwipe = touch.clientX < EDGE_WIDTH;
+    }
+    function onTouchEnd(e: TouchEvent) {
+      const touch = e.changedTouches[0];
+      const dx = touch.clientX - startX;
+      const dy = Math.abs(touch.clientY - startY);
+      // Only count horizontal swipes (dx > dy)
+      if (dy > Math.abs(dx)) return;
+      if (edgeSwipe && dx > SWIPE_THRESHOLD) {
+        setDrawerOpen(true);
+      } else if (dx < -SWIPE_THRESHOLD) {
+        setDrawerOpen(false);
+      }
+    }
+    document.addEventListener("touchstart", onTouchStart, { passive: true });
+    document.addEventListener("touchend", onTouchEnd, { passive: true });
+    return () => {
+      document.removeEventListener("touchstart", onTouchStart);
+      document.removeEventListener("touchend", onTouchEnd);
+    };
+  }, [isMobile]);
+
   // Re-send terminal dimensions when WebSocket (re)connects — handles the race
   // where the initial fit.fit() fires before the socket is open.
   useEffect(() => {
@@ -77,6 +113,7 @@ export default function App() {
   const [panelTab, setPanelTab] = useState<"events" | "notifications" | "skills" | "health" | "agents" | null>(null);
   const health = useHealth(panelTab === "health");
   const [settingsSession, setSettingsSession] = useState<{ machineId: string; sessionId: string } | null>(null);
+  const [newSessionModal, setNewSessionModal] = useState<{ machineId: string; cwd?: string } | null>(null);
   const [editingTopbarName, setEditingTopbarName] = useState(false);
   const [topbarEditValue, setTopbarEditValue] = useState("");
   const navBarRef = useRef<HTMLDivElement>(null);
@@ -96,6 +133,13 @@ export default function App() {
   selectedMachineRef.current = selectedMachine;
   const selectedSessionRef = useRef(selectedSession);
   selectedSessionRef.current = selectedSession;
+
+  const viewsRef = useRef(views);
+  viewsRef.current = views;
+  const selectedViewRef = useRef(selectedView);
+  selectedViewRef.current = selectedView;
+  const newSessionModalRef = useRef(newSessionModal);
+  newSessionModalRef.current = newSessionModal;
 
   const cyclePaneRef = useRef<((delta: number) => void) | undefined>();
 
@@ -168,6 +212,42 @@ export default function App() {
 
     function handleKeyDown(e: KeyboardEvent) {
       if (e.isComposing) return;
+
+      // Ctrl/Cmd+T: open new session modal
+      if ((e.ctrlKey || e.metaKey) && e.key === "t") {
+        e.preventDefault();
+        if (newSessionModalRef.current) return; // already open
+        const machines = machinesRef.current;
+        if (machines.length === 0) return;
+
+        let machineId: string | undefined;
+        let cwd: string | undefined;
+
+        const selView = selectedViewRef.current;
+        const selMachine = selectedMachineRef.current;
+        const selSession = selectedSessionRef.current;
+
+        if (selMachine && selSession) {
+          machineId = selMachine;
+          const machine = machines.find((m) => m.machineId === selMachine);
+          cwd = machine?.sessions.find((s) => s.id === selSession)?.cwd;
+        } else if (selView) {
+          const view = viewsRef.current.find((v) => v.id === selView);
+          const pane = view?.panes[0];
+          if (pane) {
+            machineId = pane.machineId;
+            const machine = machines.find((m) => m.machineId === pane.machineId);
+            cwd = machine?.sessions.find((s) => s.id === pane.sessionId)?.cwd;
+          }
+        }
+
+        if (!machineId) machineId = machines[0].machineId;
+        setNewSessionModal({ machineId, cwd });
+        return;
+      }
+
+      // Skip all other shortcuts when new session modal is open
+      if (newSessionModalRef.current) return;
 
       // Shift+Arrow Left/Right: switch focus between split view panes
       if (e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
@@ -337,6 +417,7 @@ export default function App() {
     onToggleHideTmux: toggleHideTmux,
     onSwapPane: swapPane,
     onSwapWindow: swapWindow,
+    onRediscover: rediscover,
     views,
     selectedView,
     onSelectView: (viewId: string) => {
@@ -622,6 +703,7 @@ export default function App() {
               onSendResize={sendResize}
               getMachineName={getMachineName}
               getSessionName={getSessionName}
+              getOrderedGroups={getOrderedGroups}
               onUpdateView={(id, name, panes) => {
                 if (panes && panes.length === 0) {
                   deleteView(id);
@@ -783,6 +865,21 @@ export default function App() {
           />
         );
       })()}
+      {/* New session modal (Ctrl/Cmd+T) */}
+      {newSessionModal && (
+        <StartSessionModal
+          machineId={newSessionModal.machineId}
+          machineName={getMachineName(newSessionModal.machineId)}
+          initialCwd={newSessionModal.cwd}
+          onStart={(mid, args, cwd, name, cliTool) => {
+            startSession(mid, args, cwd, name, cliTool);
+            setNewSessionModal(null);
+          }}
+          onClose={() => setNewSessionModal(null)}
+          listDirectory={listDirectory}
+          createDirectory={createDirectory}
+        />
+      )}
       <PWAPrompt />
       {/* Create View modal */}
       {showCreateViewModal && (

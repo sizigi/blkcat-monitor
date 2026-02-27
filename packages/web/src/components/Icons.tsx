@@ -196,6 +196,16 @@ export function Plug(props: IconProps) {
   </>);
 }
 
+/** ⇄  Arrow left-right / switch */
+export function ArrowLeftRight(props: IconProps) {
+  return svg(24, props, <>
+    <line x1="3" y1="8" x2="21" y2="8" />
+    <polyline points="17 4 21 8 17 12" />
+    <line x1="21" y1="16" x2="3" y2="16" />
+    <polyline points="7 12 3 16 7 20" />
+  </>);
+}
+
 export function TerminalSquare(props: IconProps) {
   return svg(24, props, <>
     <rect x="3" y="3" width="18" height="18" rx="2" />

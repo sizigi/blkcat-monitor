@@ -80,6 +80,7 @@ describe("StartSessionModal", () => {
         listDirectory={mockListDir}
       />,
     );
+    fireEvent.click(screen.getByText("Claude"));
     const chip = screen.getByText("--resume");
     fireEvent.click(chip);
     // After clicking, the chip should have accent background (selected state)
@@ -98,6 +99,8 @@ describe("StartSessionModal", () => {
       />,
     );
 
+    // Select Claude first (default is now Terminal)
+    fireEvent.click(screen.getByText("Claude"));
     // Toggle --resume
     fireEvent.click(screen.getByText("--resume"));
     // Click Start
@@ -161,6 +164,7 @@ describe("StartSessionModal", () => {
         listDirectory={mockListDir}
       />,
     );
+    fireEvent.click(screen.getByText("Claude"));
     expect(screen.getByText("--dangerously-skip-permissions")).toBeInTheDocument();
     expect(screen.queryByText("--full-auto")).not.toBeInTheDocument();
     fireEvent.click(screen.getByText("Codex"));

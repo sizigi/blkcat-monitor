@@ -23,6 +23,7 @@ interface StartSessionModalProps {
     success: boolean;
     error?: string;
   }>;
+  initialCwd?: string;
 }
 
 export function StartSessionModal({
@@ -32,20 +33,22 @@ export function StartSessionModal({
   onClose,
   listDirectory,
   createDirectory,
+  initialCwd,
 }: StartSessionModalProps) {
   const [sessionName, setSessionName] = useState("");
-  const [currentPath, setCurrentPath] = useState("~");
-  const [pathInput, setPathInput] = useState("~/");
+  const [currentPath, setCurrentPath] = useState(initialCwd ?? "~");
+  const [pathInput, setPathInput] = useState(initialCwd ? (initialCwd.endsWith("/") ? initialCwd : initialCwd + "/") : "~/");
   const [entries, setEntries] = useState<{ name: string; isDir: boolean }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedTool, setSelectedTool] = useState<CliTool | null>("claude");
+  const [selectedTool, setSelectedTool] = useState<CliTool | null>(null);
   const [selectedFlags, setSelectedFlags] = useState<Set<string>>(new Set());
   const [extraArgs, setExtraArgs] = useState("");
   const [newFolderMode, setNewFolderMode] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [creatingFolder, setCreatingFolder] = useState(false);
   const newFolderInputRef = useRef<HTMLInputElement>(null);
+  const sessionNameRef = useRef<HTMLInputElement>(null);
 
   const flagOptions = selectedTool ? [
     { flag: selectedTool === "codex" ? "resume" : "--resume", color: "var(--accent)" },
@@ -53,7 +56,7 @@ export function StartSessionModal({
   ] : [];
 
   // Track the last fetched parent directory (resolved path) to avoid redundant fetches
-  const lastFetchedParentRef = useRef<string>("");
+  const lastFetchedParentRef = useRef<string>(initialCwd ?? "~");
 
   // Full navigation: fetch directory and update pathInput with trailing slash
   const loadDirectory = useCallback(
@@ -83,8 +86,46 @@ export function StartSessionModal({
   );
 
   useEffect(() => {
-    loadDirectory("~");
-  }, [loadDirectory]);
+    loadDirectory(initialCwd ?? "~");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Focus session name input on mount (steals focus from xterm)
+  useEffect(() => {
+    const timer = setTimeout(() => sessionNameRef.current?.focus(), 50);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Modal keyboard shortcuts
+  const handleStartRef = useRef(handleStart);
+  handleStartRef.current = handleStart;
+  const selectedToolRef = useRef(selectedTool);
+  selectedToolRef.current = selectedTool;
+  useEffect(() => {
+    const TOOLS: (CliTool | null)[] = [null, "claude", "codex", "gemini"];
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        handleStartRef.current();
+        return;
+      }
+      if (e.key === "Tab" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        const idx = TOOLS.indexOf(selectedToolRef.current);
+        const next = (idx + (e.shiftKey ? -1 : 1) + TOOLS.length) % TOOLS.length;
+        setSelectedTool(TOOLS[next]);
+        setSelectedFlags(new Set());
+        return;
+      }
+    }
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
+  }, [onClose]);
 
   // Parse pathInput into parent directory and partial segment for filtering
   const { parentDir, partial } = useMemo(() => {
@@ -275,6 +316,7 @@ export function StartSessionModal({
               Session Name
             </label>
             <input
+              ref={sessionNameRef}
               type="text"
               value={sessionName}
               onChange={(e) => setSessionName(e.target.value)}
@@ -527,7 +569,7 @@ export function StartSessionModal({
             <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>
               Session Type
             </label>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
               {([null, "claude", "codex", "gemini"] as const).map((tool) => {
                 const isSelected = selectedTool === tool;
                 const label = tool ? tool.charAt(0).toUpperCase() + tool.slice(1) : "Terminal";
@@ -552,6 +594,7 @@ export function StartSessionModal({
                   </button>
                 );
               })}
+              <span style={{ fontSize: 11, color: "var(--text-muted)", opacity: 0.6 }}>Tab</span>
             </div>
           </div>
 

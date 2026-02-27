@@ -369,11 +369,42 @@ html, body, #root {
   opacity: 0.7;
 }
 
+/* Floating chat input: collapsed bar with DPad + Enter + toggle */
+.floating-input-bar {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 30;
+}
+.floating-input-bar-circle {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+.floating-input-bar-circle:hover {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+/* DPad in the floating bar inherits the shadow style */
+.floating-input-bar > div {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+}
 /* Floating chat input button + panel */
 .floating-input-btn {
-  position: absolute;
-  bottom: 16px;
-  right: 16px;
   width: 44px;
   height: 44px;
   border-radius: 50%;
@@ -385,13 +416,24 @@ html, body, #root {
   align-items: center;
   justify-content: center;
   box-shadow: 0 2px 8px rgba(0,0,0,0.25);
-  z-index: 30;
+  z-index: 31;
   transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
 }
 .floating-input-btn:hover {
   background: var(--accent);
   color: #fff;
   border-color: var(--accent);
+}
+/* Close button inside panel: top-right corner */
+.floating-input-btn-close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  box-shadow: none;
+  z-index: 1;
 }
 .floating-input-panel {
   position: absolute;
@@ -438,10 +480,10 @@ html, body, #root {
 /* LIVE toggle: mobile full-width version (hidden on desktop) */
 .live-toggle-mobile {
   position: relative;
-  width: 100%;
-  padding: 10px 16px;
+  width: auto;
+  padding: 4px 14px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 4px;
   background: var(--bg-tertiary);
   color: var(--text-muted);
   cursor: pointer;
@@ -449,10 +491,12 @@ html, body, #root {
   display: none; /* shown via media query */
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
   transition: all 0.3s;
   overflow: hidden;
-  min-height: 44px;
+  min-height: 0;
+  font-size: 12px;
+  align-self: flex-start;
 }
 /* LIVE toggle: desktop compact version */
 .live-toggle-desktop {
@@ -466,11 +510,12 @@ html, body, #root {
   color: #fff !important;
 }
 .live-toggle-label {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 2px;
 }
 .live-toggle-hint {
+  display: none;
   font-size: 11px;
   font-weight: 400;
   opacity: 0.6;

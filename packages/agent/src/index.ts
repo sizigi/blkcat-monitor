@@ -184,16 +184,23 @@ async function main() {
     if (!hasAutoTarget) return;
     const fresh = discoverAllSessions();
 
-    // Apply sticky CLI detection: once detected as CLI, lock it in permanently.
-    // Update sticky map from fresh detections, then apply to sessions that lost theirs.
+    // Apply sticky CLI detection: once detected as CLI, lock it in.
+    // But invalidate if paneCommand clearly isn't a CLI tool (e.g. after swap-pane).
+    const CLI_CMDS = new Set(["claude", "codex", "gemini"]);
+    const HOST_RUNTIMES = new Set(["node", "MainThread"]);
     for (const s of fresh) {
       if (s.cliTool) {
         stickyCliMap.set(s.id, { cliTool: s.cliTool, args: s.args });
       } else {
         const sticky = stickyCliMap.get(s.id);
         if (sticky) {
-          s.cliTool = sticky.cliTool;
-          s.args = sticky.args;
+          // If the pane is now running something clearly not a CLI, discard sticky
+          if (s.paneCommand && !CLI_CMDS.has(s.paneCommand) && !HOST_RUNTIMES.has(s.paneCommand)) {
+            stickyCliMap.delete(s.id);
+          } else {
+            s.cliTool = sticky.cliTool;
+            s.args = sticky.args;
+          }
         }
       }
     }
@@ -247,6 +254,9 @@ async function main() {
   function handleSwapPane(sessionId1: string, sessionId2: string) {
     const cap = captures.get(sessionId1) ?? new TmuxCapture(bunExec);
     cap.swapPane(sessionId1, sessionId2);
+    // Clear sticky CLI entries — processes moved to different panes
+    stickyCliMap.delete(sessionId1);
+    stickyCliMap.delete(sessionId2);
     triggerRediscovery();
   }
 
@@ -255,7 +265,21 @@ async function main() {
     const winTarget = (id: string) => id.replace(/\.\d+$/, "");
     const cap = captures.get(sessionId1) ?? new TmuxCapture(bunExec);
     cap.swapWindow(winTarget(sessionId1), winTarget(sessionId2));
+    // Clear sticky CLI entries for all panes in both windows
+    const win1 = winTarget(sessionId1);
+    const win2 = winTarget(sessionId2);
+    for (const id of stickyCliMap.keys()) {
+      if (id.startsWith(win1 + ".") || id === win1 || id.startsWith(win2 + ".") || id === win2) {
+        stickyCliMap.delete(id);
+      }
+    }
     triggerRediscovery();
+  }
+
+  function handleRediscover() {
+    stickyCliMap.clear();
+    triggerRediscovery();
+    console.log("Rediscovery triggered (sticky CLI cache cleared)");
   }
 
   function handleListDirectory(requestId: string, path: string) {
@@ -369,6 +393,7 @@ async function main() {
 
       onSwapPane: handleSwapPane,
       onSwapWindow: handleSwapWindow,
+      onRediscover: handleRediscover,
     });
     // When a new server connects, clear prevLines so the next poll cycle
     // re-sends the current pane content for all sessions.
