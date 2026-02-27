@@ -7,16 +7,45 @@ const CLI_COMMANDS = new Set(["claude", "codex", "gemini"]);
 const HOST_RUNTIMES = new Set(["node", "MainThread"]);
 
 /**
+ * Get child process command lines for a given parent PID.
+ * Uses `ps --ppid` on Linux, falls back to `pgrep -P` + `ps -p` on macOS.
+ */
+function getChildArgs(panePid: string, exec: ExecFn): string[] {
+  // Try GNU ps first (Linux)
+  const gnu = exec(["ps", "--ppid", panePid, "-o", "args", "--no-headers"]);
+  if (gnu.success && gnu.stdout.trim()) {
+    return gnu.stdout.trim().split("\n").filter(Boolean);
+  }
+  // Fallback: pgrep + BSD ps (macOS)
+  const pgrep = exec(["pgrep", "-P", panePid]);
+  if (!pgrep.success || !pgrep.stdout.trim()) return [];
+  const childPids = pgrep.stdout.trim().split("\n").filter(Boolean).join(",");
+  // BSD ps: `-o args=` (trailing =) suppresses header
+  const bsd = exec(["ps", "-p", childPids, "-o", "args="]);
+  if (!bsd.success) return [];
+  return bsd.stdout.trim().split("\n").filter(Boolean);
+}
+
+/**
+ * Get the command line for a specific PID.
+ * Uses `--no-headers` on Linux, `-o args=` on macOS.
+ */
+function getProcessArgs(pid: string, exec: ExecFn): string | null {
+  const gnu = exec(["ps", "-p", pid, "-o", "args", "--no-headers"]);
+  if (gnu.success && gnu.stdout.trim()) return gnu.stdout.trim();
+  // Fallback: BSD ps (macOS)
+  const bsd = exec(["ps", "-p", pid, "-o", "args="]);
+  if (bsd.success && bsd.stdout.trim()) return bsd.stdout.trim();
+  return null;
+}
+
+/**
  * Check if a node/MainThread pane is actually running a known CLI tool
- * by inspecting the child process command line via `ps --ppid <pid>`.
+ * by inspecting the child process command lines.
  */
 function resolveNodeCliTool(panePid: string, exec: ExecFn): CliTool | null {
-  const result = exec(["ps", "--ppid", panePid, "-o", "args", "--no-headers"]);
-  if (!result.success) return null;
-  for (const line of result.stdout.trim().split("\n")) {
-    if (!line) continue;
-    // Check each path segment of the args for a known CLI command name
-    // e.g., "node /path/to/bin/codex --full-auto" → match "codex"
+  const lines = getChildArgs(panePid, exec);
+  for (const line of lines) {
     for (const tool of CLI_COMMANDS) {
       if (line.includes(`/${tool}`) || line.startsWith(`${tool} `) || line === tool) {
         return tool as CliTool;
@@ -37,12 +66,11 @@ function resolveCliArgs(panePid: string, cliTool: CliTool, exec: ExecFn): string
   const lines: string[] = [];
 
   // Check the pane process itself (pane_pid may be the CLI process directly)
-  const self = exec(["ps", "-p", panePid, "-o", "args", "--no-headers"]);
-  if (self.success) lines.push(self.stdout.trim());
+  const self = getProcessArgs(panePid, exec);
+  if (self) lines.push(self);
 
   // Check child processes (pane_pid is a shell, CLI is a child)
-  const children = exec(["ps", "--ppid", panePid, "-o", "args", "--no-headers"]);
-  if (children.success) lines.push(...children.stdout.trim().split("\n"));
+  lines.push(...getChildArgs(panePid, exec));
 
   for (const line of lines) {
     if (!line) continue;
