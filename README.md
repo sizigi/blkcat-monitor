@@ -96,6 +96,8 @@ BLKCAT_SERVER_URL=ws://your-server:3000/ws/agent \
 bun packages/agent/src/index.ts
 ```
 
+> **Note:** If the server has [HTTPS / TLS](#https--tls-optional) enabled, use `wss://` instead of `ws://`.
+
 #### Running the agent persistently with tmux
 
 ```bash
@@ -188,7 +190,7 @@ Server options can also be set in `~/.blkcat/server.json` (environment variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `BLKCAT_SERVER_URL` | `ws://localhost:3000/ws/agent` | Server WebSocket URL (outbound mode) |
+| `BLKCAT_SERVER_URL` | `ws://localhost:3000/ws/agent` | Server WebSocket URL (outbound mode). Use `wss://` when TLS is enabled |
 | `BLKCAT_MACHINE_ID` | hostname | Machine identifier |
 | `BLKCAT_POLL_INTERVAL` | `150` | Pane capture interval in ms |
 | `BLKCAT_CONFIG` | — | Path to JSON config file |
@@ -419,6 +421,13 @@ BLKCAT_STATIC_DIR=packages/web/dist bun packages/server/src/index.ts
 ```
 
 Access the dashboard at `https://<machine-name>.<tailnet>.ts.net:3000`.
+
+**Agents must use `wss://`** when connecting to a TLS-enabled server:
+
+```bash
+BLKCAT_SERVER_URL=wss://<machine-name>.<tailnet>.ts.net:3000/ws/agent \
+  bun packages/agent/src/index.ts
+```
 
 **3. Auto-renew**
 

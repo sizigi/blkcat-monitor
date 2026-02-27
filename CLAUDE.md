@@ -60,3 +60,4 @@ When adding new features, changing configuration options, or modifying the WebSo
 - `Bun.spawnSync` does **not** expand `~` — always resolve tilde to `$HOME` before passing paths to external commands
 - Display names in `useDisplayNames` are scoped by `machineId:sessionId` to prevent cross-machine collisions in localStorage
 - Agent auto-installs Claude Code hooks on startup (`hooks-install.ts`) to forward hook events (Stop, Notification, PermissionRequest) to the dashboard
+- **Agents must always run inside a tmux session**, never via `nohup &` or bare background processes. Use `tmux send-keys` to start/restart agents on remote machines. Agent config uses env vars (`BLKCAT_LISTEN_PORT`, `BLKCAT_HOOKS_PORT`), not CLI flags.

@@ -569,10 +569,11 @@ export function Sidebar({
             }
 
             function buildCwdGroups(sessions: SessionInfo[]): { groups: CwdGroup[]; ungrouped: SessionInfo[] } {
-              // 1. Collect anchor roots from CLI sessions
+              // 1. Collect anchor roots from CLI sessions (skip home dirs — too broad)
+              const HOME_RE = /^\/home\/[^/]+\/?$|^\/root\/?$/;
               const anchorSet = new Set<string>();
               for (const s of sessions) {
-                if (s.cliTool && s.cwd) anchorSet.add(s.cwd);
+                if (s.cliTool && s.cwd && !HOME_RE.test(s.cwd)) anchorSet.add(s.cwd);
               }
               // 2. Sort shortest-first; merge subdirectory anchors into parent
               let anchors = [...anchorSet].sort((a, b) => a.length - b.length);

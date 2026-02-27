@@ -11,6 +11,16 @@ Deploy a blkcat monitoring agent to a remote server. Uses reverse (listener) mod
 ## Arguments
 - $ARGUMENTS: `<host>` or `<host> <listen-port>`. Default listen port is 4000.
 
+## CRITICAL: Always run agents inside tmux
+
+The blkcat agent MUST always run inside a tmux session, never via `nohup &` or bare background processes. This applies to both fresh deploys and restarts/updates. Use `tmux send-keys` to start the agent process.
+
+When restarting an existing agent (e.g. after `git pull`):
+1. Find the tmux session running the agent: `ssh -A <alias> 'tmux list-sessions'`
+2. Send Ctrl-C to stop it: `ssh -A <alias> 'tmux send-keys -t <session> C-c'`
+3. Wait 1 second
+4. Start it again: `ssh -A <alias> 'tmux send-keys -t <session> "BLKCAT_LISTEN_PORT=<port> ~/.bun/bin/bun packages/agent/src/index.ts" Enter'`
+
 ## Instructions
 
 ### 1. Resolve Host

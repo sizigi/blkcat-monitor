@@ -79,7 +79,7 @@ export default function App() {
   const [settingsSession, setSettingsSession] = useState<{ machineId: string; sessionId: string } | null>(null);
   const [editingTopbarName, setEditingTopbarName] = useState(false);
   const [topbarEditValue, setTopbarEditValue] = useState("");
-  const [navMode, setNavMode] = useState(false);
+  const navBarRef = useRef<HTMLDivElement>(null);
   const [hideTmuxSessions, setHideTmuxSessions] = useState(() => {
     try { return localStorage.getItem("blkcat:hideTmux") === "true"; } catch { return false; }
   });
@@ -108,7 +108,10 @@ export default function App() {
   // Uses refs so the keydown listener registers once and never re-attaches.
   const navModeRef = useRef(false);
   useEffect(() => {
-    function setNav(v: boolean) { navModeRef.current = v; setNavMode(v); }
+    function setNav(v: boolean) {
+      navModeRef.current = v;
+      if (navBarRef.current) navBarRef.current.style.display = v ? "flex" : "none";
+    }
 
     function selectMachine(idx: number) {
       const machine = machinesRef.current[idx];
@@ -526,7 +529,7 @@ export default function App() {
           </button>
         ))}
       </div>
-      <main style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0, overflow: "hidden" }}>
+      <main style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0, overflow: "hidden", position: "relative" }}>
         {(!isMobile && sidebarCollapsed) && (
           <button
             onClick={() => setSidebarCollapsed(false)}
@@ -556,27 +559,31 @@ export default function App() {
             Disconnected from server
           </div>
         )}
-        {navMode && (
-          <div style={{
-            padding: "6px 16px",
-            background: "rgba(255, 200, 0, 0.9)",
-            color: "#000",
-            fontSize: 12,
-            fontWeight: 600,
-            display: "flex",
-            gap: 16,
-            alignItems: "center",
-            flexWrap: "wrap",
-          }}>
-            <span style={{ fontFamily: "monospace" }}>` ~</span>
-            <span style={{ fontWeight: 400 }}>1-9 machine</span>
-            <span style={{ fontWeight: 400 }}>[ ] cycle machine</span>
-            <span style={{ fontWeight: 400 }}>Tab cycle session</span>
-            <span style={{ fontWeight: 400 }}>j/k cycle pane</span>
-            <span style={{ fontWeight: 400, opacity: 0.7 }}>`` ~~ literal</span>
-            <span style={{ fontWeight: 400, opacity: 0.7 }}>Esc cancel</span>
-          </div>
-        )}
+        <div ref={navBarRef} style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 50,
+          padding: "6px 16px",
+          background: "rgba(255, 200, 0, 0.9)",
+          color: "#000",
+          fontSize: 12,
+          fontWeight: 600,
+          display: "none",
+          gap: 16,
+          alignItems: "center",
+          flexWrap: "wrap",
+          pointerEvents: "none",
+        }}>
+          <span style={{ fontFamily: "monospace" }}>` ~</span>
+          <span style={{ fontWeight: 400 }}>1-9 machine</span>
+          <span style={{ fontWeight: 400 }}>[ ] cycle machine</span>
+          <span style={{ fontWeight: 400 }}>Tab cycle session</span>
+          <span style={{ fontWeight: 400 }}>j/k cycle pane</span>
+          <span style={{ fontWeight: 400, opacity: 0.7 }}>`` ~~ literal</span>
+          <span style={{ fontWeight: 400, opacity: 0.7 }}>Esc cancel</span>
+        </div>
         {selectedView && (() => {
           const view = views.find((v) => v.id === selectedView);
           if (!view || view.panes.length === 0) {
