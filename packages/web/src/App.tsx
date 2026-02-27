@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import type { CliTool } from "@blkcat/shared";
 import { useSocket } from "./hooks/useSocket";
 import { useSessionOutput } from "./hooks/useSessionOutput";
 import { useAgents } from "./hooks/useAgents";
@@ -140,6 +141,8 @@ export default function App() {
   selectedViewRef.current = selectedView;
   const newSessionModalRef = useRef(newSessionModal);
   newSessionModalRef.current = newSessionModal;
+  const getOrderedMachinesRef = useRef(getOrderedMachines);
+  getOrderedMachinesRef.current = getOrderedMachines;
 
   const cyclePaneRef = useRef<((delta: number) => void) | undefined>();
 
@@ -158,36 +161,54 @@ export default function App() {
     }
 
     function selectMachine(idx: number) {
-      const machine = machinesRef.current[idx];
+      const ordered = getOrderedMachinesRef.current(machinesRef.current);
+      const machine = ordered[idx];
       if (!machine) return;
       setSelectedMachine(machine.machineId);
+      setSelectedView(undefined);
       if (machine.sessions.length > 0) {
         setSelectedSession(machine.sessions[0].id);
         clearNotifications(`${machine.machineId}:${machine.sessions[0].id}`);
       }
     }
     function cycleMachine(delta: number) {
-      const machines = machinesRef.current;
-      const idx = machines.findIndex((m) => m.machineId === selectedMachineRef.current);
-      const next = (idx + delta + machines.length) % machines.length;
+      const ordered = getOrderedMachinesRef.current(machinesRef.current);
+      const idx = ordered.findIndex((m) => m.machineId === selectedMachineRef.current);
+      const next = (idx + delta + ordered.length) % ordered.length;
       selectMachine(next);
     }
     function selectSession(idx: number) {
-      const mid = selectedMachineRef.current;
+      let mid = selectedMachineRef.current;
+      // If in a view, derive machine from the view's first pane
+      if (!mid && selectedViewRef.current) {
+        const view = viewsRef.current.find((v) => v.id === selectedViewRef.current);
+        mid = view?.panes[0]?.machineId;
+      }
       if (!mid) return;
       const machine = machinesRef.current.find((m) => m.machineId === mid);
       const session = machine?.sessions[idx];
       if (session) {
+        setSelectedMachine(mid);
         setSelectedSession(session.id);
+        setSelectedView(undefined);
         clearNotifications(`${mid}:${session.id}`);
       }
     }
     function cycleSession(delta: number) {
-      const mid = selectedMachineRef.current;
+      let mid = selectedMachineRef.current;
+      let sid = selectedSessionRef.current;
+      // If in a view, derive machine/session from the view's first pane
+      if (!mid && selectedViewRef.current) {
+        const view = viewsRef.current.find((v) => v.id === selectedViewRef.current);
+        if (view?.panes[0]) {
+          mid = view.panes[0].machineId;
+          sid = view.panes[0].sessionId;
+        }
+      }
       if (!mid) return;
       const machine = machinesRef.current.find((m) => m.machineId === mid);
       if (!machine || machine.sessions.length === 0) return;
-      const idx = machine.sessions.findIndex((s) => s.id === selectedSessionRef.current);
+      const idx = machine.sessions.findIndex((s) => s.id === sid);
       const next = (idx + delta + machine.sessions.length) % machine.sessions.length;
       selectSession(next);
     }
@@ -375,12 +396,34 @@ export default function App() {
     clearNotifications(`${machineId}:${sessionId}`);
   }, [views, clearNotifications]);
 
+  // Auto-select newly created sessions
+  const pendingStartRef = useRef<{ machineId: string; sessionCount: number } | null>(null);
+  useEffect(() => {
+    const pending = pendingStartRef.current;
+    if (!pending) return;
+    const machine = machines.find((m) => m.machineId === pending.machineId);
+    if (!machine || machine.sessions.length <= pending.sessionCount) return;
+    // New session appeared — select the last one
+    const newSession = machine.sessions[machine.sessions.length - 1];
+    pendingStartRef.current = null;
+    setSelectedMachine(pending.machineId);
+    setSelectedSession(newSession.id);
+    setSelectedView(undefined);
+    setViewFocusReq(undefined);
+  }, [machines]);
+
   const sidebarBaseProps = {
     machines: machines,
     selectedMachine,
     selectedSession,
     notificationCounts,
-    onStartSession: startSession,
+    onStartSession: (machineId: string, args?: string, cwd?: string, name?: string, cliTool?: CliTool) => {
+      const machine = machines.find((m) => m.machineId === machineId);
+      pendingStartRef.current = { machineId, sessionCount: machine?.sessions.length ?? 0 };
+      // Show terminal sessions if creating a plain terminal while they're hidden
+      if (!cliTool && hideTmuxSessions) setHideTmuxSessions(false);
+      startSession(machineId, args, cwd, name, cliTool);
+    },
     listDirectory,
     createDirectory,
     onCloseSession: (machineId: string, sessionId: string) => {
@@ -704,6 +747,13 @@ export default function App() {
               getMachineName={getMachineName}
               getSessionName={getSessionName}
               getOrderedGroups={getOrderedGroups}
+              onSelectSessionDirect={(machineId, sessionId) => {
+                setSelectedMachine(machineId);
+                setSelectedSession(sessionId);
+                setSelectedView(undefined);
+                setViewFocusReq(undefined);
+                clearNotifications(`${machineId}:${sessionId}`);
+              }}
               onUpdateView={(id, name, panes) => {
                 if (panes && panes.length === 0) {
                   deleteView(id);
@@ -872,6 +922,9 @@ export default function App() {
           machineName={getMachineName(newSessionModal.machineId)}
           initialCwd={newSessionModal.cwd}
           onStart={(mid, args, cwd, name, cliTool) => {
+            const machine = machines.find((m) => m.machineId === mid);
+            pendingStartRef.current = { machineId: mid, sessionCount: machine?.sessions.length ?? 0 };
+            if (!cliTool && hideTmuxSessions) setHideTmuxSessions(false);
             startSession(mid, args, cwd, name, cliTool);
             setNewSessionModal(null);
           }}
