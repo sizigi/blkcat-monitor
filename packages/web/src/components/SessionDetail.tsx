@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useState, useCallback } from "react";
 import { TerminalOutput } from "./TerminalOutput";
 import { FloatingChatInput } from "./FloatingChatInput";
 import { Folder } from "./Icons";
+import { useKeyboardOffset } from "../hooks/useKeyboardOffset";
 
 interface SessionDetailProps {
   machineId: string;
@@ -36,8 +37,10 @@ export function SessionDetail({
   onSendData,
   onResize,
 }: SessionDetailProps) {
-  // Shorten home dir prefix for display
   const displayCwd = cwd?.replace(/^\/home\/[^/]+/, "~")?.replace(/^\/root/, "~");
+  const keyboardOffset = useKeyboardOffset();
+  const [obscuredHeight, setObscuredHeight] = useState(0);
+  const onObscuredHeight = useCallback((h: number) => setObscuredHeight(h), []);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, position: "relative" }}>
@@ -67,12 +70,25 @@ export function SessionDetail({
           </>
         )}
       </div>
-      <TerminalOutput sessionKey={`${machineId}:${sessionId}`} lines={lines} cursor={cursor} logMapRef={logMapRef} scrollbackMapRef={scrollbackMapRef} subscribeScrollback={subscribeScrollback} onRequestScrollback={onRequestScrollback} onData={onSendData} onResize={onResize} />
+      <TerminalOutput
+        sessionKey={`${machineId}:${sessionId}`}
+        lines={lines}
+        cursor={cursor}
+        logMapRef={logMapRef}
+        scrollbackMapRef={scrollbackMapRef}
+        subscribeScrollback={subscribeScrollback}
+        onRequestScrollback={onRequestScrollback}
+        onData={onSendData}
+        onResize={onResize}
+        inputObscuredHeight={obscuredHeight}
+      />
       <FloatingChatInput
         inputKey={`${machineId}:${sessionId}`}
         onSendText={onSendText}
         onSendKey={onSendKey}
         onSendData={onSendData}
+        keyboardOffset={keyboardOffset}
+        onObscuredHeight={onObscuredHeight}
       />
     </div>
   );
