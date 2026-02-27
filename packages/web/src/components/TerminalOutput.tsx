@@ -287,6 +287,12 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
         return false;
       }
 
+      // Shift+Arrow Left/Right: let document handler switch split view panes
+      if (event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey
+          && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
+        return false;
+      }
+
       // Enter scroll mode via keyboard
       if (!scrollModeRef.current) {
         if (event.shiftKey && event.key === "PageUp") {
@@ -546,6 +552,13 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
   }, []);
 
   useImperativeHandle(ref, () => ({ forceFit }), [forceFit]);
+
+  // Listen for global force-fit shortcut event
+  useEffect(() => {
+    const handler = () => forceFit();
+    window.addEventListener("blkcat:force-fit", handler);
+    return () => window.removeEventListener("blkcat:force-fit", handler);
+  }, [forceFit]);
 
   const hasLog = logMapRef?.current?.has(sessionKey ?? "") ?? false;
   const pd = useCallback((e: React.MouseEvent) => e.preventDefault(), []);

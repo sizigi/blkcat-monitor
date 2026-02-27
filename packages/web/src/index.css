@@ -303,6 +303,11 @@ html, body, #root {
   box-shadow: inset 0 -2px 0 0 var(--accent) !important;
 }
 
+/* Split view divider hover highlight */
+.split-divider:hover > div {
+  background: var(--accent) !important;
+}
+
 /* During pane drag: disable pointer-events on xterm so drag events
    only hit pane wrapper divs — prevents forbidden cursor and lag */
 .split-dragging .xterm {

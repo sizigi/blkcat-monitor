@@ -169,6 +169,15 @@ export default function App() {
     function handleKeyDown(e: KeyboardEvent) {
       if (e.isComposing) return;
 
+      // Shift+Arrow Left/Right: switch focus between split view panes
+      if (e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+        if (cyclePaneRef.current) {
+          e.preventDefault(); e.stopPropagation();
+          cyclePane(e.key === "ArrowRight" ? 1 : -1);
+          return;
+        }
+      }
+
       if ((e.key === "`" || e.key === "~") && !e.ctrlKey && !e.altKey && !e.metaKey && !navModeRef.current) {
         // ~ is Shift+` on most keyboards — accept both as prefix
         if (e.key === "~" && !e.shiftKey) return; // ignore bare ~ if not shift
@@ -213,6 +222,11 @@ export default function App() {
       if (e.key === "j" || e.key === "k") {
         e.preventDefault(); e.stopPropagation();
         cyclePane(e.key === "j" ? 1 : -1); return;
+      }
+      if (e.key === "r" || e.key === "R") {
+        e.preventDefault(); e.stopPropagation();
+        window.dispatchEvent(new Event("blkcat:force-fit"));
+        setNav(false); return;
       }
       if (e.key === "Shift" || e.key === "Control" || e.key === "Alt" || e.key === "Meta") return;
       setNav(false);

@@ -222,8 +222,90 @@ export function CrossMachineSplitView({
   const dropTargetRef = useRef<number | null>(null);
   const paneRefsMap = useRef<Map<number, HTMLDivElement>>(new Map());
   const splitContainerRef = useRef<HTMLDivElement>(null);
+  const flexContainerRef = useRef<HTMLDivElement>(null);
   const viewPanesRef = useRef(view.panes);
   viewPanesRef.current = view.panes;
+
+  // Pane size ratios (sum to 1). Reset when pane count changes.
+  const [paneSizes, setPaneSizes] = useState<number[]>(() =>
+    view.panes.map(() => 1 / Math.max(1, view.panes.length))
+  );
+  const paneSizesRef = useRef(paneSizes);
+  paneSizesRef.current = paneSizes;
+
+  useEffect(() => {
+    const n = view.panes.length;
+    if (n !== paneSizesRef.current.length) {
+      const equal = Array.from({ length: n }, () => 1 / Math.max(1, n));
+      setPaneSizes(equal);
+    }
+  }, [view.panes.length]);
+
+  // Divider drag-to-resize
+  const resizeDragRef = useRef<{ index: number; startPos: number; startSizes: number[] } | null>(null);
+
+  const handleDividerMouseDown = useCallback((e: React.MouseEvent, dividerIndex: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const container = flexContainerRef.current;
+    if (!container) return;
+
+    const startPos = isMobile ? e.clientY : e.clientX;
+    const startSizes = [...paneSizesRef.current];
+    resizeDragRef.current = { index: dividerIndex, startPos, startSizes };
+
+    const totalSize = isMobile ? container.offsetHeight : container.offsetWidth;
+
+    const onMouseMove = (ev: MouseEvent) => {
+      const ref = resizeDragRef.current;
+      if (!ref) return;
+      const delta = (isMobile ? ev.clientY : ev.clientX) - ref.startPos;
+      const deltaRatio = delta / totalSize;
+
+      const newSizes = [...ref.startSizes];
+      const minRatio = 0.1; // minimum 10% per pane
+      const left = ref.index;
+      const right = ref.index + 1;
+
+      let newLeft = ref.startSizes[left] + deltaRatio;
+      let newRight = ref.startSizes[right] - deltaRatio;
+
+      if (newLeft < minRatio) {
+        newLeft = minRatio;
+        newRight = ref.startSizes[left] + ref.startSizes[right] - minRatio;
+      }
+      if (newRight < minRatio) {
+        newRight = minRatio;
+        newLeft = ref.startSizes[left] + ref.startSizes[right] - minRatio;
+      }
+
+      newSizes[left] = newLeft;
+      newSizes[right] = newRight;
+      setPaneSizes(newSizes);
+    };
+
+    const onMouseUp = () => {
+      resizeDragRef.current = null;
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      // Trigger terminal refit after resize
+      window.dispatchEvent(new Event("resize"));
+    };
+
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+    document.body.style.cursor = isMobile ? "row-resize" : "col-resize";
+    document.body.style.userSelect = "none";
+  }, [isMobile]);
+
+  // Double-click divider to reset equal sizes
+  const handleDividerDoubleClick = useCallback(() => {
+    const n = view.panes.length;
+    setPaneSizes(Array.from({ length: n }, () => 1 / Math.max(1, n)));
+    window.dispatchEvent(new Event("resize"));
+  }, [view.panes.length]);
 
   // Find the focused pane (or fall back to first)
   const activePane = view.panes.find((p) => `${p.machineId}:${p.sessionId}` === focusedKey) ?? view.panes[0];
@@ -308,6 +390,7 @@ export function CrossMachineSplitView({
       onDrop={handleContainerDrop}
     >
       <div
+        ref={flexContainerRef}
         style={{
           display: "flex",
           flexDirection: isMobile ? "column" : "row",
@@ -319,15 +402,36 @@ export function CrossMachineSplitView({
         {view.panes.map((pane, i) => {
           const key = `${pane.machineId}:${pane.sessionId}`;
           const available = isAvailable(pane.machineId, pane.sessionId);
+          const sizeRatio = paneSizes[i] ?? 1 / view.panes.length;
           return (
             <React.Fragment key={key}>
               {i > 0 && (
-                <div style={{
-                  width: isMobile ? undefined : 2,
-                  height: isMobile ? 2 : undefined,
-                  background: "var(--border)",
-                  flexShrink: 0,
-                }} />
+                <div
+                  className="split-divider"
+                  onMouseDown={(e) => handleDividerMouseDown(e, i - 1)}
+                  onDoubleClick={handleDividerDoubleClick}
+                  style={{
+                    width: isMobile ? undefined : 6,
+                    height: isMobile ? 6 : undefined,
+                    flexShrink: 0,
+                    cursor: isMobile ? "row-resize" : "col-resize",
+                    position: "relative",
+                    zIndex: 5,
+                    /* Center a thin line inside the wider hit area */
+                    background: "transparent",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <div style={{
+                    width: isMobile ? "100%" : 2,
+                    height: isMobile ? 2 : "100%",
+                    background: "var(--border)",
+                    pointerEvents: "none",
+                    transition: "background 0.15s",
+                  }} />
+                </div>
               )}
               <div
                 ref={(el) => { if (el) paneRefsMap.current.set(i, el); else paneRefsMap.current.delete(i); }}
@@ -400,7 +504,7 @@ export function CrossMachineSplitView({
                   }
                 }}
                 style={{
-                  flex: 1,
+                  flex: `${sizeRatio} 0 0px`,
                   minWidth: 0,
                   minHeight: 0,
                   display: "flex",
