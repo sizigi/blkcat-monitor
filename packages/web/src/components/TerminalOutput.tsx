@@ -14,6 +14,8 @@ interface TerminalOutputProps {
   onRequestScrollback?: () => void;
   onData?: (data: string) => void;
   onResize?: (cols: number, rows: number, force?: boolean) => void;
+  /** Height in px obscured by floating input + keyboard — terminal shifts up by this amount */
+  inputObscuredHeight?: number;
   hideFloatingButtons?: boolean;
 }
 
@@ -21,7 +23,7 @@ export interface TerminalOutputHandle {
   forceFit: () => void;
 }
 
-export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputProps>(function TerminalOutput({ sessionKey, lines, cursor, logMapRef, scrollbackMapRef, subscribeScrollback, onRequestScrollback, onData, onResize, hideFloatingButtons }, ref) {
+export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputProps>(function TerminalOutput({ sessionKey, lines, cursor, logMapRef, scrollbackMapRef, subscribeScrollback, onRequestScrollback, onData, onResize, inputObscuredHeight, hideFloatingButtons }, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -416,10 +418,17 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
     };
     container.addEventListener("dblclick", onDblClick);
 
-    // --- Resize handling (debounced to avoid keyboard open/close thrashing) ---
+    // --- Resize handling (skip height-only changes on mobile to avoid keyboard thrashing) ---
     let fitTimer: ReturnType<typeof setTimeout> | undefined;
     let resizeTimer: ReturnType<typeof setTimeout> | undefined;
+    let lastWidth = containerRef.current.offsetWidth;
+
     const doFit = () => {
+      const currentWidth = containerRef.current?.offsetWidth ?? lastWidth;
+      // On mobile (touch device), ignore height-only changes (keyboard open/close)
+      if ("ontouchstart" in window && currentWidth === lastWidth) return;
+      lastWidth = currentWidth;
+
       clearTimeout(fitTimer);
       fitTimer = setTimeout(() => {
         fit.fit();
@@ -585,10 +594,17 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
   const floatBtn = "terminal-float-btn";
 
   return (
-    <div style={{ position: "relative", flex: 1, minHeight: 0, minWidth: 0 }}>
+    <div style={{ position: "relative", flex: 1, minHeight: 0, minWidth: 0, overflow: "hidden" }}>
       <div
         ref={containerRef}
-        style={{ width: "100%", height: "100%", overflow: "hidden", background: "var(--bg)", touchAction: "none" }}
+        style={{
+          width: "100%",
+          height: "100%",
+          overflow: "hidden",
+          background: "var(--bg)",
+          touchAction: "none",
+          transform: inputObscuredHeight ? `translateY(-${inputObscuredHeight}px)` : undefined,
+        }}
       />
       {scrollMode && (
         <div
