@@ -18,6 +18,8 @@ interface AgentListenerOptions {
   onRenameSession?: (sessionId: string, name: string) => void;
   onSwapPane?: (sessionId1: string, sessionId2: string) => void;
   onSwapWindow?: (sessionId1: string, sessionId2: string) => void;
+  onMovePane?: (sessionId: string, targetSessionId: string, before: boolean) => void;
+  onMoveWindow?: (sessionId: string, targetSessionId: string, before: boolean) => void;
   onRediscover?: () => void;
 }
 
@@ -85,6 +87,10 @@ export class AgentListener {
               this.opts.onSwapPane?.(msg.sessionId1, msg.sessionId2);
             } else if (msg.type === "swap_window") {
               this.opts.onSwapWindow?.(msg.sessionId1, msg.sessionId2);
+            } else if (msg.type === "move_pane") {
+              this.opts.onMovePane?.(msg.sessionId, msg.targetSessionId, msg.before);
+            } else if (msg.type === "move_window") {
+              this.opts.onMoveWindow?.(msg.sessionId, msg.targetSessionId, msg.before);
             } else if (msg.type === "rediscover") {
               this.opts.onRediscover?.();
             }

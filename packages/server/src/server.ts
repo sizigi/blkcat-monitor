@@ -635,6 +635,26 @@ export function createServer(opts: ServerOptions) {
                 sessionId2: msg.sessionId2,
               }));
             }
+          } else if (msg.type === "move_pane") {
+            const machine = machines.get(msg.machineId);
+            if (machine) {
+              machine.agent.send(JSON.stringify({
+                type: "move_pane",
+                sessionId: msg.sessionId,
+                targetSessionId: msg.targetSessionId,
+                before: msg.before,
+              }));
+            }
+          } else if (msg.type === "move_window") {
+            const machine = machines.get(msg.machineId);
+            if (machine) {
+              machine.agent.send(JSON.stringify({
+                type: "move_window",
+                sessionId: msg.sessionId,
+                targetSessionId: msg.targetSessionId,
+                before: msg.before,
+              }));
+            }
           } else if (msg.type === "rediscover") {
             const machine = machines.get(msg.machineId);
             if (machine) {

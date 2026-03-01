@@ -40,6 +40,8 @@ interface SidebarProps {
   onToggleHideTmux?: () => void;
   onSwapPane?: (machineId: string, sessionId1: string, sessionId2: string) => void;
   onSwapWindow?: (machineId: string, sessionId1: string, sessionId2: string) => void;
+  onMovePane?: (machineId: string, sessionId: string, targetSessionId: string, before: boolean) => void;
+  onMoveWindow?: (machineId: string, sessionId: string, targetSessionId: string, before: boolean) => void;
   onRediscover?: (machineId: string) => void;
   views?: View[];
   selectedView?: string;
@@ -102,6 +104,8 @@ export function Sidebar({
   onToggleHideTmux,
   onSwapPane,
   onSwapWindow,
+  onMovePane,
+  onMoveWindow,
   onRediscover,
   views,
   selectedView,
@@ -676,16 +680,19 @@ export function Sidebar({
               sessions.filter((s) => !isSessionAttached(s) && !isSessionHidden(s));
 
             // When hideTmuxSessions, filter terminals out of groups and hide empty groups
+            // Always keep the selected session visible so newly created terminals aren't hidden
+            const isSelected = (s: SessionInfo) =>
+              selectedMachine === machine.machineId && selectedSession === s.id;
             const visibleGroups = (hideTmuxSessions
               ? cwdGroups
-                  .map((g) => ({ ...g, sessions: g.sessions.filter((s) => !!s.cliTool) }))
+                  .map((g) => ({ ...g, sessions: g.sessions.filter((s) => !!s.cliTool || isSelected(s)) }))
                   .filter((g) => g.sessions.length > 0)
               : cwdGroups
             ).map((g) => ({ ...g, sessions: filterSessions(g.sessions) }))
               .filter((g) => g.sessions.length > 0);
             const visibleUngrouped = filterSessions(
               hideTmuxSessions
-                ? ungrouped.filter((s) => !!s.cliTool)
+                ? ungrouped.filter((s) => !!s.cliTool || isSelected(s))
                 : ungrouped,
             );
 
@@ -758,11 +765,20 @@ export function Sidebar({
                     if (hasShift && !srcIsCli && tgtIsCli && onAttachTerminal) {
                       onAttachTerminal(machine.machineId, src.sessionId, session.id);
                     } else if (src.machineId === machine.machineId && src.group === group && (zone === "above" || zone === "below")) {
-                      // Edge zone in same group = reorder via tmux swap
+                      // Edge zone in same group = reorder via move (sequential adjacent swaps)
+                      const before = zone === "above";
                       if (src.windowId === session.windowId) {
-                        onSwapPane?.(machine.machineId, src.sessionId, session.id);
+                        if (onMovePane) {
+                          onMovePane(machine.machineId, src.sessionId, session.id, before);
+                        } else {
+                          onSwapPane?.(machine.machineId, src.sessionId, session.id);
+                        }
                       } else {
-                        onSwapWindow?.(machine.machineId, src.sessionId, session.id);
+                        if (onMoveWindow) {
+                          onMoveWindow(machine.machineId, src.sessionId, session.id, before);
+                        } else {
+                          onSwapWindow?.(machine.machineId, src.sessionId, session.id);
+                        }
                       }
                     } else if (onCreateViewFromDrag) {
                       onCreateViewFromDrag(

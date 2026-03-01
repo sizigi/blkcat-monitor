@@ -276,6 +276,29 @@ async function main() {
     triggerRediscovery();
   }
 
+  function handleMovePane(sessionId: string, targetSessionId: string, before: boolean) {
+    const cap = captures.get(sessionId) ?? new TmuxCapture(bunExec);
+    cap.movePane(sessionId, targetSessionId, before);
+    stickyCliMap.delete(sessionId);
+    stickyCliMap.delete(targetSessionId);
+    triggerRediscovery();
+  }
+
+  function handleMoveWindow(sessionId: string, targetSessionId: string, before: boolean) {
+    const cap = captures.get(sessionId) ?? new TmuxCapture(bunExec);
+    cap.moveWindow(sessionId, targetSessionId, before);
+    // Clear sticky CLI entries for all panes in both windows
+    const winTarget = (id: string) => id.replace(/\.\d+$/, "");
+    const win1 = winTarget(sessionId);
+    const win2 = winTarget(targetSessionId);
+    for (const id of stickyCliMap.keys()) {
+      if (id.startsWith(win1 + ".") || id === win1 || id.startsWith(win2 + ".") || id === win2) {
+        stickyCliMap.delete(id);
+      }
+    }
+    triggerRediscovery();
+  }
+
   function handleRediscover() {
     stickyCliMap.clear();
     triggerRediscovery();
@@ -393,6 +416,8 @@ async function main() {
 
       onSwapPane: handleSwapPane,
       onSwapWindow: handleSwapWindow,
+      onMovePane: handleMovePane,
+      onMoveWindow: handleMoveWindow,
       onRediscover: handleRediscover,
     });
     // When a new server connects, clear prevLines so the next poll cycle
@@ -421,6 +446,8 @@ async function main() {
 
       onSwapPane: handleSwapPane,
       onSwapWindow: handleSwapWindow,
+      onMovePane: handleMovePane,
+      onMoveWindow: handleMoveWindow,
       getSessions: () => [...autoSessions, ...manualSessions],
       onReconnect: () => { prevLines.clear(); },
     });

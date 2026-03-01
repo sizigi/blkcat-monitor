@@ -162,6 +162,102 @@ export class TmuxCapture {
     return this.exec(cmd).success;
   }
 
+  /**
+   * Move a pane to before/after another pane within the same window using
+   * sequential adjacent swaps (bubble approach).
+   * @param src Full pane target (e.g. "main:0.2")
+   * @param dst Full pane target (e.g. "main:0.0")
+   * @param before true = insert before dst, false = insert after dst
+   */
+  movePane(src: string, dst: string, before: boolean): boolean {
+    // Both must be in the same window
+    const srcWin = src.replace(/\.\d+$/, "");
+    const dstWin = dst.replace(/\.\d+$/, "");
+    if (srcWin !== dstWin) return false;
+
+    const srcPaneIdx = parseInt(src.split(".").pop()!, 10);
+    const dstPaneIdx = parseInt(dst.split(".").pop()!, 10);
+    if (srcPaneIdx === dstPaneIdx) return true;
+
+    // Get ordered list of pane indices for this window
+    const allPanes = this.listPanes(srcWin.split(":")[0]);
+    const paneIndices = allPanes
+      .filter((p) => p.replace(/\.\d+$/, "") === srcWin)
+      .map((p) => parseInt(p.split(".").pop()!, 10))
+      .sort((a, b) => a - b);
+
+    const srcPos = paneIndices.indexOf(srcPaneIdx);
+    const dstPos = paneIndices.indexOf(dstPaneIdx);
+    if (srcPos < 0 || dstPos < 0) return false;
+
+    // Calculate final target position
+    let targetPos: number;
+    if (srcPos < dstPos) {
+      targetPos = before ? dstPos - 1 : dstPos;
+    } else {
+      targetPos = before ? dstPos : dstPos + 1;
+    }
+    if (targetPos === srcPos) return true;
+
+    // Bubble src toward targetPos via adjacent swaps
+    if (srcPos < targetPos) {
+      for (let i = srcPos; i < targetPos; i++) {
+        this.swapPane(`${srcWin}.${paneIndices[i]}`, `${srcWin}.${paneIndices[i + 1]}`);
+      }
+    } else {
+      for (let i = srcPos; i > targetPos; i--) {
+        this.swapPane(`${srcWin}.${paneIndices[i]}`, `${srcWin}.${paneIndices[i - 1]}`);
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Move a window to before/after another window within the same tmux session
+   * using sequential adjacent swaps (bubble approach).
+   * @param src Full pane target (e.g. "main:2.0")
+   * @param dst Full pane target (e.g. "main:0.0")
+   * @param before true = insert before dst's window, false = insert after
+   */
+  moveWindow(src: string, dst: string, before: boolean): boolean {
+    const srcWin = src.replace(/\.\d+$/, "");
+    const dstWin = dst.replace(/\.\d+$/, "");
+    if (srcWin === dstWin) return true;
+
+    const sessionName = srcWin.split(":")[0];
+    const srcWinIdx = parseInt(srcWin.split(":")[1], 10);
+    const dstWinIdx = parseInt(dstWin.split(":")[1], 10);
+
+    // Get ordered list of window indices
+    const allPanes = this.listPanes(sessionName);
+    const windowIndices = [...new Set(
+      allPanes.map((p) => parseInt(p.replace(/\.\d+$/, "").split(":")[1], 10))
+    )].sort((a, b) => a - b);
+
+    const srcPos = windowIndices.indexOf(srcWinIdx);
+    const dstPos = windowIndices.indexOf(dstWinIdx);
+    if (srcPos < 0 || dstPos < 0) return false;
+
+    let targetPos: number;
+    if (srcPos < dstPos) {
+      targetPos = before ? dstPos - 1 : dstPos;
+    } else {
+      targetPos = before ? dstPos : dstPos + 1;
+    }
+    if (targetPos === srcPos) return true;
+
+    if (srcPos < targetPos) {
+      for (let i = srcPos; i < targetPos; i++) {
+        this.swapWindow(`${sessionName}:${windowIndices[i]}`, `${sessionName}:${windowIndices[i + 1]}`);
+      }
+    } else {
+      for (let i = srcPos; i > targetPos; i--) {
+        this.swapWindow(`${sessionName}:${windowIndices[i]}`, `${sessionName}:${windowIndices[i - 1]}`);
+      }
+    }
+    return true;
+  }
+
   killPane(target: string): boolean {
     const cmd = [...this.sshPrefix, "tmux", "kill-pane", "-t", target];
     return this.exec(cmd).success;

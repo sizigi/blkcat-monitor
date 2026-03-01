@@ -34,7 +34,7 @@ const MIN_SIDEBAR_WIDTH = 160;
 const MAX_SIDEBAR_WIDTH = 500;
 
 export default function App() {
-  const { connected, machines, views, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory, createDirectory, deploySkills, removeSkills, getSettings, updateSettings, subscribeDeployResult, subscribeSettingsSnapshot, subscribeSettingsResult, setDisplayName, subscribeDisplayNames, subscribeReloadResult, swapPane, swapWindow, rediscover, createView, updateView, deleteView } = useSocket(WS_URL);
+  const { connected, machines, views, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory, createDirectory, deploySkills, removeSkills, getSettings, updateSettings, subscribeDeployResult, subscribeSettingsSnapshot, subscribeSettingsResult, setDisplayName, subscribeDisplayNames, subscribeReloadResult, swapPane, swapWindow, movePane, moveWindow, rediscover, createView, updateView, deleteView } = useSocket(WS_URL);
   const { agents, addAgent, removeAgent } = useAgents();
   const { getMachineName, getSessionName, setMachineName, setSessionName } = useDisplayNames({
     sendDisplayName: setDisplayName,
@@ -396,21 +396,34 @@ export default function App() {
     clearNotifications(`${machineId}:${sessionId}`);
   }, [views, clearNotifications]);
 
-  // Auto-select newly created sessions
-  const pendingStartRef = useRef<{ machineId: string; sessionCount: number } | null>(null);
+  // Auto-select newly created sessions (or add to view if created from a split view)
+  const pendingStartRef = useRef<{ machineId: string; sessionCount: number; viewId?: string } | null>(null);
   useEffect(() => {
     const pending = pendingStartRef.current;
     if (!pending) return;
     const machine = machines.find((m) => m.machineId === pending.machineId);
     if (!machine || machine.sessions.length <= pending.sessionCount) return;
-    // New session appeared — select the last one
+    // New session appeared
     const newSession = machine.sessions[machine.sessions.length - 1];
     pendingStartRef.current = null;
+
+    if (pending.viewId) {
+      // Add to the split view that was active when session was created
+      const view = views.find((v) => v.id === pending.viewId);
+      if (view) {
+        updateView(pending.viewId, undefined, [...view.panes, { machineId: pending.machineId, sessionId: newSession.id }]);
+        setSelectedView(pending.viewId);
+        setViewFocusReq({ key: `${pending.machineId}:${newSession.id}`, seq: ++focusSeqRef.current });
+        setSelectedMachine(undefined);
+        setSelectedSession(undefined);
+        return;
+      }
+    }
     setSelectedMachine(pending.machineId);
     setSelectedSession(newSession.id);
     setSelectedView(undefined);
     setViewFocusReq(undefined);
-  }, [machines]);
+  }, [machines, views, updateView]);
 
   const sidebarBaseProps = {
     machines: machines,
@@ -421,7 +434,7 @@ export default function App() {
       const machine = machines.find((m) => m.machineId === machineId);
       pendingStartRef.current = { machineId, sessionCount: machine?.sessions.length ?? 0 };
       // Show terminal sessions if creating a plain terminal while they're hidden
-      if (!cliTool && hideTmuxSessions) setHideTmuxSessions(false);
+
       startSession(machineId, args, cwd, name, cliTool);
     },
     listDirectory,
@@ -460,6 +473,8 @@ export default function App() {
     onToggleHideTmux: toggleHideTmux,
     onSwapPane: swapPane,
     onSwapWindow: swapWindow,
+    onMovePane: movePane,
+    onMoveWindow: moveWindow,
     onRediscover: rediscover,
     views,
     selectedView,
@@ -923,8 +938,8 @@ export default function App() {
           initialCwd={newSessionModal.cwd}
           onStart={(mid, args, cwd, name, cliTool) => {
             const machine = machines.find((m) => m.machineId === mid);
-            pendingStartRef.current = { machineId: mid, sessionCount: machine?.sessions.length ?? 0 };
-            if (!cliTool && hideTmuxSessions) setHideTmuxSessions(false);
+            pendingStartRef.current = { machineId: mid, sessionCount: machine?.sessions.length ?? 0, viewId: selectedView };
+      
             startSession(mid, args, cwd, name, cliTool);
             setNewSessionModal(null);
           }}
