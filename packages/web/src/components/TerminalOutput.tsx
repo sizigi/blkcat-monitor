@@ -273,19 +273,7 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
       if ((event.ctrlKey || event.metaKey) && event.key === "c") {
         if (term.hasSelection()) {
           const text = term.getSelection();
-          if (navigator.clipboard?.writeText) {
-            navigator.clipboard.writeText(text).catch(() => {
-              // Fallback for insecure contexts (plain HTTP)
-              const ta = document.createElement("textarea");
-              ta.value = text;
-              ta.style.position = "fixed";
-              ta.style.opacity = "0";
-              document.body.appendChild(ta);
-              ta.select();
-              document.execCommand("copy");
-              document.body.removeChild(ta);
-            });
-          } else {
+          const fallbackCopy = () => {
             const ta = document.createElement("textarea");
             ta.value = text;
             ta.style.position = "fixed";
@@ -294,6 +282,11 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
             ta.select();
             document.execCommand("copy");
             document.body.removeChild(ta);
+          };
+          if (navigator.clipboard?.writeText) {
+            navigator.clipboard.writeText(text).catch(fallbackCopy);
+          } else {
+            fallbackCopy();
           }
           term.clearSelection();
           return false;
@@ -309,10 +302,7 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
           event.preventDefault();
           navigator.clipboard.readText().then((text) => {
             if (text) onDataRef.current?.(text);
-          }).catch(() => {
-            // Clipboard API rejected (insecure context) — trigger native paste
-            document.execCommand("paste");
-          });
+          }).catch(() => {});
           return false;
         }
         // No Clipboard API — allow default browser paste behavior;
