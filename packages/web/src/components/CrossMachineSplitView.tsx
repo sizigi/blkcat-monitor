@@ -7,6 +7,7 @@ import type { TerminalOutputHandle } from "./TerminalOutput";
 import { FloatingChatInput } from "./FloatingChatInput";
 import { SessionPickerModal } from "./SessionPickerModal";
 import { X, Maximize, Expand } from "./Icons";
+import { useKeyboardOffset } from "../hooks/useKeyboardOffset";
 
 interface CrossMachineSplitViewProps {
   view: View;
@@ -52,6 +53,7 @@ function ViewPane({
   onRemove,
   onDoubleClickHeader,
   onSelectDirect,
+  inputObscuredHeight,
 }: {
   machineId: string;
   sessionId: string;
@@ -71,6 +73,7 @@ function ViewPane({
   onRemove: () => void;
   onDoubleClickHeader?: () => void;
   onSelectDirect?: () => void;
+  inputObscuredHeight?: number;
 }) {
   const output = useSessionOutput(outputMapRef, subscribeOutput, machineId, sessionId);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -194,6 +197,7 @@ function ViewPane({
           onRequestScrollback={onRequestScrollback}
           onData={onSendData}
           onResize={onSendResize}
+          inputObscuredHeight={inputObscuredHeight}
           hideFloatingButtons
         />
       ) : (
@@ -237,6 +241,9 @@ export function CrossMachineSplitView({
   const firstPane = view.panes[0];
   const [focusedKey, setFocusedKey] = useState(firstPane ? `${firstPane.machineId}:${firstPane.sessionId}` : "");
   const [pickerTarget, setPickerTarget] = useState<number | null>(null);
+  const keyboardOffset = useKeyboardOffset();
+  const [obscuredHeight, setObscuredHeight] = useState(0);
+  const onObscuredHeight = useCallback((h: number) => setObscuredHeight(h), []);
   const focusedKeyRef = useRef(focusedKey);
   focusedKeyRef.current = focusedKey;
 
@@ -567,6 +574,7 @@ export function CrossMachineSplitView({
                   onRemove={() => handleRemovePane(i)}
                   onDoubleClickHeader={() => setPickerTarget(i)}
                   onSelectDirect={onSelectSessionDirect ? () => onSelectSessionDirect(pane.machineId, pane.sessionId) : undefined}
+                  inputObscuredHeight={obscuredHeight}
                 />
               </div>
             </React.Fragment>
@@ -582,6 +590,8 @@ export function CrossMachineSplitView({
         onInputChange={(value) => {
           if (activeKey) inputCacheRef.current.set(activeKey, value);
         }}
+        keyboardOffset={keyboardOffset}
+        onObscuredHeight={onObscuredHeight}
       />
       {pickerTarget !== null && (() => {
         const targetPane = view.panes[pickerTarget];
