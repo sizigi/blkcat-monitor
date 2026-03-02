@@ -799,6 +799,7 @@ export default function App() {
             onSendKey={(key) => sendInput(selectedMachine, selectedSession, { key })}
             onSendData={(data) => sendInput(selectedMachine, selectedSession, { data })}
             onResize={(cols, rows, force) => sendResize(selectedMachine, selectedSession, cols, rows, force)}
+            isCliSession={!!selectedSessionData?.cliTool}
           />
         ) : (
           <div

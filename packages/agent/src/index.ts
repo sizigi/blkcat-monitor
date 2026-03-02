@@ -543,18 +543,24 @@ async function main() {
     return false;
   }
 
+  const prevCursors = new Map<string, string>();
+
   setInterval(() => {
     for (const [paneId, cap] of captures) {
       const lines = cap.capturePane(paneId);
       const prev = prevLines.get(paneId) ?? [];
-      if (hasChanged(prev, lines)) {
+      const cursor = cap.getCursorPos(paneId);
+      const cursorKey = cursor ? `${cursor.x},${cursor.y}` : "";
+      const linesChanged = hasChanged(prev, lines);
+      const cursorChanged = cursorKey !== (prevCursors.get(paneId) ?? "");
+      if (linesChanged || cursorChanged) {
         // Only detect waiting-for-input for CLI tool sessions
         const allSess = [...autoSessions, ...manualSessions];
         const sess = allSess.find((s) => s.id === paneId);
         const waitingForInput = sess?.cliTool ? detectWaitingForInput(lines) : false;
-        const cursor = cap.getCursorPos(paneId);
         conn.sendOutput(paneId, lines, waitingForInput, cursor ?? undefined);
         prevLines.set(paneId, lines);
+        prevCursors.set(paneId, cursorKey);
       }
     }
   }, config.pollInterval);
