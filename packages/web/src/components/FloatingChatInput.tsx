@@ -35,7 +35,9 @@ export function FloatingChatInput({
   const [panelHeight, setPanelHeight] = useState(DEFAULT_PANEL_HEIGHT);
   const dragging = useRef(false);
 
-  // Report total obscured height whenever panel size or keyboard changes
+  // Report total obscured height whenever panel size or keyboard changes.
+  // Only report when panel is position:absolute (mobile) — on desktop the panel
+  // is position:relative (in flex flow) so the layout already accounts for it.
   useEffect(() => {
     if (!onObscuredHeight) return;
     if (!open) {
@@ -44,6 +46,12 @@ export function FloatingChatInput({
     }
     const panel = panelRef.current;
     if (!panel) return;
+
+    const isOverlay = getComputedStyle(panel).position === "absolute";
+    if (!isOverlay) {
+      onObscuredHeight(0);
+      return;
+    }
 
     const report = () => onObscuredHeight(panel.offsetHeight + keyboardOffset);
 
