@@ -272,24 +272,52 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
       // otherwise let it through as terminal interrupt (SIGINT)
       if ((event.ctrlKey || event.metaKey) && event.key === "c") {
         if (term.hasSelection()) {
-          navigator.clipboard.writeText(term.getSelection()).catch(() => {});
+          const text = term.getSelection();
+          if (navigator.clipboard?.writeText) {
+            navigator.clipboard.writeText(text).catch(() => {
+              // Fallback for insecure contexts (plain HTTP)
+              const ta = document.createElement("textarea");
+              ta.value = text;
+              ta.style.position = "fixed";
+              ta.style.opacity = "0";
+              document.body.appendChild(ta);
+              ta.select();
+              document.execCommand("copy");
+              document.body.removeChild(ta);
+            });
+          } else {
+            const ta = document.createElement("textarea");
+            ta.value = text;
+            ta.style.position = "fixed";
+            ta.style.opacity = "0";
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand("copy");
+            document.body.removeChild(ta);
+          }
           term.clearSelection();
           return false;
         }
         return true; // no selection → send ^C to terminal
       }
 
-      // Intercept Ctrl+V / Cmd+V: read clipboard ourselves and send as data.
-      // Without this, xterm sends raw \x16 which Claude Code interprets as
-      // "paste image" rather than receiving the actual clipboard text.
-      // preventDefault stops the browser's native paste event from also firing
-      // (which would cause xterm's onData to deliver the text a second time).
+      // Intercept Ctrl+V / Cmd+V: read clipboard and send as data.
+      // Use Clipboard API when available (secure contexts), otherwise
+      // let the browser fire a native paste event which we handle below.
       if ((event.ctrlKey || event.metaKey) && event.key === "v") {
-        event.preventDefault();
-        navigator.clipboard.readText().then((text) => {
-          if (text) onDataRef.current?.(text);
-        }).catch(() => {});
-        return false;
+        if (navigator.clipboard?.readText) {
+          event.preventDefault();
+          navigator.clipboard.readText().then((text) => {
+            if (text) onDataRef.current?.(text);
+          }).catch(() => {
+            // Clipboard API rejected (insecure context) — trigger native paste
+            document.execCommand("paste");
+          });
+          return false;
+        }
+        // No Clipboard API — allow default browser paste behavior;
+        // the paste event listener below will handle it.
+        return true;
       }
 
       // Shift+Arrow Left/Right: let document handler switch split view panes
@@ -418,6 +446,17 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
     };
     container.addEventListener("dblclick", onDblClick);
 
+    // Native paste fallback for insecure contexts (plain HTTP) where
+    // navigator.clipboard.readText() is unavailable.
+    const onPaste = (e: ClipboardEvent) => {
+      const text = e.clipboardData?.getData("text");
+      if (text && !scrollModeRef.current) {
+        e.preventDefault();
+        onDataRef.current?.(text);
+      }
+    };
+    container.addEventListener("paste", onPaste);
+
     // --- Resize handling (skip height-only changes on mobile to avoid keyboard thrashing) ---
     let fitTimer: ReturnType<typeof setTimeout> | undefined;
     let resizeTimer: ReturnType<typeof setTimeout> | undefined;
@@ -450,6 +489,7 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
       container.removeEventListener("touchmove", onTouchMove);
       container.removeEventListener("touchend", onTouchEnd);
       container.removeEventListener("dblclick", onDblClick);
+      container.removeEventListener("paste", onPaste);
       stopMomentum();
       if (scrollRafRef.current) cancelAnimationFrame(scrollRafRef.current);
       dataDisposable.dispose();
