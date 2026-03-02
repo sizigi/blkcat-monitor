@@ -17,13 +17,15 @@ interface TerminalOutputProps {
   /** Height in px obscured by floating input + keyboard — terminal shifts up by this amount */
   inputObscuredHeight?: number;
   hideFloatingButtons?: boolean;
+  /** CLI tool sessions (claude/codex/gemini) — hide xterm cursor since their TUI cursor is unreliable */
+  isCliSession?: boolean;
 }
 
 export interface TerminalOutputHandle {
   forceFit: () => void;
 }
 
-export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputProps>(function TerminalOutput({ sessionKey, lines, cursor, logMapRef, scrollbackMapRef, subscribeScrollback, onRequestScrollback, onData, onResize, inputObscuredHeight, hideFloatingButtons }, ref) {
+export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputProps>(function TerminalOutput({ sessionKey, lines, cursor, logMapRef, scrollbackMapRef, subscribeScrollback, onRequestScrollback, onData, onResize, inputObscuredHeight, hideFloatingButtons, isCliSession }, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -209,14 +211,15 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
     const term = new Terminal({
       disableStdin: !onData,
       convertEol: true,
-      cursorBlink: !!onData,
+      cursorBlink: !isCliSession && !!onData,
+      cursorInactiveStyle: isCliSession ? "none" : undefined,
       scrollback: 0,
       theme: (() => {
         const s = getComputedStyle(document.documentElement);
         return {
           background: s.getPropertyValue("--bg").trim() || "#0d1117",
           foreground: s.getPropertyValue("--text").trim() || "#c9d1d9",
-          cursor: s.getPropertyValue("--text").trim() || "#c9d1d9",
+          cursor: isCliSession ? "transparent" : (s.getPropertyValue("--text").trim() || "#c9d1d9"),
         };
       })(),
       fontSize: 13,
@@ -543,13 +546,21 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
 
   // Write live terminal output — only update changed lines to avoid flicker.
   // After writing, move the cursor to match tmux's cursor position.
+  // For CLI sessions (claude/codex/gemini), skip cursor positioning since their
+  // TUI cursor doesn't correspond to the input prompt.
   useEffect(() => {
     const term = termRef.current;
     if (!term) return;
+    // Cursor positioning escape: \x1b[row;colH (1-based)
+    // Skip for CLI sessions — their TUI puts cursor at the status bar, not the input prompt
+    const cur = cursorRef.current;
+    // Show cursor (\x1b[?25h) after positioning to counteract any hide sequences in content
+    const cursorSeq = !isCliSession && cur
+      ? `\x1b[${cur.y + 1};${cur.x + 1}H\x1b[?25h`
+      : "";
     // Cursor-only update: if lines haven't changed, just reposition cursor
     if (lines === prevLinesRef.current) {
-      const cur = cursorRef.current;
-      if (cur && !scrollModeRef.current) term.write(`\x1b[${cur.y + 1};${cur.x + 1}H`);
+      if (cursorSeq && !scrollModeRef.current) term.write(cursorSeq);
       return;
     }
     const prev = prevLinesRef.current;
@@ -558,9 +569,6 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
       pendingLinesRef.current = lines;
       return;
     }
-    // Cursor positioning escape: \x1b[row;colH (1-based)
-    const cur = cursorRef.current;
-    const cursorSeq = cur ? `\x1b[${cur.y + 1};${cur.x + 1}H` : "";
     // If previous was empty, do full write
     if (prev.length === 0) {
       term.write("\x1b[H\x1b[2J" + lines.join("\r\n") + cursorSeq);
@@ -581,7 +589,7 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
     // Always append cursor positioning (even if no lines changed, cursor may have moved)
     buf += cursorSeq;
     if (buf) term.write(buf);
-  }, [lines, cursor]);
+  }, [lines, cursor, isCliSession]);
 
   const forceFit = useCallback(() => {
     const fit = fitRef.current;

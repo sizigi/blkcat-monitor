@@ -52,6 +52,7 @@ function ViewPane({
   onRemove,
   onDoubleClickHeader,
   onSelectDirect,
+  isCliSession,
 }: {
   machineId: string;
   sessionId: string;
@@ -71,6 +72,7 @@ function ViewPane({
   onRemove: () => void;
   onDoubleClickHeader?: () => void;
   onSelectDirect?: () => void;
+  isCliSession?: boolean;
 }) {
   const output = useSessionOutput(outputMapRef, subscribeOutput, machineId, sessionId);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -195,6 +197,7 @@ function ViewPane({
           onData={onSendData}
           onResize={onSendResize}
           hideFloatingButtons
+          isCliSession={isCliSession}
         />
       ) : (
         <div style={{
@@ -567,6 +570,7 @@ export function CrossMachineSplitView({
                   onRemove={() => handleRemovePane(i)}
                   onDoubleClickHeader={() => setPickerTarget(i)}
                   onSelectDirect={onSelectSessionDirect ? () => onSelectSessionDirect(pane.machineId, pane.sessionId) : undefined}
+                  isCliSession={!!machines.find(m => m.machineId === pane.machineId)?.sessions.find(s => s.id === pane.sessionId)?.cliTool}
                 />
               </div>
             </React.Fragment>

@@ -19,6 +19,7 @@ interface SessionDetailProps {
   onSendKey: (key: string) => void;
   onSendData: (data: string) => void;
   onResize?: (cols: number, rows: number, force?: boolean) => void;
+  isCliSession?: boolean;
 }
 
 export function SessionDetail({
@@ -36,6 +37,7 @@ export function SessionDetail({
   onSendKey,
   onSendData,
   onResize,
+  isCliSession,
 }: SessionDetailProps) {
   const displayCwd = cwd?.replace(/^\/home\/[^/]+/, "~")?.replace(/^\/root/, "~");
   const keyboardOffset = useKeyboardOffset();
@@ -81,6 +83,7 @@ export function SessionDetail({
         onData={onSendData}
         onResize={onResize}
         inputObscuredHeight={obscuredHeight}
+        isCliSession={isCliSession}
       />
       <FloatingChatInput
         inputKey={`${machineId}:${sessionId}`}
