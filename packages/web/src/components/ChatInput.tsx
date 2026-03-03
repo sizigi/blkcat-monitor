@@ -384,10 +384,7 @@ export function ChatInput({ onSendText, onSendKey, onSendData, initialValue, onI
       resetLiveInput();
       return;
     }
-    if (justComposedRef.current) {
-      justComposedRef.current = false;
-      return;
-    }
+    // justComposedRef no longer needed — compositionEnd doesn't send anymore
 
     if (newValue.length > SENTINEL.length) {
       // Characters added — send the new part (after the sentinel)
@@ -403,16 +400,14 @@ export function ChatInput({ onSendText, onSendKey, onSendData, initialValue, onI
     }
   }, [onSendData, sendKeyWithModifiers, sendDataWithModifiers, resetLiveInput]);
 
-  const handleCompositionEnd = useCallback((e: React.CompositionEvent<HTMLTextAreaElement>) => {
+  const handleCompositionEnd = useCallback((_e: React.CompositionEvent<HTMLTextAreaElement>) => {
     composingRef.current = false;
-    // In non-live mode, just clear the composing flag — don't send or reset
+    // In non-live mode, just clear the composing flag
     if (!liveModeRef.current) return;
-    justComposedRef.current = true; // prevent the following onChange from double-sending
-    if (!onSendData) return;
-    const committed = e.data;
-    if (committed) sendDataWithModifiers(committed);
-    resetLiveInput();
-  }, [onSendData, sendDataWithModifiers, resetLiveInput]);
+    // Don't send here — let the onChange (handleLiveChange) that fires right after
+    // compositionEnd handle sending the committed text. This avoids double-send
+    // when switching IME mid-composition (e.g. Chinese → English on Mac).
+  }, []);
 
   const handleLiveKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.isComposing || composingRef.current) return;
