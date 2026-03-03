@@ -251,7 +251,17 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
       if (xtermTextarea) xtermTextarea.setAttribute("inputmode", "none");
     }
 
-    const dataDisposable = term.onData((data) => { if (!scrollModeRef.current) onDataRef.current?.(data); });
+    // Deduplicate xterm onData: some IMEs (e.g. Chinese on Mac) fire duplicate
+    // data events when switching input method mid-composition.
+    let lastData = "";
+    let lastDataTime = 0;
+    const dataDisposable = term.onData((data) => {
+      const now = Date.now();
+      if (data === lastData && data.length > 1 && now - lastDataTime < 50) return;
+      lastData = data;
+      lastDataTime = now;
+      if (!scrollModeRef.current) onDataRef.current?.(data);
+    });
 
     const selDisposable = term.onSelectionChange(() => {
       if (!term.hasSelection() && !scrollModeRef.current && pendingLinesRef.current) {
