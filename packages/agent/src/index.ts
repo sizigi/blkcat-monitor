@@ -50,6 +50,11 @@ async function main() {
     }
   }
 
+  // Ensure new tmux windows use a login shell so ~/.profile is sourced
+  // (makes tools like claude available even when tmux was started from a non-login shell)
+  const defaultShell = process.env.SHELL || "/bin/bash";
+  bunExec(["tmux", "set-option", "-g", "default-command", `${defaultShell} -l`]);
+
   const hasAutoTarget = config.targets.some((t) => t.type === "auto");
   let autoSessions: SessionInfo[] = [];
   if (hasAutoTarget) {
