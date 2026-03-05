@@ -63,34 +63,46 @@ interface OutboundAgent {
 
 async function readSkillsDir(dir: string): Promise<{ name: string; files: { path: string; content: string }[] }[]> {
   const { readdir, stat } = await import("fs/promises");
-  const { join, relative } = await import("path");
+  const { join, relative, basename } = await import("path");
 
-  const entries = await readdir(dir);
   const skills: { name: string; files: { path: string; content: string }[] }[] = [];
 
-  for (const entry of entries) {
-    const entryPath = join(dir, entry);
-    const s = await stat(entryPath);
-    if (!s.isDirectory()) continue;
+  // Recursively find directories containing SKILL.md
+  async function findSkills(p: string) {
+    const entries = await readdir(p);
+    const hasSkillMd = entries.includes("SKILL.md");
 
-    const files: { path: string; content: string }[] = [];
-    async function walk(p: string) {
-      const items = await readdir(p);
-      for (const item of items) {
-        const full = join(p, item);
-        const st = await stat(full);
-        if (st.isDirectory()) {
-          await walk(full);
-        } else {
-          const content = await Bun.file(full).text();
-          files.push({ path: relative(entryPath, full), content });
+    if (hasSkillMd) {
+      const name = basename(p);
+      const files: { path: string; content: string }[] = [];
+      async function collectFiles(dir: string) {
+        const items = await readdir(dir);
+        for (const item of items) {
+          const full = join(dir, item);
+          const st = await stat(full);
+          if (st.isDirectory()) {
+            await collectFiles(full);
+          } else {
+            const content = await Bun.file(full).text();
+            files.push({ path: relative(p, full), content });
+          }
         }
       }
+      await collectFiles(p);
+      skills.push({ name, files });
+      return; // Don't recurse into a skill's subdirectories
     }
-    await walk(entryPath);
-    skills.push({ name: entry, files });
+
+    // No SKILL.md here — recurse into subdirectories
+    for (const entry of entries) {
+      if (entry.startsWith(".")) continue;
+      const entryPath = join(p, entry);
+      const s = await stat(entryPath);
+      if (s.isDirectory()) await findSkills(entryPath);
+    }
   }
 
+  await findSkills(dir);
   return skills;
 }
 
