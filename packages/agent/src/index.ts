@@ -324,6 +324,19 @@ async function main() {
     }
   }
 
+  function handleReadFile(requestId: string, path: string) {
+    const resolved = path.startsWith("~")
+      ? path.replace("~", process.env.HOME ?? "/root")
+      : path;
+    const localCap = new TmuxCapture(bunExec);
+    const result = localCap.readFile(resolved);
+    if ("error" in result) {
+      conn.sendFileContent(config.machineId, requestId, resolved, undefined, result.error);
+    } else {
+      conn.sendFileContent(config.machineId, requestId, resolved, result.content, undefined, result.truncated);
+    }
+  }
+
   function handleCreateDirectory(requestId: string, path: string) {
     const resolved = path.startsWith("~")
       ? path.replace("~", process.env.HOME ?? "/root")
@@ -393,6 +406,7 @@ async function main() {
     sendScrollback(sessionId: string, lines: string[]): void;
     sendHookEvent(event: AgentHookEventMessage): void;
     sendDirectoryListing(machineId: string, requestId: string, path: string, entries: { name: string; isDir: boolean }[], error?: string): void;
+    sendFileContent(machineId: string, requestId: string, path: string, content?: string, error?: string, truncated?: { totalLines: number; headLines: number; tailLines: number }): void;
     sendDeployResult(requestId: string, success: boolean, error?: string): void;
     sendSettingsSnapshot(requestId: string, settings: Record<string, unknown>, scope: "global" | "project", deployedSkills?: string[]): void;
     sendSettingsResult(requestId: string, success: boolean, error?: string): void;
@@ -412,6 +426,7 @@ async function main() {
       onRequestScrollback: handleRequestScrollback,
       onReloadSession: handleReloadSession,
       onListDirectory: handleListDirectory,
+      onReadFile: handleReadFile,
       onCreateDirectory: handleCreateDirectory,
       onDeploySkills: handleDeploySkills,
       onRemoveSkills: handleRemoveSkills,
@@ -442,6 +457,7 @@ async function main() {
       onRequestScrollback: handleRequestScrollback,
       onReloadSession: handleReloadSession,
       onListDirectory: handleListDirectory,
+      onReadFile: handleReadFile,
       onCreateDirectory: handleCreateDirectory,
       onDeploySkills: handleDeploySkills,
       onRemoveSkills: handleRemoveSkills,

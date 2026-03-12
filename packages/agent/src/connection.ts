@@ -10,6 +10,7 @@ interface AgentConnectionOptions {
   onRequestScrollback?: (sessionId: string) => void;
   onReloadSession?: (sessionId: string, args?: string, resume?: boolean) => void;
   onListDirectory?: (requestId: string, path: string) => void;
+  onReadFile?: (requestId: string, path: string) => void;
   onCreateDirectory?: (requestId: string, path: string) => void;
   onDeploySkills?: (requestId: string, skills: { name: string; files: { path: string; content: string }[] }[]) => void;
   onRemoveSkills?: (requestId: string, skillNames: string[]) => void;
@@ -107,6 +108,8 @@ export class AgentConnection {
           this.opts.onReloadSession?.(msg.sessionId, msg.args, msg.resume);
         } else if (msg.type === "list_directory") {
           this.opts.onListDirectory?.(msg.requestId, msg.path);
+        } else if (msg.type === "read_file") {
+          this.opts.onReadFile?.(msg.requestId, msg.path);
         } else if (msg.type === "create_directory") {
           this.opts.onCreateDirectory?.(msg.requestId, msg.path);
         } else if (msg.type === "deploy_skills") {
@@ -193,6 +196,19 @@ export class AgentConnection {
       entries,
     };
     if (error) msg.error = error;
+    this.safeSend(JSON.stringify(msg));
+  }
+
+  sendFileContent(machineId: string, requestId: string, path: string, content?: string, error?: string, truncated?: { totalLines: number; headLines: number; tailLines: number }) {
+    const msg: Record<string, any> = {
+      type: "file_content",
+      machineId,
+      requestId,
+      path,
+    };
+    if (content !== undefined) msg.content = content;
+    if (error) msg.error = error;
+    if (truncated) msg.truncated = truncated;
     this.safeSend(JSON.stringify(msg));
   }
 
