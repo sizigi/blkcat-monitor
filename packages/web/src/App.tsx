@@ -352,6 +352,27 @@ export default function App() {
     return getSessionName(selectedMachine, selectedSession, defaultName);
   }, [machines, selectedMachine, selectedSession, getSessionName]);
 
+  // Derive file browser context: works for both single session and split view
+  const fileBrowserContext = useMemo(() => {
+    if (selectedMachine) {
+      return { machineId: selectedMachine, cwd: selectedSessionData?.cwd };
+    }
+    if (selectedView) {
+      const view = views.find((v) => v.id === selectedView);
+      const pane = view?.panes[0];
+      if (pane) {
+        const machine = machines.find((m) => m.machineId === pane.machineId);
+        const session = machine?.sessions.find((s) => s.id === pane.sessionId);
+        return { machineId: pane.machineId, cwd: session?.cwd };
+      }
+    }
+    // Fallback: first machine
+    if (machines.length > 0) {
+      return { machineId: machines[0].machineId, cwd: undefined };
+    }
+    return null;
+  }, [selectedMachine, selectedSessionData, selectedView, views, machines]);
+
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     resizing.current = true;
@@ -865,7 +886,7 @@ export default function App() {
         </div>
       )}
       {/* Desktop: file browser panel */}
-      {!isMobile && panelTab === "files" && selectedMachine && (
+      {!isMobile && panelTab === "files" && fileBrowserContext && (
         <div style={{
           position: "absolute",
           top: 0,
@@ -876,10 +897,10 @@ export default function App() {
           overflow: "hidden",
         }}>
           <FileBrowser
-            machineId={selectedMachine}
-            initialPath={selectedSessionData?.cwd}
+            machineId={fileBrowserContext.machineId}
+            initialPath={fileBrowserContext.cwd}
             listDirectory={listDirectory}
-            onFileSelect={(path) => setViewingFile({ machineId: selectedMachine!, path })}
+            onFileSelect={(path) => setViewingFile({ machineId: fileBrowserContext.machineId, path })}
             onClose={() => setPanelTab(null)}
           />
         </div>
@@ -941,14 +962,14 @@ export default function App() {
         </div>
       )}
       {/* Mobile: file browser panel overlay */}
-      {isMobile && panelTab === "files" && selectedMachine && (
+      {isMobile && panelTab === "files" && fileBrowserContext && (
         <div className="panel-overlay" style={{ overflow: "hidden", background: "var(--bg, #000)" }}>
           <FileBrowser
-            machineId={selectedMachine}
-            initialPath={selectedSessionData?.cwd}
+            machineId={fileBrowserContext.machineId}
+            initialPath={fileBrowserContext.cwd}
             listDirectory={listDirectory}
             onFileSelect={(path) => {
-              setViewingFile({ machineId: selectedMachine!, path });
+              setViewingFile({ machineId: fileBrowserContext.machineId, path });
               setPanelTab(null);
             }}
             onClose={() => setPanelTab(null)}
