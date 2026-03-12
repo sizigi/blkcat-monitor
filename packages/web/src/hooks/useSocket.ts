@@ -82,6 +82,7 @@ export interface UseSocketReturn {
   notificationCounts: Map<string, number>;
   clearNotifications: (sessionKey: string) => void;
   listDirectory: (machineId: string, path: string) => Promise<{ path: string; entries: { name: string; isDir: boolean }[]; error?: string }>;
+  readFile: (machineId: string, path: string) => Promise<{ path: string; content?: string; error?: string; truncated?: { totalLines: number; headLines: number; tailLines: number } }>;
   createDirectory: (machineId: string, path: string) => Promise<{ path: string; success: boolean; error?: string }>;
   sendRaw: (msg: object) => void;
   deploySkills: (machineId: string, skills: { name: string; files: { path: string; content: string }[] }[]) => string;
@@ -123,6 +124,7 @@ export function useSocket(url: string): UseSocketReturn {
   const hookEventSubsRef = useRef(new Set<(event: AgentHookEventMessage) => void>());
 
   const directoryListingSubsRef = useRef(new Map<string, (msg: { path: string; entries: { name: string; isDir: boolean }[]; error?: string }) => void>());
+  const fileContentSubsRef = useRef(new Map<string, (msg: { path: string; content?: string; error?: string; truncated?: { totalLines: number; headLines: number; tailLines: number } }) => void>());
   const createDirSubsRef = useRef(new Map<string, (msg: { path: string; success: boolean; error?: string }) => void>());
 
   const deployResultSubsRef = useRef(new Set<(msg: any) => void>());
@@ -355,6 +357,12 @@ export function useSocket(url: string): UseSocketReturn {
               directoryListingSubsRef.current.delete(msg.requestId);
               cb({ path: msg.path, entries: (msg as any).entries ?? [], error: (msg as any).error });
             }
+          } else if (msg.type === "file_content") {
+            const cb = fileContentSubsRef.current.get(msg.requestId);
+            if (cb) {
+              fileContentSubsRef.current.delete(msg.requestId);
+              cb({ path: msg.path, content: (msg as any).content, error: (msg as any).error, truncated: (msg as any).truncated });
+            }
           } else if ((msg as any).type === "create_directory_result") {
             const m = msg as any;
             const cb = createDirSubsRef.current.get(m.requestId);
@@ -518,6 +526,28 @@ export function useSocket(url: string): UseSocketReturn {
     [],
   );
 
+  const readFile = useCallback(
+    (machineId: string, path: string): Promise<{ path: string; content?: string; error?: string; truncated?: { totalLines: number; headLines: number; tailLines: number } }> => {
+      const ws = wsRef.current;
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        return Promise.resolve({ path, error: "Not connected" });
+      }
+      const requestId = Math.random().toString(36).slice(2) + Date.now().toString(36);
+      return new Promise((resolve) => {
+        const timeout = setTimeout(() => {
+          fileContentSubsRef.current.delete(requestId);
+          resolve({ path, error: "Timeout" });
+        }, 15000);
+        fileContentSubsRef.current.set(requestId, (result) => {
+          clearTimeout(timeout);
+          resolve(result);
+        });
+        ws.send(JSON.stringify({ type: "read_file", machineId, requestId, path }));
+      });
+    },
+    [],
+  );
+
   const createDirectory = useCallback(
     (machineId: string, path: string): Promise<{ path: string; success: boolean; error?: string }> => {
       const ws = wsRef.current;
@@ -616,5 +646,5 @@ export function useSocket(url: string): UseSocketReturn {
     sendRaw({ type: "delete_view", id });
   }, [sendRaw]);
 
-  return { connected, machines, views, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory, createDirectory, sendRaw, deploySkills, removeSkills, getSettings, updateSettings, subscribeDeployResult, subscribeSettingsSnapshot, subscribeSettingsResult, setDisplayName, subscribeDisplayNames, subscribeReloadResult, swapPane, swapWindow, movePane, moveWindow, rediscover, createView, updateView, deleteView };
+  return { connected, machines, views, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory, readFile, createDirectory, sendRaw, deploySkills, removeSkills, getSettings, updateSettings, subscribeDeployResult, subscribeSettingsSnapshot, subscribeSettingsResult, setDisplayName, subscribeDisplayNames, subscribeReloadResult, swapPane, swapWindow, movePane, moveWindow, rediscover, createView, updateView, deleteView };
 }

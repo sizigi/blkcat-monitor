@@ -22,8 +22,10 @@ import { useHealth } from "./hooks/useHealth";
 import { useAttachedTerminals } from "./hooks/useAttachedTerminals";
 import { useCwdGroupOrder } from "./hooks/useCwdGroupOrder";
 import { useMachineOrder } from "./hooks/useMachineOrder";
-import { Menu, Pencil, ClipboardList, Bell, Settings, Activity, Plug } from "./components/Icons";
+import { Menu, Pencil, ClipboardList, Bell, Settings, Activity, Plug, Folder } from "./components/Icons";
 import { AgentManager } from "./components/AgentManager";
+import { FileBrowser } from "./components/FileBrowser";
+import { FileViewer } from "./components/FileViewer";
 
 const WS_URL =
   (import.meta as any).env?.VITE_WS_URL ??
@@ -34,7 +36,7 @@ const MIN_SIDEBAR_WIDTH = 160;
 const MAX_SIDEBAR_WIDTH = 500;
 
 export default function App() {
-  const { connected, machines, views, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory, createDirectory, deploySkills, removeSkills, getSettings, updateSettings, subscribeDeployResult, subscribeSettingsSnapshot, subscribeSettingsResult, setDisplayName, subscribeDisplayNames, subscribeReloadResult, swapPane, swapWindow, movePane, moveWindow, rediscover, createView, updateView, deleteView } = useSocket(WS_URL);
+  const { connected, machines, views, waitingSessions, activeSessions, outputMapRef, logMapRef, scrollbackMapRef, subscribeOutput, subscribeScrollback, sendInput, startSession, closeSession, reloadSession, sendResize, requestScrollback, hookEventsRef, subscribeHookEvents, notificationCounts, clearNotifications, listDirectory, createDirectory, readFile, deploySkills, removeSkills, getSettings, updateSettings, subscribeDeployResult, subscribeSettingsSnapshot, subscribeSettingsResult, setDisplayName, subscribeDisplayNames, subscribeReloadResult, swapPane, swapWindow, movePane, moveWindow, rediscover, createView, updateView, deleteView } = useSocket(WS_URL);
   const { agents, addAgent, removeAgent } = useAgents();
   const { getMachineName, getSessionName, setMachineName, setSessionName } = useDisplayNames({
     sendDisplayName: setDisplayName,
@@ -111,7 +113,8 @@ export default function App() {
   const [showCreateViewModal, setShowCreateViewModal] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
-  const [panelTab, setPanelTab] = useState<"events" | "notifications" | "skills" | "health" | "agents" | null>(null);
+  const [panelTab, setPanelTab] = useState<"events" | "notifications" | "skills" | "health" | "agents" | "files" | null>(null);
+  const [viewingFile, setViewingFile] = useState<{ machineId: string; path: string } | null>(null);
   const health = useHealth(panelTab === "health");
   const [settingsSession, setSettingsSession] = useState<{ machineId: string; sessionId: string } | null>(null);
   const [newSessionModal, setNewSessionModal] = useState<{ machineId: string; cwd?: string } | null>(null);
@@ -379,6 +382,7 @@ export default function App() {
 
   // When clicking a session, check if it belongs to a view — if so, select that view and focus
   const handleSelectSession = useCallback((machineId: string, sessionId: string) => {
+    setViewingFile(null);
     const containingView = views.find((v) =>
       v.panes.some((p) => p.machineId === machineId && p.sessionId === sessionId)
     );
@@ -658,7 +662,7 @@ export default function App() {
             title="Rename session"
           ><Pencil size={14} /></button>
         )}
-        {(["events", "notifications", "skills", "health", "agents"] as const).map((tab) => (
+        {(["files", "events", "notifications", "skills", "health", "agents"] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setPanelTab((v) => v === tab ? null : tab)}
@@ -674,7 +678,7 @@ export default function App() {
               gap: 2,
             }}
           >
-            {tab === "events" ? <ClipboardList size={16} /> : tab === "notifications" ? (() => {
+            {tab === "files" ? <Folder size={16} /> : tab === "events" ? <ClipboardList size={16} /> : tab === "notifications" ? (() => {
               let total = 0;
               for (const c of notificationCounts.values()) total += c;
               return <><Bell size={16} />{total > 0 && <span style={{ fontSize: 11, fontWeight: 600 }}>{total}</span>}</>;
@@ -737,7 +741,14 @@ export default function App() {
           <span style={{ fontWeight: 400, opacity: 0.7 }}>`` ~~ literal</span>
           <span style={{ fontWeight: 400, opacity: 0.7 }}>Esc cancel</span>
         </div>
-        {selectedView && (() => {
+        {viewingFile ? (
+          <FileViewer
+            machineId={viewingFile.machineId}
+            filePath={viewingFile.path}
+            readFile={readFile}
+            onClose={() => setViewingFile(null)}
+          />
+        ) : selectedView ? (() => {
           const view = views.find((v) => v.id === selectedView);
           if (!view || view.panes.length === 0) {
             return (
@@ -782,8 +793,7 @@ export default function App() {
               cyclePaneRef={cyclePaneRef}
             />
           );
-        })()}
-        {selectedView ? null : selectedMachine && selectedSession ? (
+        })() : selectedMachine && selectedSession ? (
           <SessionDetail
             machineId={selectedMachine}
             sessionId={selectedSession}
@@ -815,7 +825,7 @@ export default function App() {
         )}
       </main>
       {/* Desktop: panel content overlay next to sidebar */}
-      {!isMobile && panelTab && panelTab !== "skills" && (
+      {!isMobile && panelTab && panelTab !== "skills" && panelTab !== "files" && (
         <div style={{
           position: "absolute",
           top: 0,
@@ -854,6 +864,26 @@ export default function App() {
           )}
         </div>
       )}
+      {/* Desktop: file browser panel */}
+      {!isMobile && panelTab === "files" && selectedMachine && (
+        <div style={{
+          position: "absolute",
+          top: 0,
+          left: sidebarCollapsed ? 0 : sidebarWidth + 4,
+          bottom: 0,
+          width: 320,
+          zIndex: 20,
+          overflow: "hidden",
+        }}>
+          <FileBrowser
+            machineId={selectedMachine}
+            initialPath={selectedSessionData?.cwd}
+            listDirectory={listDirectory}
+            onFileSelect={(path) => setViewingFile({ machineId: selectedMachine!, path })}
+            onClose={() => setPanelTab(null)}
+          />
+        </div>
+      )}
       {/* Full-width skills matrix overlay */}
       {panelTab === "skills" && (
         <div className="panel-overlay" style={{
@@ -879,7 +909,7 @@ export default function App() {
         </div>
       )}
       {/* Mobile: full-screen panel overlay (rendered outside pointer-events:none container) */}
-      {isMobile && panelTab && panelTab !== "skills" && (
+      {isMobile && panelTab && panelTab !== "skills" && panelTab !== "files" && (
         <div className="panel-overlay" style={{ overflow: "hidden" }}>
           {panelTab === "events" ? (
             <EventFeed
@@ -908,6 +938,18 @@ export default function App() {
               onClose={() => setPanelTab(null)}
             />
           )}
+        </div>
+      )}
+      {/* Mobile: file browser panel overlay */}
+      {isMobile && panelTab === "files" && selectedMachine && (
+        <div className="panel-overlay" style={{ overflow: "hidden" }}>
+          <FileBrowser
+            machineId={selectedMachine}
+            initialPath={selectedSessionData?.cwd}
+            listDirectory={listDirectory}
+            onFileSelect={(path) => setViewingFile({ machineId: selectedMachine!, path })}
+            onClose={() => setPanelTab(null)}
+          />
         </div>
       )}
       {/* Project settings modal */}
