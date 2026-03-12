@@ -337,6 +337,57 @@ export class TmuxCapture {
     return { entries };
   }
 
+  readFile(path: string): { content: string; truncated?: { totalLines: number; headLines: number; tailLines: number } } | { error: string } {
+    const resolved = path.startsWith("~")
+      ? path.replace("~", process.env.HOME ?? "/root")
+      : path;
+
+    // Check file size first
+    const sizeCmd = [...this.sshPrefix, "stat", "-c", "%s", resolved];
+    const sizeResult = this.exec(sizeCmd);
+    if (!sizeResult.success) return { error: "File not found or not accessible" };
+
+    const fileSize = parseInt(sizeResult.stdout.trim(), 10);
+    if (isNaN(fileSize)) return { error: "Cannot determine file size" };
+
+    const MAX_SIZE = 1_000_000; // 1MB
+
+    if (fileSize <= MAX_SIZE) {
+      // Read entire file
+      const cmd = [...this.sshPrefix, "cat", resolved];
+      const result = this.exec(cmd);
+      if (!result.success) return { error: "Failed to read file" };
+
+      // Check for binary content (null bytes)
+      if (result.stdout.includes("\0")) return { error: "Binary file" };
+
+      return { content: result.stdout };
+    }
+
+    // Large file: head + tail + line count
+    const wcCmd = [...this.sshPrefix, "wc", "-l", resolved];
+    const wcResult = this.exec(wcCmd);
+    const totalLines = parseInt((wcResult.stdout || "0").trim().split(/\s+/)[0], 10) || 0;
+
+    const HEAD_LINES = 100;
+    const TAIL_LINES = 50;
+
+    const headCmd = [...this.sshPrefix, "head", `-${HEAD_LINES}`, resolved];
+    const headResult = this.exec(headCmd);
+    if (!headResult.success) return { error: "Failed to read file" };
+    if (headResult.stdout.includes("\0")) return { error: "Binary file" };
+
+    const tailCmd = [...this.sshPrefix, "tail", `-${TAIL_LINES}`, resolved];
+    const tailResult = this.exec(tailCmd);
+    if (!tailResult.success) return { error: "Failed to read file" };
+
+    const content = headResult.stdout + "\n... (truncated) ...\n" + tailResult.stdout;
+    return {
+      content,
+      truncated: { totalLines, headLines: HEAD_LINES, tailLines: TAIL_LINES },
+    };
+  }
+
   createDirectory(path: string): { success: boolean; error?: string } {
     const resolved = path.startsWith("~")
       ? path.replace("~", process.env.HOME ?? "/root")
