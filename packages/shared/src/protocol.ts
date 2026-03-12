@@ -117,6 +117,16 @@ export interface AgentDirectoryListingMessage {
   error?: string;
 }
 
+export interface AgentFileContentMessage {
+  type: "file_content";
+  machineId: string;
+  requestId: string;
+  path: string;
+  content?: string;
+  error?: string;
+  truncated?: { totalLines: number; headLines: number; tailLines: number };
+}
+
 export interface AgentDeployResultMessage {
   type: "deploy_result";
   machineId: string;
@@ -166,6 +176,7 @@ export type AgentToServerMessage =
   | AgentScrollbackMessage
   | AgentHookEventMessage
   | AgentDirectoryListingMessage
+  | AgentFileContentMessage
   | AgentDeployResultMessage
   | AgentSettingsSnapshotMessage
   | AgentSettingsResultMessage
@@ -216,6 +227,12 @@ export interface ServerReloadSessionMessage {
 
 export interface ServerListDirectoryMessage {
   type: "list_directory";
+  requestId: string;
+  path: string;
+}
+
+export interface ServerReadFileMessage {
+  type: "read_file";
   requestId: string;
   path: string;
 }
@@ -291,7 +308,7 @@ export interface ServerRediscoverMessage {
   type: "rediscover";
 }
 
-export type ServerToAgentMessage = ServerInputMessage | ServerStartSessionMessage | ServerCloseSessionMessage | ServerResizeMessage | ServerRequestScrollbackMessage | ServerReloadSessionMessage | ServerListDirectoryMessage | ServerDeploySkillsMessage | ServerGetSettingsMessage | ServerUpdateSettingsMessage | ServerRemoveSkillsMessage | ServerCreateDirectoryMessage | ServerRenameSessionMessage | ServerSwapPaneMessage | ServerSwapWindowMessage | ServerMovePaneMessage | ServerMoveWindowMessage | ServerRediscoverMessage;
+export type ServerToAgentMessage = ServerInputMessage | ServerStartSessionMessage | ServerCloseSessionMessage | ServerResizeMessage | ServerRequestScrollbackMessage | ServerReloadSessionMessage | ServerListDirectoryMessage | ServerReadFileMessage | ServerDeploySkillsMessage | ServerGetSettingsMessage | ServerUpdateSettingsMessage | ServerRemoveSkillsMessage | ServerCreateDirectoryMessage | ServerRenameSessionMessage | ServerSwapPaneMessage | ServerSwapWindowMessage | ServerMovePaneMessage | ServerMoveWindowMessage | ServerRediscoverMessage;
 
 // --- Server -> Dashboard messages ---
 
@@ -357,6 +374,16 @@ export interface ServerDirectoryListingMessage {
   error?: string;
 }
 
+export interface ServerFileContentMessage {
+  type: "file_content";
+  machineId: string;
+  requestId: string;
+  path: string;
+  content?: string;
+  error?: string;
+  truncated?: { totalLines: number; headLines: number; tailLines: number };
+}
+
 export interface ServerDeployResultMessage {
   type: "deploy_result";
   machineId: string;
@@ -406,6 +433,7 @@ export type ServerToDashboardMessage =
   | ServerScrollbackMessage
   | ServerHookEventMessage
   | ServerDirectoryListingMessage
+  | ServerFileContentMessage
   | ServerDeployResultMessage
   | ServerSettingsSnapshotMessage
   | ServerSettingsResultMessage
@@ -465,6 +493,13 @@ export interface DashboardReloadSessionMessage {
 
 export interface DashboardListDirectoryMessage {
   type: "list_directory";
+  machineId: string;
+  requestId: string;
+  path: string;
+}
+
+export interface DashboardReadFileMessage {
+  type: "read_file";
   machineId: string;
   requestId: string;
   path: string;
@@ -570,7 +605,7 @@ export interface DashboardDeleteViewMessage {
   id: string;
 }
 
-export type DashboardToServerMessage = DashboardInputMessage | DashboardStartSessionMessage | DashboardCloseSessionMessage | DashboardResizeMessage | DashboardRequestScrollbackMessage | DashboardReloadSessionMessage | DashboardListDirectoryMessage | DashboardDeploySkillsMessage | DashboardGetSettingsMessage | DashboardUpdateSettingsMessage | DashboardRemoveSkillsMessage | DashboardSetDisplayNameMessage | DashboardCreateDirectoryMessage | DashboardSwapPaneMessage | DashboardSwapWindowMessage | DashboardMovePaneMessage | DashboardMoveWindowMessage | DashboardRediscoverMessage | DashboardCreateViewMessage | DashboardUpdateViewMessage | DashboardDeleteViewMessage;
+export type DashboardToServerMessage = DashboardInputMessage | DashboardStartSessionMessage | DashboardCloseSessionMessage | DashboardResizeMessage | DashboardRequestScrollbackMessage | DashboardReloadSessionMessage | DashboardListDirectoryMessage | DashboardReadFileMessage | DashboardDeploySkillsMessage | DashboardGetSettingsMessage | DashboardUpdateSettingsMessage | DashboardRemoveSkillsMessage | DashboardSetDisplayNameMessage | DashboardCreateDirectoryMessage | DashboardSwapPaneMessage | DashboardSwapWindowMessage | DashboardMovePaneMessage | DashboardMoveWindowMessage | DashboardRediscoverMessage | DashboardCreateViewMessage | DashboardUpdateViewMessage | DashboardDeleteViewMessage;
 
 // --- Outbound agent info ---
 
@@ -585,8 +620,8 @@ export const NOTIFY_HOOK_EVENTS = new Set(["Stop", "Notification", "PermissionRe
 
 // --- Parsers ---
 
-const AGENT_TYPES = new Set(["register", "output", "sessions", "scrollback", "hook_event", "directory_listing", "deploy_result", "settings_snapshot", "settings_result", "reload_session_result", "create_directory_result"]);
-const DASHBOARD_TYPES = new Set(["input", "start_session", "close_session", "resize", "request_scrollback", "reload_session", "list_directory", "deploy_skills", "get_settings", "update_settings", "remove_skills", "set_display_name", "create_directory", "rename_session", "swap_pane", "swap_window", "move_pane", "move_window", "rediscover", "create_view", "update_view", "delete_view"]);
+const AGENT_TYPES = new Set(["register", "output", "sessions", "scrollback", "hook_event", "directory_listing", "file_content", "deploy_result", "settings_snapshot", "settings_result", "reload_session_result", "create_directory_result"]);
+const DASHBOARD_TYPES = new Set(["input", "start_session", "close_session", "resize", "request_scrollback", "reload_session", "list_directory", "read_file", "deploy_skills", "get_settings", "update_settings", "remove_skills", "set_display_name", "create_directory", "rename_session", "swap_pane", "swap_window", "move_pane", "move_window", "rediscover", "create_view", "update_view", "delete_view"]);
 
 export function parseAgentMessage(raw: string): AgentToServerMessage | null {
   try {
