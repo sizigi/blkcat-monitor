@@ -221,6 +221,8 @@ export function createServer(opts: ServerOptions) {
       }
     } else if (msg.type === "directory_listing") {
       broadcastToDashboards(msg);
+    } else if (msg.type === "file_content") {
+      broadcastToDashboards(msg);
     } else if (msg.type === "create_directory_result") {
       broadcastToDashboards(msg);
     } else if (msg.type === "deploy_result" || msg.type === "settings_snapshot" || msg.type === "settings_result" || msg.type === "reload_session_result") {
@@ -541,6 +543,15 @@ export function createServer(opts: ServerOptions) {
             if (machine) {
               machine.agent.send(JSON.stringify({
                 type: "list_directory",
+                requestId: msg.requestId,
+                path: msg.path,
+              }));
+            }
+          } else if (msg.type === "read_file") {
+            const machine = machines.get(msg.machineId);
+            if (machine) {
+              machine.agent.send(JSON.stringify({
+                type: "read_file",
                 requestId: msg.requestId,
                 path: msg.path,
               }));
