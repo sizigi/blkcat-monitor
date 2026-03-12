@@ -47,7 +47,7 @@ export function FileViewer({ machineId, filePath, readFile, onClose }: FileViewe
   const lines = content?.split("\n") ?? [];
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "var(--bg-primary)", color: "var(--text-primary)" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "var(--bg-primary, #111)", color: "var(--text-primary, #eee)" }}>
       {/* Header */}
       <div style={{
         display: "flex",

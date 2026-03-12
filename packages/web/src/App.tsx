@@ -942,12 +942,15 @@ export default function App() {
       )}
       {/* Mobile: file browser panel overlay */}
       {isMobile && panelTab === "files" && selectedMachine && (
-        <div className="panel-overlay" style={{ overflow: "hidden" }}>
+        <div className="panel-overlay" style={{ overflow: "hidden", background: "var(--bg, #000)" }}>
           <FileBrowser
             machineId={selectedMachine}
             initialPath={selectedSessionData?.cwd}
             listDirectory={listDirectory}
-            onFileSelect={(path) => setViewingFile({ machineId: selectedMachine!, path })}
+            onFileSelect={(path) => {
+              setViewingFile({ machineId: selectedMachine!, path });
+              setPanelTab(null);
+            }}
             onClose={() => setPanelTab(null)}
           />
         </div>

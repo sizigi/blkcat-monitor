@@ -79,7 +79,7 @@ export function FileBrowser({ machineId, initialPath, listDirectory, onFileSelec
   });
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "var(--bg-primary)", color: "var(--text-primary)" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "var(--bg-primary, #111)", color: "var(--text-primary, #eee)" }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderBottom: "1px solid var(--border-color)" }}>
         <span style={{ fontWeight: 600, fontSize: 13 }}>Files</span>
