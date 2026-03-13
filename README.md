@@ -330,6 +330,88 @@ curl -s -X POST http://localhost:3000/api/agents \
   -d '{"address":"remote-host:4000"}'
 ```
 
+### Persistent agent with auto-restart
+
+The `scripts/agent-loop.sh` wrapper automatically restarts the agent if it crashes (with a 5-second delay):
+
+```bash
+ssh user@remote-host 'tmux send-keys -t claude \
+  "cd ~/blkcat-monitor && BLKCAT_LISTEN_PORT=4000 ./scripts/agent-loop.sh" Enter'
+```
+
+Sample output when an agent crashes and restarts:
+
+```
+[2026-03-12 19:37:43] Starting agent on port 4000...
+Found 3 sessions to monitor
+Listening on port 4000 as my-host
+...
+[2026-03-12 20:15:02] Agent exited (code 1), restarting in 5s...
+[2026-03-12 20:15:07] Starting agent on port 4000...
+```
+
+### Auto-reconnect monitor
+
+The `scripts/ensure-agents.sh` script checks `/api/sessions` for expected machines and reconnects any that have dropped. Edit the `AGENTS` associative array inside the script to configure your machines:
+
+```bash
+declare -A AGENTS=(
+  [my-host]="10.0.0.1:4000"
+  [other-host]="localhost:14000"
+)
+```
+
+Run it manually or on a timer:
+
+```bash
+# Manual check
+./scripts/ensure-agents.sh
+
+# systemd user timer (every 5 minutes)
+# Create ~/.config/systemd/user/blkcat-ensure-agents.service:
+#   [Service]
+#   Type=oneshot
+#   ExecStart=/path/to/blkcat-monitor/scripts/ensure-agents.sh
+#
+# Create ~/.config/systemd/user/blkcat-ensure-agents.timer:
+#   [Timer]
+#   OnBootSec=60
+#   OnUnitActiveSec=5min
+#   [Install]
+#   WantedBy=timers.target
+#
+# Enable: systemctl --user enable --now blkcat-ensure-agents.timer
+```
+
+### Persistent SSH tunnel with autossh
+
+For machines behind a firewall, use `autossh` with a systemd user service for a tunnel that auto-reconnects:
+
+```bash
+# Install autossh
+sudo apt install autossh
+
+# Create ~/.config/systemd/user/my-tunnel.service:
+#   [Unit]
+#   Description=SSH tunnel to remote-host (port 4000)
+#   [Service]
+#   Environment="AUTOSSH_GATETIME=0"
+#   ExecStart=/usr/bin/autossh -M 0 -N \
+#     -L 4000:localhost:4000 \
+#     -o ServerAliveInterval=30 \
+#     -o ServerAliveCountMax=3 \
+#     -o ExitOnForwardFailure=yes \
+#     remote-host
+#   Restart=always
+#   RestartSec=10
+#   [Install]
+#   WantedBy=default.target
+
+# Enable and start
+systemctl --user daemon-reload
+systemctl --user enable --now my-tunnel.service
+```
+
 ### Port conflicts
 
 The default ports `BLKCAT_LISTEN_PORT=4000` and `BLKCAT_HOOKS_PORT=3001` may already be in use on busy machines. Check with `ss -tlnp` and pick free ports:
