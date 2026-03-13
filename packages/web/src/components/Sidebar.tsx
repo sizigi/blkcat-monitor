@@ -3,7 +3,7 @@ import { CLI_TOOLS } from "@blkcat/shared";
 import type { MachineSnapshot, OutboundAgentInfo, SessionInfo, CliTool, View } from "@blkcat/shared";
 import { StartSessionModal } from "./StartSessionModal";
 import { ReloadSessionModal } from "./ReloadSessionModal";
-import { ChevronsLeft, ChevronDown, Settings, Check, X, RotateCw, Plus, ClipboardList, Bell, Activity, Plug, LayoutGrid } from "./Icons";
+import { ChevronsLeft, ChevronDown, Settings, Check, X, RotateCw, Plus, ClipboardList, Bell, Activity, Plug, LayoutGrid, Folder } from "./Icons";
 import { buildCwdGroups, shortenPath } from "../utils/cwdGroups";
 
 interface SidebarProps {
@@ -66,8 +66,8 @@ interface SidebarProps {
   onReorderCwdGroups?: (machineId: string, cwdRoots: string[]) => void;
   getOrderedMachines?: <T extends { machineId: string }>(machines: T[]) => T[];
   onReorderMachines?: (machineIds: string[]) => void;
-  panelTab?: "events" | "notifications" | "skills" | "health" | "agents" | null;
-  onPanelTab?: (tab: "events" | "notifications" | "skills" | "health" | "agents" | null) => void;
+  panelTab?: "events" | "notifications" | "skills" | "health" | "agents" | "files" | null;
+  onPanelTab?: (tab: "events" | "notifications" | "skills" | "health" | "agents" | "files" | null) => void;
 }
 
 export function Sidebar({
@@ -1513,7 +1513,7 @@ export function Sidebar({
           borderTop: "1px solid var(--border)",
           flexShrink: 0,
         }}>
-          {(["events", "notifications", "skills", "health", "agents"] as const).map((tab) => {
+          {(["files", "events", "notifications", "skills", "health", "agents"] as const).map((tab) => {
             const active = panelTab === tab;
             return (
               <button
@@ -1532,7 +1532,7 @@ export function Sidebar({
                   ...(tab === "agents" ? { marginLeft: "auto" } : {}),
                 }}
               >
-                {tab === "events" ? <ClipboardList size={16} /> : tab === "notifications" ? (() => {
+                {tab === "files" ? <Folder size={16} /> : tab === "events" ? <ClipboardList size={16} /> : tab === "notifications" ? (() => {
                   let total = 0;
                   if (notificationCounts) for (const c of notificationCounts.values()) total += c;
                   return <><Bell size={16} />{total > 0 && <span style={{ fontSize: 11, fontWeight: 600 }}>{total}</span>}</>;
