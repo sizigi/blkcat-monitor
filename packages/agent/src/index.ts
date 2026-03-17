@@ -68,6 +68,7 @@ async function main() {
   console.log(`Found ${allSessions.length} sessions to monitor`);
 
   const prevLines = new Map<string, string[]>();
+  const prevCursors = new Map<string, string>(); // "y,x" → deduplicate cursor updates
 
   function handleInput({ sessionId, text, key, data }: { sessionId: string; text?: string; key?: string; data?: string }) {
     const cap = captures.get(sessionId);
@@ -88,6 +89,7 @@ async function main() {
     cap.killPane(sessionId);
     captures.delete(sessionId);
     prevLines.delete(sessionId);
+    prevCursors.delete(sessionId);
     sessionIds.delete(sessionId);
     // Remove ALL entries with this ID from manual sessions (prevent stale duplicates)
     for (let i = manualSessions.length - 1; i >= 0; i--) {
@@ -106,6 +108,7 @@ async function main() {
     cap.resizePane(sessionId, cols, rows);
     // Clear cache so the next poll cycle re-sends content at new dimensions
     prevLines.delete(sessionId);
+    prevCursors.delete(sessionId);
   }
 
   function handleRequestScrollback(sessionId: string) {
@@ -142,6 +145,7 @@ async function main() {
       return;
     }
     prevLines.delete(sessionId);
+    prevCursors.delete(sessionId);
     // Clear stale session UUID so hooks server repopulates from new session
     sessionIds.delete(sessionId);
     // Protect this pane from auto-discovery removal during bash->cli transition
@@ -225,7 +229,7 @@ async function main() {
     );
     if (newSessions.length > 0 || goneSessions.length > 0) {
       for (const s of newSessions) captures.set(s.id, new TmuxCapture(bunExec));
-      for (const s of goneSessions) { captures.delete(s.id); prevLines.delete(s.id); }
+      for (const s of goneSessions) { captures.delete(s.id); prevLines.delete(s.id); prevCursors.delete(s.id); }
     }
     // Clean up sticky entries for sessions no longer in tmux
     const freshIds = new Set(fresh.map((s) => s.id));
@@ -252,6 +256,7 @@ async function main() {
         manualSessions.splice(i, 1);
         captures.delete(manual.id);
         prevLines.delete(manual.id);
+        prevCursors.delete(manual.id);
       }
     }
     const manualIds = new Set(manualSessions.map((s) => s.id));
@@ -447,7 +452,7 @@ async function main() {
     });
     // When a new server connects, clear prevLines so the next poll cycle
     // re-sends the current pane content for all sessions.
-    listener.onNewClient = () => { prevLines.clear(); };
+    listener.onNewClient = () => { prevLines.clear(); prevCursors.clear(); };
     conn = listener;
     conn.register(allSessions);
     console.log(`Listening on port ${listener.port} as ${config.machineId}`);
@@ -475,7 +480,7 @@ async function main() {
       onMovePane: handleMovePane,
       onMoveWindow: handleMoveWindow,
       getSessions: () => [...autoSessions, ...manualSessions],
-      onReconnect: () => { prevLines.clear(); },
+      onReconnect: () => { prevLines.clear(); prevCursors.clear(); },
     });
     conn = connection;
     await connection.waitForOpen();
@@ -574,13 +579,17 @@ async function main() {
     if (!cap) return;
     const lines = cap.capturePane(paneId);
     const prev = prevLines.get(paneId) ?? [];
-    if (hasChanged(prev, lines)) {
+    const cursor = cap.getCursorPos(paneId);
+    const cursorKey = cursor ? `${cursor.y},${cursor.x}` : "";
+    const linesChanged = hasChanged(prev, lines);
+    const cursorChanged = cursorKey !== (prevCursors.get(paneId) ?? "");
+    if (linesChanged || cursorChanged) {
       const allSess = [...autoSessions, ...manualSessions];
       const sess = allSess.find((s) => s.id === paneId);
       const waitingForInput = sess?.cliTool ? detectWaitingForInput(lines) : false;
-      const cursor = cap.getCursorPos(paneId);
       conn.sendOutput(paneId, lines, waitingForInput, cursor ?? undefined);
       prevLines.set(paneId, lines);
+      if (cursorKey) prevCursors.set(paneId, cursorKey);
     }
   }
 

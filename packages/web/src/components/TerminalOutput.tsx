@@ -41,6 +41,7 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
   onResizeRef.current = onResize;
   const cursorRef = useRef(cursor);
   cursorRef.current = cursor;
+  const prevCursorRef = useRef(""); // "y,x" — skip repositioning if unchanged
   const sessionKeyRef = useRef(sessionKey);
   sessionKeyRef.current = sessionKey;
   const logMapRefRef = useRef(logMapRef);
@@ -525,6 +526,7 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
     const term = termRef.current;
     if (!term) return;
     prevLinesRef.current = [];
+    prevCursorRef.current = "";
     pendingLinesRef.current = null;
     scrollModeRef.current = false;
     scrollOffsetRef.current = 0;
@@ -556,10 +558,15 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
   useEffect(() => {
     const term = termRef.current;
     if (!term) return;
+    const cur = cursorRef.current;
+    const cursorKey = cur ? `${cur.y},${cur.x}` : "";
+    const cursorMoved = cursorKey !== prevCursorRef.current;
     // Cursor-only update: if lines haven't changed, just reposition cursor
     if (lines === prevLinesRef.current) {
-      const cur = cursorRef.current;
-      if (cur && !scrollModeRef.current) term.write(`\x1b[${cur.y + 1};${cur.x + 1}H`);
+      if (cursorMoved && cur && !scrollModeRef.current) {
+        term.write(`\x1b[${cur.y + 1};${cur.x + 1}H`);
+        prevCursorRef.current = cursorKey;
+      }
       return;
     }
     const prev = prevLinesRef.current;
@@ -569,8 +576,9 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
       return;
     }
     // Cursor positioning escape: \x1b[row;colH (1-based)
-    const cur = cursorRef.current;
+    // Always reposition after writing rows — writing moves xterm's internal cursor
     const cursorSeq = cur ? `\x1b[${cur.y + 1};${cur.x + 1}H` : "";
+    if (cur) prevCursorRef.current = cursorKey;
     // If previous was empty, do full write
     if (prev.length === 0) {
       term.write("\x1b[H\x1b[2J" + lines.join("\r\n") + cursorSeq);
@@ -582,13 +590,13 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
     for (let i = 0; i < maxRows; i++) {
       if (i < lines.length) {
         if (prev[i] !== lines[i]) {
-          buf += `\x1b[${i + 1};1H${lines[i]}\x1b[K`;
+          // Reset attributes before clearing to prevent style bleeding into erased area
+          buf += `\x1b[${i + 1};1H${lines[i]}\x1b[0m\x1b[K`;
         }
       } else {
         buf += `\x1b[${i + 1};1H\x1b[K`;
       }
     }
-    // Always append cursor positioning (even if no lines changed, cursor may have moved)
     buf += cursorSeq;
     if (buf) term.write(buf);
   }, [lines, cursor]);
@@ -600,6 +608,7 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
     fit.fit();
     term.write("\x1b[H\x1b[2J");
     prevLinesRef.current = [];
+    prevCursorRef.current = "";
     onResizeRef.current?.(term.cols, term.rows, true);
   }, []);
 
