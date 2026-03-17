@@ -564,12 +564,19 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
     // Cursor positioning: only for terminal sessions (not CLI tools)
     const shouldCursor = !hideCursor && cur;
     const cursorSeq = shouldCursor ? `\x1b[${cur.y + 1};${cur.x + 1}H` : "";
-    // Cursor-only update: if lines haven't changed, just reposition cursor
-    if (lines === prevLinesRef.current) {
+    const prev = prevLinesRef.current;
+    // Check if line content actually changed (not just array reference)
+    let linesChanged = lines.length !== prev.length;
+    if (!linesChanged) {
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i] !== prev[i]) { linesChanged = true; break; }
+      }
+    }
+    // Cursor-only update: just reposition, no row writes needed
+    if (!linesChanged) {
       if (shouldCursor && !scrollModeRef.current) term.write(cursorSeq);
       return;
     }
-    const prev = prevLinesRef.current;
     prevLinesRef.current = lines;
     if (scrollModeRef.current || term.hasSelection()) {
       pendingLinesRef.current = lines;
