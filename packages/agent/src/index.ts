@@ -75,8 +75,11 @@ async function main() {
     if (data) cap.sendRaw(sessionId, data);
     else if (text) cap.sendText(sessionId, text);
     if (key) cap.sendKey(sessionId, key);
-    // Immediate poll after input to reduce keystroke-to-screen latency
-    setTimeout(() => pollPane(sessionId), 5);
+    // Burst-poll after input to reduce keystroke-to-screen latency.
+    // Multiple polls catch both fast programs (shell echo) and slower ones (claude, vim).
+    for (const delay of [5, 30, 80]) {
+      setTimeout(() => pollPane(sessionId), delay);
+    }
   }
 
   function handleCloseSession(sessionId: string) {
