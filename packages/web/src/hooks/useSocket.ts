@@ -282,17 +282,20 @@ export function useSocket(url: string): UseSocketReturn {
             outputMapRef.current.set(key, entry);
 
             // Accumulate scrolled-off lines into per-session log
+            // Skip expensive scroll detection if lines haven't changed (cursor-only update)
             const prev = prevLinesMapRef.current.get(key) || [];
-            const scrolled = detectScrolled(prev, msg.lines);
-            if (scrolled > 0) {
-              let log = logMapRef.current.get(key);
-              if (!log) { log = []; logMapRef.current.set(key, log); }
-              log.push(...prev.slice(0, scrolled));
-              if (log.length > MAX_LOG_LINES) {
-                logMapRef.current.set(key, log.slice(-MAX_LOG_LINES));
+            if (prev.length !== msg.lines.length || prev.some((l, i) => l !== msg.lines[i])) {
+              const scrolled = detectScrolled(prev, msg.lines);
+              if (scrolled > 0) {
+                let log = logMapRef.current.get(key);
+                if (!log) { log = []; logMapRef.current.set(key, log); }
+                log.push(...prev.slice(0, scrolled));
+                if (log.length > MAX_LOG_LINES) {
+                  logMapRef.current.set(key, log.slice(-MAX_LOG_LINES));
+                }
               }
+              prevLinesMapRef.current.set(key, msg.lines);
             }
-            prevLinesMapRef.current.set(key, msg.lines);
 
             // Notify subscribers (only the selected session's hook re-renders)
             for (const sub of outputSubsRef.current) sub(key);

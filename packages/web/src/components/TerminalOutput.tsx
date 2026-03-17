@@ -43,6 +43,8 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
   onResizeRef.current = onResize;
   const cursorRef = useRef(cursor);
   cursorRef.current = cursor;
+  const hideCursorRef = useRef(hideCursor);
+  hideCursorRef.current = hideCursor;
   const sessionKeyRef = useRef(sessionKey);
   sessionKeyRef.current = sessionKey;
   const logMapRefRef = useRef(logMapRef);
@@ -152,7 +154,10 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
     if (scrollRafRef.current) { cancelAnimationFrame(scrollRafRef.current); scrollRafRef.current = 0; }
     const latest = pendingLinesRef.current || prevLinesRef.current;
     pendingLinesRef.current = null;
-    term.write("\x1b[H\x1b[2J" + latest.join("\r\n"));
+    prevLinesRef.current = latest;
+    const cur = cursorRef.current;
+    const cursorSeq = !hideCursorRef.current && cur ? `\x1b[${cur.y + 1};${cur.x + 1}H` : "";
+    term.write("\x1b[H\x1b[2J" + latest.join("\r\n") + cursorSeq);
     term.focus();
   }, []);
 
@@ -272,7 +277,9 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
         const deferred = pendingLinesRef.current;
         pendingLinesRef.current = null;
         prevLinesRef.current = deferred;
-        term.write("\x1b[H\x1b[2J" + deferred.join("\r\n"));
+        const cur = cursorRef.current;
+        const cSeq = !hideCursorRef.current && cur ? `\x1b[${cur.y + 1};${cur.x + 1}H` : "";
+        term.write("\x1b[H\x1b[2J" + deferred.join("\r\n") + cSeq);
       }
     });
 
@@ -555,6 +562,14 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
     return () => { clearTimeout(t); clearInterval(i); };
   }, [sessionKey]);
 
+  // Toggle cursor visibility when hideCursor prop changes (e.g., cliTool detected after startup)
+  useEffect(() => {
+    const term = termRef.current;
+    if (!term) return;
+    term.options.cursorBlink = !hideCursor && !!onData;
+    term.write(hideCursor ? "\x1b[?25l" : "\x1b[?25h");
+  }, [hideCursor]);
+
   // Write live terminal output — only update changed lines to avoid flicker.
   // For terminal sessions, reposition cursor after writes. For CLI sessions, hide it.
   useEffect(() => {
@@ -609,7 +624,7 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
     const term = termRef.current;
     if (!fit || !term) return;
     fit.fit();
-    term.write("\x1b[H\x1b[2J");
+    term.write("\x1b[H\x1b[2J" + (hideCursorRef.current ? "\x1b[?25l" : ""));
     prevLinesRef.current = [];
     onResizeRef.current?.(term.cols, term.rows, true);
   }, []);
