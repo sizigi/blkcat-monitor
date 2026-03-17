@@ -75,6 +75,8 @@ async function main() {
     if (data) cap.sendRaw(sessionId, data);
     else if (text) cap.sendText(sessionId, text);
     if (key) cap.sendKey(sessionId, key);
+    // Immediate poll after input to reduce keystroke-to-screen latency
+    setTimeout(() => pollPane(sessionId), 5);
   }
 
   function handleCloseSession(sessionId: string) {
@@ -564,19 +566,24 @@ async function main() {
     return false;
   }
 
+  function pollPane(paneId: string) {
+    const cap = captures.get(paneId);
+    if (!cap) return;
+    const lines = cap.capturePane(paneId);
+    const prev = prevLines.get(paneId) ?? [];
+    if (hasChanged(prev, lines)) {
+      const allSess = [...autoSessions, ...manualSessions];
+      const sess = allSess.find((s) => s.id === paneId);
+      const waitingForInput = sess?.cliTool ? detectWaitingForInput(lines) : false;
+      const cursor = cap.getCursorPos(paneId);
+      conn.sendOutput(paneId, lines, waitingForInput, cursor ?? undefined);
+      prevLines.set(paneId, lines);
+    }
+  }
+
   setInterval(() => {
-    for (const [paneId, cap] of captures) {
-      const lines = cap.capturePane(paneId);
-      const prev = prevLines.get(paneId) ?? [];
-      if (hasChanged(prev, lines)) {
-        // Only detect waiting-for-input for CLI tool sessions
-        const allSess = [...autoSessions, ...manualSessions];
-        const sess = allSess.find((s) => s.id === paneId);
-        const waitingForInput = sess?.cliTool ? detectWaitingForInput(lines) : false;
-        const cursor = cap.getCursorPos(paneId);
-        conn.sendOutput(paneId, lines, waitingForInput, cursor ?? undefined);
-        prevLines.set(paneId, lines);
-      }
+    for (const [paneId] of captures) {
+      pollPane(paneId);
     }
   }, config.pollInterval);
 
