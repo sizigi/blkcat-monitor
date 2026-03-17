@@ -638,6 +638,23 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
     return () => window.removeEventListener("blkcat:force-fit", handler);
   }, [forceFit]);
 
+  // Re-fit terminal when tab becomes visible (browsers suppress ResizeObserver for hidden tabs)
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        const fit = fitRef.current;
+        const term = termRef.current;
+        if (fit && term) {
+          fit.fit();
+          prevLinesRef.current = [];
+          onResizeRef.current?.(term.cols, term.rows, true);
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
+
   const hasLog = logMapRef?.current?.has(sessionKey ?? "") ?? false;
   const pd = useCallback((e: React.MouseEvent) => e.preventDefault(), []);
 
