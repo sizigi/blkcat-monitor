@@ -30,6 +30,8 @@ interface CrossMachineSplitViewProps {
   focusSeq?: number;
   /** Ref callback for direct pane cycling from keyboard shortcuts (bypasses App re-render) */
   cyclePaneRef?: React.MutableRefObject<((delta: number) => void) | undefined>;
+  /** Ref that exposes the currently focused pane's machineId + sessionId */
+  activePaneRef?: React.MutableRefObject<{ machineId: string; sessionId: string } | undefined>;
   getOrderedGroups?: <T extends { cwdRoot: string }>(machineId: string, groups: T[]) => T[];
   onSelectSessionDirect?: (machineId: string, sessionId: string) => void;
 }
@@ -235,6 +237,7 @@ export function CrossMachineSplitView({
   focusSessionKey,
   focusSeq,
   cyclePaneRef,
+  activePaneRef,
   getOrderedGroups,
   onSelectSessionDirect,
 }: CrossMachineSplitViewProps) {
@@ -363,6 +366,13 @@ export function CrossMachineSplitView({
     };
     return () => { cyclePaneRef.current = undefined; };
   }, [cyclePaneRef]);
+
+  // Expose active pane via ref so App-level keyboard shortcuts can send input
+  useEffect(() => {
+    if (!activePaneRef) return;
+    activePaneRef.current = activePane ? { machineId: activePane.machineId, sessionId: activePane.sessionId } : undefined;
+    return () => { activePaneRef.current = undefined; };
+  }, [activePaneRef, activePane]);
 
   // Check if a session is available (machine connected and session exists)
   const isAvailable = (machineId: string, sessionId: string) => {

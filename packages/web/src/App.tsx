@@ -148,6 +148,7 @@ export default function App() {
   getOrderedMachinesRef.current = getOrderedMachines;
 
   const cyclePaneRef = useRef<((delta: number) => void) | undefined>();
+  const activePaneRef = useRef<{ machineId: string; sessionId: string } | undefined>();
 
   const sessionOutput = useSessionOutput(outputMapRef, subscribeOutput, selectedMachine, selectedSession);
 
@@ -221,8 +222,13 @@ export default function App() {
     function sendLiteralChar(ch: string) {
       const el = document.activeElement as HTMLElement;
       if (el?.closest?.(".xterm")) {
-        const mid = selectedMachineRef.current;
-        const sid = selectedSessionRef.current;
+        let mid = selectedMachineRef.current;
+        let sid = selectedSessionRef.current;
+        // In split view, selectedMachine is null — use the focused pane
+        if (!mid && activePaneRef.current) {
+          mid = activePaneRef.current.machineId;
+          sid = activePaneRef.current.sessionId;
+        }
         if (mid && sid) sendInput(mid, sid, { data: ch });
       } else if (el?.tagName === "INPUT" || el?.tagName === "TEXTAREA") {
         document.execCommand("insertText", false, ch);
@@ -812,6 +818,7 @@ export default function App() {
               focusSessionKey={viewFocusReq?.key}
               focusSeq={viewFocusReq?.seq}
               cyclePaneRef={cyclePaneRef}
+              activePaneRef={activePaneRef}
             />
           );
         })() : selectedMachine && selectedSession ? (
