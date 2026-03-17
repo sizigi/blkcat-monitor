@@ -420,6 +420,7 @@ export function createServer(opts: ServerOptions) {
       return new Response("Not found", { status: 404 });
     },
     websocket: {
+      perMessageDeflate: true,
       open(ws) {
         const data = ws.data as WsData;
         if (data.role === "dashboard") {
