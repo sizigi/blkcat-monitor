@@ -19,6 +19,8 @@ interface SessionDetailProps {
   onSendKey: (key: string) => void;
   onSendData: (data: string) => void;
   onResize?: (cols: number, rows: number, force?: boolean) => void;
+  /** True for CLI tools (claude, codex) that render their own cursor */
+  hideCursor?: boolean;
 }
 
 export function SessionDetail({
@@ -36,6 +38,7 @@ export function SessionDetail({
   onSendKey,
   onSendData,
   onResize,
+  hideCursor,
 }: SessionDetailProps) {
   const displayCwd = cwd?.replace(/^\/home\/[^/]+/, "~")?.replace(/^\/root/, "~");
   const keyboardOffset = useKeyboardOffset();
@@ -81,6 +84,7 @@ export function SessionDetail({
         onData={onSendData}
         onResize={onResize}
         inputObscuredHeight={obscuredHeight}
+        hideCursor={hideCursor}
       />
       <FloatingChatInput
         inputKey={`${machineId}:${sessionId}`}

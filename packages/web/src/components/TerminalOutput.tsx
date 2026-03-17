@@ -17,13 +17,15 @@ interface TerminalOutputProps {
   /** Height in px obscured by floating input + keyboard — terminal shifts up by this amount */
   inputObscuredHeight?: number;
   hideFloatingButtons?: boolean;
+  /** Hide xterm cursor — CLI tools (claude, codex) render their own */
+  hideCursor?: boolean;
 }
 
 export interface TerminalOutputHandle {
   forceFit: () => void;
 }
 
-export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputProps>(function TerminalOutput({ sessionKey, lines, cursor, logMapRef, scrollbackMapRef, subscribeScrollback, onRequestScrollback, onData, onResize, inputObscuredHeight, hideFloatingButtons }, ref) {
+export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputProps>(function TerminalOutput({ sessionKey, lines, cursor, logMapRef, scrollbackMapRef, subscribeScrollback, onRequestScrollback, onData, onResize, inputObscuredHeight, hideFloatingButtons, hideCursor }, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -41,7 +43,6 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
   onResizeRef.current = onResize;
   const cursorRef = useRef(cursor);
   cursorRef.current = cursor;
-  const prevCursorRef = useRef(""); // "y,x" — skip repositioning if unchanged
   const sessionKeyRef = useRef(sessionKey);
   sessionKeyRef.current = sessionKey;
   const logMapRefRef = useRef(logMapRef);
@@ -210,7 +211,8 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
     const term = new Terminal({
       disableStdin: !onData,
       convertEol: true,
-      cursorBlink: !!onData,
+      cursorBlink: !hideCursor && !!onData,
+      cursorInactiveStyle: hideCursor ? "none" : undefined,
       scrollback: 0,
       theme: (() => {
         const s = getComputedStyle(document.documentElement);
@@ -228,6 +230,7 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
     term.loadAddon(fit);
     term.open(containerRef.current);
     fit.fit();
+    if (hideCursor) term.write("\x1b[?25l"); // hide cursor for CLI tools that render their own
     onResizeRef.current?.(term.cols, term.rows);
 
     const themeObserver = new MutationObserver(() => {
@@ -526,7 +529,6 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
     const term = termRef.current;
     if (!term) return;
     prevLinesRef.current = [];
-    prevCursorRef.current = "";
     pendingLinesRef.current = null;
     scrollModeRef.current = false;
     scrollOffsetRef.current = 0;
@@ -554,19 +556,17 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
   }, [sessionKey]);
 
   // Write live terminal output — only update changed lines to avoid flicker.
-  // After writing, move the cursor to match tmux's cursor position.
+  // For terminal sessions, reposition cursor after writes. For CLI sessions, hide it.
   useEffect(() => {
     const term = termRef.current;
     if (!term) return;
     const cur = cursorRef.current;
-    const cursorKey = cur ? `${cur.y},${cur.x}` : "";
-    const cursorMoved = cursorKey !== prevCursorRef.current;
+    // Cursor positioning: only for terminal sessions (not CLI tools)
+    const shouldCursor = !hideCursor && cur;
+    const cursorSeq = shouldCursor ? `\x1b[${cur.y + 1};${cur.x + 1}H` : "";
     // Cursor-only update: if lines haven't changed, just reposition cursor
     if (lines === prevLinesRef.current) {
-      if (cursorMoved && cur && !scrollModeRef.current) {
-        term.write(`\x1b[${cur.y + 1};${cur.x + 1}H`);
-        prevCursorRef.current = cursorKey;
-      }
+      if (shouldCursor && !scrollModeRef.current) term.write(cursorSeq);
       return;
     }
     const prev = prevLinesRef.current;
@@ -575,10 +575,6 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
       pendingLinesRef.current = lines;
       return;
     }
-    // Cursor positioning escape: \x1b[row;colH (1-based)
-    // Always reposition after writing rows — writing moves xterm's internal cursor
-    const cursorSeq = cur ? `\x1b[${cur.y + 1};${cur.x + 1}H` : "";
-    if (cur) prevCursorRef.current = cursorKey;
     // If previous was empty, do full write
     if (prev.length === 0) {
       term.write("\x1b[H\x1b[2J" + lines.join("\r\n") + cursorSeq);
@@ -599,7 +595,7 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
     }
     buf += cursorSeq;
     if (buf) term.write(buf);
-  }, [lines, cursor]);
+  }, [lines, cursor, hideCursor]);
 
   const forceFit = useCallback(() => {
     const fit = fitRef.current;
@@ -608,7 +604,6 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
     fit.fit();
     term.write("\x1b[H\x1b[2J");
     prevLinesRef.current = [];
-    prevCursorRef.current = "";
     onResizeRef.current?.(term.cols, term.rows, true);
   }, []);
 

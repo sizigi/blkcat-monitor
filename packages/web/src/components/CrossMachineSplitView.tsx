@@ -56,6 +56,7 @@ function ViewPane({
   onDoubleClickHeader,
   onSelectDirect,
   inputObscuredHeight,
+  hideCursor,
 }: {
   machineId: string;
   sessionId: string;
@@ -76,6 +77,7 @@ function ViewPane({
   onDoubleClickHeader?: () => void;
   onSelectDirect?: () => void;
   inputObscuredHeight?: number;
+  hideCursor?: boolean;
 }) {
   const output = useSessionOutput(outputMapRef, subscribeOutput, machineId, sessionId);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -201,6 +203,7 @@ function ViewPane({
           onResize={onSendResize}
           inputObscuredHeight={inputObscuredHeight}
           hideFloatingButtons
+          hideCursor={hideCursor}
         />
       ) : (
         <div style={{
@@ -585,6 +588,11 @@ export function CrossMachineSplitView({
                   onDoubleClickHeader={() => setPickerTarget(i)}
                   onSelectDirect={onSelectSessionDirect ? () => onSelectSessionDirect(pane.machineId, pane.sessionId) : undefined}
                   inputObscuredHeight={obscuredHeight}
+                  hideCursor={(() => {
+                    const m = machines.find((m) => m.machineId === pane.machineId);
+                    const s = m?.sessions.find((s) => s.id === pane.sessionId);
+                    return s?.cliTool === "claude" || s?.cliTool === "gemini";
+                  })()}
                 />
               </div>
             </React.Fragment>

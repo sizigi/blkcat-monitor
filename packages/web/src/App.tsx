@@ -837,6 +837,7 @@ export default function App() {
             onSendKey={(key) => sendInput(selectedMachine, selectedSession, { key })}
             onSendData={(data) => sendInput(selectedMachine, selectedSession, { data })}
             onResize={(cols, rows, force) => sendResize(selectedMachine, selectedSession, cols, rows, force)}
+            hideCursor={selectedSessionData?.cliTool === "claude" || selectedSessionData?.cliTool === "gemini"}
           />
         ) : (
           <div
