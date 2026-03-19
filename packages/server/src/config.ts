@@ -26,6 +26,10 @@ export interface ServerConfig {
   notifyEnv?: Record<string, string>;
   tlsCert?: string;
   tlsKey?: string;
+  dashboardPort?: number;
+  dashboardHostname?: string;
+  dashboardTlsCert?: string;
+  dashboardTlsKey?: string;
 }
 
 export async function loadServerConfig(): Promise<ServerConfig> {
@@ -40,7 +44,7 @@ export async function loadServerConfig(): Promise<ServerConfig> {
   const defaultStaticDir = new URL("../../web/dist", import.meta.url).pathname;
 
   return {
-    port: parseInt(env("BLKCAT_PORT") ?? str(file.port) ?? "3000"),
+    port: num(env("BLKCAT_PORT")) ?? num(file.port) ?? 3000,
     hostname: env("BLKCAT_HOST") ?? str(file.hostname) ?? defaultHostname(),
     staticDir: env("BLKCAT_STATIC_DIR") ?? str(file.staticDir) ?? defaultStaticDir,
     agents: env("BLKCAT_AGENTS")
@@ -51,6 +55,10 @@ export async function loadServerConfig(): Promise<ServerConfig> {
     notifyEnv: strRecord(file.notifyEnv),
     tlsCert: env("BLKCAT_TLS_CERT") ?? str(file.tlsCert) ?? autoDetectCert(),
     tlsKey: env("BLKCAT_TLS_KEY") ?? str(file.tlsKey) ?? autoDetectKey(),
+    dashboardPort: num(env("BLKCAT_DASHBOARD_PORT")) ?? num(file.dashboardPort),
+    dashboardHostname: env("BLKCAT_DASHBOARD_HOST") ?? str(file.dashboardHostname) ?? "127.0.0.1",
+    dashboardTlsCert: env("BLKCAT_DASHBOARD_TLS_CERT") ?? str(file.dashboardTlsCert),
+    dashboardTlsKey: env("BLKCAT_DASHBOARD_TLS_KEY") ?? str(file.dashboardTlsKey),
   };
 }
 
@@ -72,6 +80,12 @@ function env(key: string): string | undefined {
 
 function str(v: unknown): string | undefined {
   return typeof v === "string" ? v : undefined;
+}
+
+function num(v: unknown): number | undefined {
+  if (typeof v === "number" && !isNaN(v)) return v;
+  if (typeof v === "string") { const n = parseInt(v); if (!isNaN(n)) return n; }
+  return undefined;
 }
 
 function strRecord(v: unknown): Record<string, string> | undefined {

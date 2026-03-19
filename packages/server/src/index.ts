@@ -24,6 +24,10 @@ const server = createServer({
   tlsKey: config.tlsKey,
   views,
   onViewsSaved: (v) => { saveViews(v); },
+  dashboardPort: config.dashboardPort,
+  dashboardHostname: config.dashboardHostname,
+  dashboardTlsCert: config.dashboardTlsCert,
+  dashboardTlsKey: config.dashboardTlsKey,
 });
 
 // Connect saved agents (as "api" source so they continue to be persisted)
@@ -32,7 +36,13 @@ for (const address of savedAgents) {
 }
 
 const proto = config.tlsCert ? "https" : "http";
-console.log(`blkcat-monitor server listening on ${proto}://${config.hostname}:${server.port}`);
+if (server.dashboardPort) {
+  console.log(`blkcat-monitor agent port: ${proto}://${config.hostname}:${server.port}`);
+  const dashProto = config.dashboardTlsCert ? "https" : "http";
+  console.log(`blkcat-monitor dashboard: ${dashProto}://${config.dashboardHostname ?? "127.0.0.1"}:${server.dashboardPort}`);
+} else {
+  console.log(`blkcat-monitor server listening on ${proto}://${config.hostname}:${server.port}`);
+}
 if (config.agents?.length) {
   console.log(`Connecting to agents: ${config.agents.join(", ")}`);
 }

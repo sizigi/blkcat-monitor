@@ -29,6 +29,11 @@ interface ServerOptions {
   tlsKey?: string;
   views?: View[];
   onViewsSaved?: (views: View[]) => void;
+  /** When set, dashboard runs on a separate port (defaults to 127.0.0.1). */
+  dashboardPort?: number;
+  dashboardHostname?: string;
+  dashboardTlsCert?: string;
+  dashboardTlsKey?: string;
 }
 
 interface WsData {
@@ -324,9 +329,411 @@ export function createServer(opts: ServerOptions) {
     return true;
   }
 
+  // --- Shared fetch/websocket handlers ---
+
+  function upgradeAgent(req: Request, server: any): Response | undefined {
+    const ok = server.upgrade(req, { data: { role: "agent" } as WsData });
+    return ok ? undefined : new Response("Upgrade failed", { status: 500 });
+  }
+
+  function upgradeDashboard(req: Request, server: any): Response | undefined {
+    const ok = server.upgrade(req, {
+      data: { role: "dashboard", dashboardId: `dash-${dashboardCounter++}` } as WsData,
+    });
+    return ok ? undefined : new Response("Upgrade failed", { status: 500 });
+  }
+
+  function handleHealthApi(): Response {
+    const mem = process.memoryUsage();
+    const total = totalmem();
+    const free = freemem();
+    return Response.json({
+      cpuUsage: getCpuUsage(),
+      memoryUsed: total - free,
+      memoryTotal: total,
+      processRss: mem.rss,
+      uptime: Math.floor(process.uptime()),
+      agentCount: machines.size,
+      dashboardCount: dashboards.size,
+    });
+  }
+
+  async function handleDashboardApi(url: URL, req: Request): Promise<Response | null> {
+    if (url.pathname === "/api/health" && req.method === "GET") {
+      return handleHealthApi();
+    }
+    if (url.pathname === "/api/sessions") {
+      return Response.json({ machines: getSnapshot() });
+    }
+
+    if (url.pathname === "/api/agents") {
+      if (req.method === "GET") {
+        const agents: OutboundAgentInfo[] = Array.from(outboundAgents.values()).map((a) => ({
+          address: a.address,
+          status: a.status,
+          source: a.source,
+        }));
+        return Response.json({ agents });
+      }
+
+      if (req.method === "POST") {
+        const body = await req.json() as { address?: string };
+        if (!body.address || typeof body.address !== "string") {
+          return Response.json({ error: "address is required" }, { status: 400 });
+        }
+        const added = connectToAgent(body.address, "api");
+        if (!added) {
+          return Response.json({ error: "agent already exists" }, { status: 409 });
+        }
+        return Response.json({ ok: true }, { status: 201 });
+      }
+    }
+
+    if (url.pathname === "/api/skills" && req.method === "GET") {
+      if (!opts.skillsDir) {
+        return Response.json({ skills: [] });
+      }
+      try {
+        const skills = await readSkillsDir(opts.skillsDir);
+        return Response.json({ skills });
+      } catch (err: any) {
+        return Response.json({ skills: [], error: err?.message }, { status: 500 });
+      }
+    }
+
+    if (url.pathname.startsWith("/api/agents/") && req.method === "DELETE") {
+      const address = decodeURIComponent(url.pathname.slice("/api/agents/".length));
+      const removed = disconnectAgent(address);
+      if (!removed) {
+        return Response.json({ error: "agent not found" }, { status: 404 });
+      }
+      return Response.json({ ok: true });
+    }
+
+    return null;
+  }
+
+  function handleStaticFile(url: URL): Response {
+    if (opts.staticDir) {
+      const filePath = url.pathname === "/" ? "/index.html" : url.pathname;
+      const file = Bun.file(`${opts.staticDir}${filePath}`);
+      return new Response(file);
+    }
+    return new Response("Not found", { status: 404 });
+  }
+
+  // --- WebSocket handlers ---
+
+  function wsOpen(ws: any) {
+    const data = ws.data as WsData;
+    if (data.role === "dashboard") {
+      dashboards.add(ws);
+      const snapshotMsg: Record<string, any> = { type: "snapshot", machines: getSnapshot() };
+      if (Object.keys(displayNames.machines).length > 0 || Object.keys(displayNames.sessions).length > 0) {
+        snapshotMsg.displayNames = displayNames;
+      }
+      if (views.length > 0) {
+        snapshotMsg.views = views;
+      }
+      ws.send(JSON.stringify(snapshotMsg));
+      for (const machine of machines.values()) {
+        for (const output of machine.lastOutputs.values()) {
+          ws.send(JSON.stringify(output));
+        }
+      }
+    } else if (data.role === "agent") {
+      inboundAgents.set(ws, { send(d: string) { ws.send(d); } });
+    }
+  }
+
+  function wsMessage(ws: any, message: string | ArrayBuffer) {
+    const data = ws.data as WsData;
+    const raw = typeof message === "string" ? message : new TextDecoder().decode(message as ArrayBuffer);
+
+    if (data.role === "agent") {
+      const agent = inboundAgents.get(ws);
+      if (!agent) return;
+      handleAgentMessage(agent, raw);
+    } else if (data.role === "dashboard") {
+      const msg = parseDashboardMessage(raw);
+      if (!msg) return;
+
+      if (msg.type === "input") {
+        const machine = machines.get(msg.machineId);
+        if (machine) {
+          // Track this dashboard as the active resize owner for this session
+          const dashId = (ws.data as WsData).dashboardId;
+          if (dashId) {
+            const ownerKey = `${msg.machineId}:${msg.sessionId}`;
+            activeResizeOwner.set(ownerKey, { dashboardId: dashId, lastInputAt: Date.now() });
+          }
+          const fwd: Record<string, any> = {
+            type: "input",
+            sessionId: msg.sessionId,
+          };
+          if (msg.text) fwd.text = msg.text;
+          if (msg.key) fwd.key = msg.key;
+          if (msg.data) fwd.data = msg.data;
+          machine.agent.send(JSON.stringify(fwd));
+        }
+      } else if (msg.type === "start_session") {
+        const machine = machines.get(msg.machineId);
+        if (machine) {
+          const fwd: Record<string, any> = { type: "start_session" };
+          if (msg.args) fwd.args = msg.args;
+          if (msg.cwd) fwd.cwd = msg.cwd;
+          if (msg.name) fwd.name = msg.name;
+          if (msg.cliTool) fwd.cliTool = msg.cliTool;
+          machine.agent.send(JSON.stringify(fwd));
+        }
+      } else if (msg.type === "close_session") {
+        const machine = machines.get(msg.machineId);
+        if (machine) {
+          machine.agent.send(JSON.stringify({
+            type: "close_session",
+            sessionId: msg.sessionId,
+          }));
+        }
+      } else if (msg.type === "resize") {
+        const machine = machines.get(msg.machineId);
+        if (machine) {
+          const dashId = (ws.data as WsData).dashboardId;
+          const ownerKey = `${msg.machineId}:${msg.sessionId}`;
+          const owner = activeResizeOwner.get(ownerKey);
+          let allowed: boolean;
+          if (msg.force === true) {
+            // Force fit always goes through
+            allowed = true;
+          } else if (owner && owner.dashboardId === dashId) {
+            // Active owner can always resize
+            allowed = true;
+          } else if (owner && (Date.now() - owner.lastInputAt <= RESIZE_OWNER_STALE_MS)) {
+            // Non-owner blocked while owner is fresh
+            allowed = false;
+          } else {
+            // No owner or stale owner: only allow if not shrinking
+            const prev = lastResizeDims.get(ownerKey);
+            allowed = !prev || (msg.cols >= prev.cols && msg.rows >= prev.rows);
+          }
+          if (allowed) {
+            lastResizeDims.set(ownerKey, { cols: msg.cols, rows: msg.rows });
+            machine.agent.send(JSON.stringify({
+              type: "resize",
+              sessionId: msg.sessionId,
+              cols: msg.cols,
+              rows: msg.rows,
+            }));
+          }
+        }
+      } else if (msg.type === "request_scrollback") {
+        const machine = machines.get(msg.machineId);
+        if (machine) {
+          machine.agent.send(JSON.stringify({
+            type: "request_scrollback",
+            sessionId: msg.sessionId,
+          }));
+        }
+      } else if (msg.type === "reload_session") {
+        const machine = machines.get(msg.machineId);
+        if (machine) {
+          machine.agent.send(JSON.stringify({
+            type: "reload_session",
+            sessionId: msg.sessionId,
+            args: msg.args,
+            resume: msg.resume,
+          }));
+        }
+      } else if (msg.type === "list_directory") {
+        const machine = machines.get(msg.machineId);
+        if (machine) {
+          machine.agent.send(JSON.stringify({
+            type: "list_directory",
+            requestId: msg.requestId,
+            path: msg.path,
+          }));
+        }
+      } else if (msg.type === "read_file") {
+        const machine = machines.get(msg.machineId);
+        if (machine) {
+          machine.agent.send(JSON.stringify({
+            type: "read_file",
+            requestId: msg.requestId,
+            path: msg.path,
+          }));
+        }
+      } else if (msg.type === "create_directory") {
+        const machine = machines.get(msg.machineId);
+        if (machine) {
+          machine.agent.send(JSON.stringify({
+            type: "create_directory",
+            requestId: msg.requestId,
+            path: msg.path,
+          }));
+        }
+      } else if (msg.type === "deploy_skills") {
+        const machine = machines.get(msg.machineId);
+        if (machine) {
+          machine.agent.send(JSON.stringify({
+            type: "deploy_skills",
+            requestId: msg.requestId,
+            skills: msg.skills,
+          }));
+        }
+      } else if (msg.type === "remove_skills") {
+        const machine = machines.get(msg.machineId);
+        if (machine) {
+          machine.agent.send(JSON.stringify({
+            type: "remove_skills",
+            requestId: msg.requestId,
+            skillNames: msg.skillNames,
+          }));
+        }
+      } else if (msg.type === "get_settings") {
+        const machine = machines.get(msg.machineId);
+        if (machine) {
+          const fwd: Record<string, any> = {
+            type: "get_settings",
+            requestId: msg.requestId,
+            scope: msg.scope,
+          };
+          if (msg.projectPath) fwd.projectPath = msg.projectPath;
+          machine.agent.send(JSON.stringify(fwd));
+        }
+      } else if (msg.type === "update_settings") {
+        const machine = machines.get(msg.machineId);
+        if (machine) {
+          const fwd: Record<string, any> = {
+            type: "update_settings",
+            requestId: msg.requestId,
+            scope: msg.scope,
+            settings: msg.settings,
+          };
+          if (msg.projectPath) fwd.projectPath = msg.projectPath;
+          machine.agent.send(JSON.stringify(fwd));
+        }
+      } else if (msg.type === "set_display_name") {
+        if (msg.target === "machine") {
+          if (msg.name) {
+            displayNames.machines[msg.machineId] = msg.name;
+          } else {
+            delete displayNames.machines[msg.machineId];
+          }
+        } else if (msg.target === "session" && msg.sessionId) {
+          const key = `${msg.machineId}:${msg.sessionId}`;
+          if (msg.name) {
+            displayNames.sessions[key] = msg.name;
+          } else {
+            delete displayNames.sessions[key];
+          }
+          // Forward rename to the agent so it can rename the tmux window
+          const machine = machines.get(msg.machineId);
+          if (machine && msg.name) {
+            machine.agent.send(JSON.stringify({
+              type: "rename_session",
+              sessionId: msg.sessionId,
+              name: msg.name,
+            }));
+          }
+        }
+        broadcastToDashboards({
+          type: "display_name_update",
+          target: msg.target,
+          machineId: msg.machineId,
+          sessionId: msg.sessionId,
+          name: msg.name,
+        });
+        if (opts.onDisplayNamesSaved) {
+          opts.onDisplayNamesSaved(displayNames);
+        }
+      } else if (msg.type === "swap_pane") {
+        const machine = machines.get(msg.machineId);
+        if (machine) {
+          machine.agent.send(JSON.stringify({
+            type: "swap_pane",
+            sessionId1: msg.sessionId1,
+            sessionId2: msg.sessionId2,
+          }));
+        }
+      } else if (msg.type === "swap_window") {
+        const machine = machines.get(msg.machineId);
+        if (machine) {
+          machine.agent.send(JSON.stringify({
+            type: "swap_window",
+            sessionId1: msg.sessionId1,
+            sessionId2: msg.sessionId2,
+          }));
+        }
+      } else if (msg.type === "move_pane") {
+        const machine = machines.get(msg.machineId);
+        if (machine) {
+          machine.agent.send(JSON.stringify({
+            type: "move_pane",
+            sessionId: msg.sessionId,
+            targetSessionId: msg.targetSessionId,
+            before: msg.before,
+          }));
+        }
+      } else if (msg.type === "move_window") {
+        const machine = machines.get(msg.machineId);
+        if (machine) {
+          machine.agent.send(JSON.stringify({
+            type: "move_window",
+            sessionId: msg.sessionId,
+            targetSessionId: msg.targetSessionId,
+            before: msg.before,
+          }));
+        }
+      } else if (msg.type === "rediscover") {
+        const machine = machines.get(msg.machineId);
+        if (machine) {
+          machine.agent.send(JSON.stringify({ type: "rediscover" }));
+        }
+      } else if (msg.type === "create_view") {
+        views.push({ id: msg.id, name: msg.name, panes: msg.panes });
+        broadcastToDashboards({ type: "views_update", views });
+        opts.onViewsSaved?.(views);
+      } else if (msg.type === "update_view") {
+        const idx = views.findIndex((v) => v.id === msg.id);
+        if (idx >= 0) {
+          if (msg.name !== undefined) views[idx].name = msg.name;
+          if (msg.panes !== undefined) views[idx].panes = msg.panes;
+          broadcastToDashboards({ type: "views_update", views });
+          opts.onViewsSaved?.(views);
+        }
+      } else if (msg.type === "delete_view") {
+        const idx = views.findIndex((v) => v.id === msg.id);
+        if (idx >= 0) {
+          views.splice(idx, 1);
+          broadcastToDashboards({ type: "views_update", views });
+          opts.onViewsSaved?.(views);
+        }
+      }
+    }
+  }
+
+  function wsClose(ws: any) {
+    const data = ws.data as WsData;
+    if (data.role === "dashboard") {
+      dashboards.delete(ws);
+      // Clean up resize ownership for this dashboard
+      if (data.dashboardId) {
+        for (const [key, owner] of activeResizeOwner) {
+          if (owner.dashboardId === data.dashboardId) {
+            activeResizeOwner.delete(key);
+          }
+        }
+      }
+    } else if (data.role === "agent") {
+      const agent = inboundAgents.get(ws);
+      if (agent) handleAgentClose(agent);
+    }
+  }
+
   const tls = opts.tlsCert && opts.tlsKey
     ? { cert: Bun.file(opts.tlsCert), key: Bun.file(opts.tlsKey) }
     : undefined;
+
+  const splitMode = opts.dashboardPort != null;
 
   const server = Bun.serve({
     port: opts.port,
@@ -334,397 +741,69 @@ export function createServer(opts: ServerOptions) {
     tls,
     async fetch(req, server) {
       const url = new URL(req.url);
-      if (url.pathname === "/ws/agent") {
-        const ok = server.upgrade(req, {
-          data: { role: "agent" } as WsData,
-        });
-        return ok ? undefined : new Response("Upgrade failed", { status: 500 });
-      }
 
-      if (url.pathname === "/ws/dashboard") {
-        const ok = server.upgrade(req, {
-          data: { role: "dashboard", dashboardId: `dash-${dashboardCounter++}` } as WsData,
-        });
-        return ok ? undefined : new Response("Upgrade failed", { status: 500 });
+      if (url.pathname === "/ws/agent") {
+        return upgradeAgent(req, server);
       }
 
       if (url.pathname === "/api/health" && req.method === "GET") {
-        const mem = process.memoryUsage();
-        const total = totalmem();
-        const free = freemem();
-        return Response.json({
-          cpuUsage: getCpuUsage(),
-          memoryUsed: total - free,
-          memoryTotal: total,
-          processRss: mem.rss,
-          uptime: Math.floor(process.uptime()),
-          agentCount: machines.size,
-          dashboardCount: dashboards.size,
-        });
+        return handleHealthApi();
       }
 
-      if (url.pathname === "/api/sessions") {
-        return Response.json({ machines: getSnapshot() });
+      // In split mode, only agent WS and health on the main port
+      if (splitMode) {
+        return new Response("Not found", { status: 404 });
       }
 
-      if (url.pathname === "/api/agents") {
-        if (req.method === "GET") {
-          const agents: OutboundAgentInfo[] = Array.from(outboundAgents.values()).map((a) => ({
-            address: a.address,
-            status: a.status,
-            source: a.source,
-          }));
-          return Response.json({ agents });
-        }
-
-        if (req.method === "POST") {
-          const body = await req.json() as { address?: string };
-          if (!body.address || typeof body.address !== "string") {
-            return Response.json({ error: "address is required" }, { status: 400 });
-          }
-          const added = connectToAgent(body.address, "api");
-          if (!added) {
-            return Response.json({ error: "agent already exists" }, { status: 409 });
-          }
-          return Response.json({ ok: true }, { status: 201 });
-        }
+      // Single-port mode: serve everything
+      if (url.pathname === "/ws/dashboard") {
+        return upgradeDashboard(req, server);
       }
 
-      if (url.pathname === "/api/skills" && req.method === "GET") {
-        if (!opts.skillsDir) {
-          return Response.json({ skills: [] });
-        }
-        try {
-          const skills = await readSkillsDir(opts.skillsDir);
-          return Response.json({ skills });
-        } catch (err: any) {
-          return Response.json({ skills: [], error: err?.message }, { status: 500 });
-        }
-      }
+      const apiResp = await handleDashboardApi(url, req);
+      if (apiResp) return apiResp;
 
-      if (url.pathname.startsWith("/api/agents/") && req.method === "DELETE") {
-        const address = decodeURIComponent(url.pathname.slice("/api/agents/".length));
-        const removed = disconnectAgent(address);
-        if (!removed) {
-          return Response.json({ error: "agent not found" }, { status: 404 });
-        }
-        return Response.json({ ok: true });
-      }
-
-      if (opts.staticDir) {
-        const filePath = url.pathname === "/" ? "/index.html" : url.pathname;
-        const file = Bun.file(`${opts.staticDir}${filePath}`);
-        return new Response(file);
-      }
-
-      return new Response("Not found", { status: 404 });
+      return handleStaticFile(url);
     },
     websocket: {
       perMessageDeflate: true,
-      open(ws) {
-        const data = ws.data as WsData;
-        if (data.role === "dashboard") {
-          dashboards.add(ws);
-          const snapshotMsg: Record<string, any> = { type: "snapshot", machines: getSnapshot() };
-          if (Object.keys(displayNames.machines).length > 0 || Object.keys(displayNames.sessions).length > 0) {
-            snapshotMsg.displayNames = displayNames;
-          }
-          if (views.length > 0) {
-            snapshotMsg.views = views;
-          }
-          ws.send(JSON.stringify(snapshotMsg));
-          for (const machine of machines.values()) {
-            for (const output of machine.lastOutputs.values()) {
-              ws.send(JSON.stringify(output));
-            }
-          }
-        } else if (data.role === "agent") {
-          inboundAgents.set(ws, { send(d: string) { ws.send(d); } });
-        }
-      },
-      message(ws, message) {
-        const data = ws.data as WsData;
-        const raw = typeof message === "string" ? message : new TextDecoder().decode(message as ArrayBuffer);
-
-        if (data.role === "agent") {
-          const agent = inboundAgents.get(ws);
-          if (!agent) return;
-          handleAgentMessage(agent, raw);
-        } else if (data.role === "dashboard") {
-          const msg = parseDashboardMessage(raw);
-          if (!msg) return;
-
-          if (msg.type === "input") {
-            const machine = machines.get(msg.machineId);
-            if (machine) {
-              // Track this dashboard as the active resize owner for this session
-              const dashId = (ws.data as WsData).dashboardId;
-              if (dashId) {
-                const ownerKey = `${msg.machineId}:${msg.sessionId}`;
-                activeResizeOwner.set(ownerKey, { dashboardId: dashId, lastInputAt: Date.now() });
-              }
-              const fwd: Record<string, any> = {
-                type: "input",
-                sessionId: msg.sessionId,
-              };
-              if (msg.text) fwd.text = msg.text;
-              if (msg.key) fwd.key = msg.key;
-              if (msg.data) fwd.data = msg.data;
-              machine.agent.send(JSON.stringify(fwd));
-            }
-          } else if (msg.type === "start_session") {
-            const machine = machines.get(msg.machineId);
-            if (machine) {
-              const fwd: Record<string, any> = { type: "start_session" };
-              if (msg.args) fwd.args = msg.args;
-              if (msg.cwd) fwd.cwd = msg.cwd;
-              if (msg.name) fwd.name = msg.name;
-              if (msg.cliTool) fwd.cliTool = msg.cliTool;
-              machine.agent.send(JSON.stringify(fwd));
-            }
-          } else if (msg.type === "close_session") {
-            const machine = machines.get(msg.machineId);
-            if (machine) {
-              machine.agent.send(JSON.stringify({
-                type: "close_session",
-                sessionId: msg.sessionId,
-              }));
-            }
-          } else if (msg.type === "resize") {
-            const machine = machines.get(msg.machineId);
-            if (machine) {
-              const dashId = (ws.data as WsData).dashboardId;
-              const ownerKey = `${msg.machineId}:${msg.sessionId}`;
-              const owner = activeResizeOwner.get(ownerKey);
-              let allowed: boolean;
-              if (msg.force === true) {
-                // Force fit always goes through
-                allowed = true;
-              } else if (owner && owner.dashboardId === dashId) {
-                // Active owner can always resize
-                allowed = true;
-              } else if (owner && (Date.now() - owner.lastInputAt <= RESIZE_OWNER_STALE_MS)) {
-                // Non-owner blocked while owner is fresh
-                allowed = false;
-              } else {
-                // No owner or stale owner: only allow if not shrinking
-                const prev = lastResizeDims.get(ownerKey);
-                allowed = !prev || (msg.cols >= prev.cols && msg.rows >= prev.rows);
-              }
-              if (allowed) {
-                lastResizeDims.set(ownerKey, { cols: msg.cols, rows: msg.rows });
-                machine.agent.send(JSON.stringify({
-                  type: "resize",
-                  sessionId: msg.sessionId,
-                  cols: msg.cols,
-                  rows: msg.rows,
-                }));
-              }
-            }
-          } else if (msg.type === "request_scrollback") {
-            const machine = machines.get(msg.machineId);
-            if (machine) {
-              machine.agent.send(JSON.stringify({
-                type: "request_scrollback",
-                sessionId: msg.sessionId,
-              }));
-            }
-          } else if (msg.type === "reload_session") {
-            const machine = machines.get(msg.machineId);
-            if (machine) {
-              machine.agent.send(JSON.stringify({
-                type: "reload_session",
-                sessionId: msg.sessionId,
-                args: msg.args,
-                resume: msg.resume,
-              }));
-            }
-          } else if (msg.type === "list_directory") {
-            const machine = machines.get(msg.machineId);
-            if (machine) {
-              machine.agent.send(JSON.stringify({
-                type: "list_directory",
-                requestId: msg.requestId,
-                path: msg.path,
-              }));
-            }
-          } else if (msg.type === "read_file") {
-            const machine = machines.get(msg.machineId);
-            if (machine) {
-              machine.agent.send(JSON.stringify({
-                type: "read_file",
-                requestId: msg.requestId,
-                path: msg.path,
-              }));
-            }
-          } else if (msg.type === "create_directory") {
-            const machine = machines.get(msg.machineId);
-            if (machine) {
-              machine.agent.send(JSON.stringify({
-                type: "create_directory",
-                requestId: msg.requestId,
-                path: msg.path,
-              }));
-            }
-          } else if (msg.type === "deploy_skills") {
-            const machine = machines.get(msg.machineId);
-            if (machine) {
-              machine.agent.send(JSON.stringify({
-                type: "deploy_skills",
-                requestId: msg.requestId,
-                skills: msg.skills,
-              }));
-            }
-          } else if (msg.type === "remove_skills") {
-            const machine = machines.get(msg.machineId);
-            if (machine) {
-              machine.agent.send(JSON.stringify({
-                type: "remove_skills",
-                requestId: msg.requestId,
-                skillNames: msg.skillNames,
-              }));
-            }
-          } else if (msg.type === "get_settings") {
-            const machine = machines.get(msg.machineId);
-            if (machine) {
-              const fwd: Record<string, any> = {
-                type: "get_settings",
-                requestId: msg.requestId,
-                scope: msg.scope,
-              };
-              if (msg.projectPath) fwd.projectPath = msg.projectPath;
-              machine.agent.send(JSON.stringify(fwd));
-            }
-          } else if (msg.type === "update_settings") {
-            const machine = machines.get(msg.machineId);
-            if (machine) {
-              const fwd: Record<string, any> = {
-                type: "update_settings",
-                requestId: msg.requestId,
-                scope: msg.scope,
-                settings: msg.settings,
-              };
-              if (msg.projectPath) fwd.projectPath = msg.projectPath;
-              machine.agent.send(JSON.stringify(fwd));
-            }
-          } else if (msg.type === "set_display_name") {
-            if (msg.target === "machine") {
-              if (msg.name) {
-                displayNames.machines[msg.machineId] = msg.name;
-              } else {
-                delete displayNames.machines[msg.machineId];
-              }
-            } else if (msg.target === "session" && msg.sessionId) {
-              const key = `${msg.machineId}:${msg.sessionId}`;
-              if (msg.name) {
-                displayNames.sessions[key] = msg.name;
-              } else {
-                delete displayNames.sessions[key];
-              }
-              // Forward rename to the agent so it can rename the tmux window
-              const machine = machines.get(msg.machineId);
-              if (machine && msg.name) {
-                machine.agent.send(JSON.stringify({
-                  type: "rename_session",
-                  sessionId: msg.sessionId,
-                  name: msg.name,
-                }));
-              }
-            }
-            broadcastToDashboards({
-              type: "display_name_update",
-              target: msg.target,
-              machineId: msg.machineId,
-              sessionId: msg.sessionId,
-              name: msg.name,
-            });
-            if (opts.onDisplayNamesSaved) {
-              opts.onDisplayNamesSaved(displayNames);
-            }
-          } else if (msg.type === "swap_pane") {
-            const machine = machines.get(msg.machineId);
-            if (machine) {
-              machine.agent.send(JSON.stringify({
-                type: "swap_pane",
-                sessionId1: msg.sessionId1,
-                sessionId2: msg.sessionId2,
-              }));
-            }
-          } else if (msg.type === "swap_window") {
-            const machine = machines.get(msg.machineId);
-            if (machine) {
-              machine.agent.send(JSON.stringify({
-                type: "swap_window",
-                sessionId1: msg.sessionId1,
-                sessionId2: msg.sessionId2,
-              }));
-            }
-          } else if (msg.type === "move_pane") {
-            const machine = machines.get(msg.machineId);
-            if (machine) {
-              machine.agent.send(JSON.stringify({
-                type: "move_pane",
-                sessionId: msg.sessionId,
-                targetSessionId: msg.targetSessionId,
-                before: msg.before,
-              }));
-            }
-          } else if (msg.type === "move_window") {
-            const machine = machines.get(msg.machineId);
-            if (machine) {
-              machine.agent.send(JSON.stringify({
-                type: "move_window",
-                sessionId: msg.sessionId,
-                targetSessionId: msg.targetSessionId,
-                before: msg.before,
-              }));
-            }
-          } else if (msg.type === "rediscover") {
-            const machine = machines.get(msg.machineId);
-            if (machine) {
-              machine.agent.send(JSON.stringify({ type: "rediscover" }));
-            }
-          } else if (msg.type === "create_view") {
-            views.push({ id: msg.id, name: msg.name, panes: msg.panes });
-            broadcastToDashboards({ type: "views_update", views });
-            opts.onViewsSaved?.(views);
-          } else if (msg.type === "update_view") {
-            const idx = views.findIndex((v) => v.id === msg.id);
-            if (idx >= 0) {
-              if (msg.name !== undefined) views[idx].name = msg.name;
-              if (msg.panes !== undefined) views[idx].panes = msg.panes;
-              broadcastToDashboards({ type: "views_update", views });
-              opts.onViewsSaved?.(views);
-            }
-          } else if (msg.type === "delete_view") {
-            const idx = views.findIndex((v) => v.id === msg.id);
-            if (idx >= 0) {
-              views.splice(idx, 1);
-              broadcastToDashboards({ type: "views_update", views });
-              opts.onViewsSaved?.(views);
-            }
-          }
-        }
-      },
-      close(ws) {
-        const data = ws.data as WsData;
-        if (data.role === "dashboard") {
-          dashboards.delete(ws);
-          // Clean up resize ownership for this dashboard
-          if (data.dashboardId) {
-            for (const [key, owner] of activeResizeOwner) {
-              if (owner.dashboardId === data.dashboardId) {
-                activeResizeOwner.delete(key);
-              }
-            }
-          }
-        } else if (data.role === "agent") {
-          const agent = inboundAgents.get(ws);
-          if (agent) handleAgentClose(agent);
-        }
-      },
+      open: wsOpen,
+      message: wsMessage,
+      close: wsClose,
     },
   });
+
+  // In split mode, start a second server for the dashboard (no TLS)
+  let dashboardServer: ReturnType<typeof Bun.serve> | undefined;
+  if (splitMode) {
+    const dashTls = opts.dashboardTlsCert && opts.dashboardTlsKey
+      ? { cert: Bun.file(opts.dashboardTlsCert), key: Bun.file(opts.dashboardTlsKey) }
+      : undefined;
+
+    dashboardServer = Bun.serve({
+      port: opts.dashboardPort!,
+      hostname: opts.dashboardHostname,
+      tls: dashTls,
+      async fetch(req, server) {
+        const url = new URL(req.url);
+
+        if (url.pathname === "/ws/dashboard") {
+          return upgradeDashboard(req, server);
+        }
+
+        const apiResp = await handleDashboardApi(url, req);
+        if (apiResp) return apiResp;
+
+        return handleStaticFile(url);
+      },
+      websocket: {
+        perMessageDeflate: true,
+        open: wsOpen,
+        message: wsMessage,
+        close: wsClose,
+      },
+    });
+  }
 
   // Connect to agents that are in listener mode
   if (opts.agents) {
@@ -735,6 +814,7 @@ export function createServer(opts: ServerOptions) {
 
   return {
     port: server.port,
+    dashboardPort: dashboardServer?.port,
     connectToAgent,
     stop: (closeActiveConnections?: boolean) => {
       for (const entry of outboundAgents.values()) {
@@ -746,6 +826,7 @@ export function createServer(opts: ServerOptions) {
       }
       outboundAgents.clear();
       server.stop(closeActiveConnections);
+      dashboardServer?.stop(closeActiveConnections);
     },
   };
 }
