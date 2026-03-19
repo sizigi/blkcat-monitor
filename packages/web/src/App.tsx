@@ -970,9 +970,9 @@ export default function App() {
           )}
         </div>
       )}
-      {/* Mobile: file browser panel overlay (hidden when viewing a file) */}
-      {isMobile && panelTab === "files" && fileBrowserContext && !viewingFile && (
-        <div className="panel-overlay" style={{ overflow: "hidden", background: "var(--bg, #000)" }}>
+      {/* Mobile: file browser panel overlay (hidden via CSS when viewing a file to preserve state) */}
+      {isMobile && panelTab === "files" && fileBrowserContext && (
+        <div className="panel-overlay" style={{ overflow: "hidden", background: "var(--bg, #000)", display: viewingFile ? "none" : undefined }}>
           <FileBrowser
             machineId={fileBrowserContext.machineId}
             initialPath={fileBrowserContext.cwd}
