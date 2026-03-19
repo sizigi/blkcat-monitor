@@ -773,7 +773,8 @@ export default function App() {
             machineId={viewingFile.machineId}
             filePath={viewingFile.path}
             readFile={readFile}
-            onClose={() => setViewingFile(null)}
+            onClose={() => { setViewingFile(null); if (isMobile) setPanelTab(null); }}
+            onBack={panelTab === "files" ? () => setViewingFile(null) : undefined}
           />
         ) : selectedView ? (() => {
           const view = views.find((v) => v.id === selectedView);
@@ -893,15 +894,15 @@ export default function App() {
           )}
         </div>
       )}
-      {/* Desktop: file browser panel */}
-      {!isMobile && panelTab === "files" && fileBrowserContext && (
+      {/* Desktop: file browser overlays the sidebar */}
+      {!isMobile && panelTab === "files" && fileBrowserContext && !sidebarCollapsed && (
         <div style={{
           position: "absolute",
           top: 0,
-          left: sidebarCollapsed ? 0 : sidebarWidth + 4,
+          left: 0,
           bottom: 0,
-          width: 320,
-          zIndex: 20,
+          width: sidebarWidth,
+          zIndex: 30,
           overflow: "hidden",
         }}>
           <FileBrowser
@@ -969,8 +970,8 @@ export default function App() {
           )}
         </div>
       )}
-      {/* Mobile: file browser panel overlay */}
-      {isMobile && panelTab === "files" && fileBrowserContext && (
+      {/* Mobile: file browser panel overlay (hidden when viewing a file) */}
+      {isMobile && panelTab === "files" && fileBrowserContext && !viewingFile && (
         <div className="panel-overlay" style={{ overflow: "hidden", background: "var(--bg, #000)" }}>
           <FileBrowser
             machineId={fileBrowserContext.machineId}
@@ -978,7 +979,6 @@ export default function App() {
             listDirectory={listDirectory}
             onFileSelect={(path) => {
               setViewingFile({ machineId: fileBrowserContext.machineId, path });
-              setPanelTab(null);
             }}
             onClose={() => setPanelTab(null)}
           />

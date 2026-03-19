@@ -361,7 +361,7 @@ export class TmuxCapture {
     if (isNaN(fileSize)) return { error: "Cannot determine file size" };
 
     const MAX_SIZE = 1_000_000; // 1MB
-    const MAX_IMAGE_SIZE = 10_000_000; // 10MB for images
+    const MAX_IMAGE_SIZE = 64_000_000; // 64MB for images
 
     // Check if it's an image file
     const ext = resolved.split(".").pop()?.toLowerCase() ?? "";
