@@ -164,7 +164,7 @@ export class AgentListener {
     this.broadcast(msg);
   }
 
-  sendFileContent(machineId: string, requestId: string, path: string, content?: string, error?: string, truncated?: { totalLines: number; headLines: number; tailLines: number }) {
+  sendFileContent(machineId: string, requestId: string, path: string, content?: string, error?: string, truncated?: { totalLines: number; headLines: number; tailLines: number }, encoding?: "base64", mimeType?: string) {
     const msg: Record<string, any> = {
       type: "file_content",
       machineId: this.machineId,
@@ -174,6 +174,8 @@ export class AgentListener {
     if (content !== undefined) msg.content = content;
     if (error) msg.error = error;
     if (truncated) msg.truncated = truncated;
+    if (encoding) msg.encoding = encoding;
+    if (mimeType) msg.mimeType = mimeType;
     this.broadcast(msg);
   }
 

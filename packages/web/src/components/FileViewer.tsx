@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 interface FileViewerProps {
   machineId: string;
   filePath: string;
-  readFile: (machineId: string, path: string) => Promise<{ path: string; content?: string; error?: string; truncated?: { totalLines: number; headLines: number; tailLines: number } }>;
+  readFile: (machineId: string, path: string) => Promise<{ path: string; content?: string; error?: string; truncated?: { totalLines: number; headLines: number; tailLines: number }; encoding?: "base64"; mimeType?: string }>;
   onClose: () => void;
 }
 
@@ -12,6 +12,8 @@ export function FileViewer({ machineId, filePath, readFile, onClose }: FileViewe
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [truncated, setTruncated] = useState<{ totalLines: number; headLines: number; tailLines: number } | null>(null);
+  const [encoding, setEncoding] = useState<"base64" | undefined>();
+  const [mimeType, setMimeType] = useState<string | undefined>();
 
   useEffect(() => {
     let cancelled = false;
@@ -19,6 +21,8 @@ export function FileViewer({ machineId, filePath, readFile, onClose }: FileViewe
     setError(null);
     setContent(null);
     setTruncated(null);
+    setEncoding(undefined);
+    setMimeType(undefined);
 
     readFile(machineId, filePath).then((result) => {
       if (cancelled) return;
@@ -27,6 +31,8 @@ export function FileViewer({ machineId, filePath, readFile, onClose }: FileViewe
       } else {
         setContent(result.content ?? "");
         if (result.truncated) setTruncated(result.truncated);
+        if (result.encoding) setEncoding(result.encoding);
+        if (result.mimeType) setMimeType(result.mimeType);
       }
       setLoading(false);
     });
@@ -44,7 +50,8 @@ export function FileViewer({ machineId, filePath, readFile, onClose }: FileViewe
   }, [onClose]);
 
   const fileName = filePath.split("/").pop() || filePath;
-  const lines = content?.split("\n") ?? [];
+  const isImage = encoding === "base64" && mimeType?.startsWith("image/");
+  const lines = (!isImage && content) ? content.split("\n") : [];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "var(--bg-primary, #111)", color: "var(--text-primary, #eee)" }}>
@@ -84,7 +91,16 @@ export function FileViewer({ machineId, filePath, readFile, onClose }: FileViewe
       <div style={{ flex: 1, overflow: "auto", padding: 0 }}>
         {loading && <div style={{ padding: 16, color: "var(--text-secondary)" }}>Loading {fileName}...</div>}
         {error && <div style={{ padding: 16, color: "#e55" }}>Error: {error}</div>}
-        {!loading && !error && content !== null && (
+        {!loading && !error && isImage && content && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 16, height: "100%" }}>
+            <img
+              src={`data:${mimeType};base64,${content}`}
+              alt={fileName}
+              style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
+            />
+          </div>
+        )}
+        {!loading && !error && !isImage && content !== null && (
           <pre style={{ margin: 0, padding: 0, fontFamily: "monospace", fontSize: 13, lineHeight: "20px" }}>
             <table style={{ borderCollapse: "collapse", width: "100%" }}>
               <tbody>

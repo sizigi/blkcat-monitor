@@ -82,7 +82,7 @@ export interface UseSocketReturn {
   notificationCounts: Map<string, number>;
   clearNotifications: (sessionKey: string) => void;
   listDirectory: (machineId: string, path: string) => Promise<{ path: string; entries: { name: string; isDir: boolean }[]; error?: string }>;
-  readFile: (machineId: string, path: string) => Promise<{ path: string; content?: string; error?: string; truncated?: { totalLines: number; headLines: number; tailLines: number } }>;
+  readFile: (machineId: string, path: string) => Promise<{ path: string; content?: string; error?: string; truncated?: { totalLines: number; headLines: number; tailLines: number }; encoding?: "base64"; mimeType?: string }>;
   createDirectory: (machineId: string, path: string) => Promise<{ path: string; success: boolean; error?: string }>;
   sendRaw: (msg: object) => void;
   deploySkills: (machineId: string, skills: { name: string; files: { path: string; content: string }[] }[]) => string;
@@ -124,7 +124,7 @@ export function useSocket(url: string): UseSocketReturn {
   const hookEventSubsRef = useRef(new Set<(event: AgentHookEventMessage) => void>());
 
   const directoryListingSubsRef = useRef(new Map<string, (msg: { path: string; entries: { name: string; isDir: boolean }[]; error?: string }) => void>());
-  const fileContentSubsRef = useRef(new Map<string, (msg: { path: string; content?: string; error?: string; truncated?: { totalLines: number; headLines: number; tailLines: number } }) => void>());
+  const fileContentSubsRef = useRef(new Map<string, (msg: { path: string; content?: string; error?: string; truncated?: { totalLines: number; headLines: number; tailLines: number }; encoding?: "base64"; mimeType?: string }) => void>());
   const createDirSubsRef = useRef(new Map<string, (msg: { path: string; success: boolean; error?: string }) => void>());
 
   const deployResultSubsRef = useRef(new Set<(msg: any) => void>());
@@ -364,7 +364,7 @@ export function useSocket(url: string): UseSocketReturn {
             const cb = fileContentSubsRef.current.get(msg.requestId);
             if (cb) {
               fileContentSubsRef.current.delete(msg.requestId);
-              cb({ path: msg.path, content: (msg as any).content, error: (msg as any).error, truncated: (msg as any).truncated });
+              cb({ path: msg.path, content: (msg as any).content, error: (msg as any).error, truncated: (msg as any).truncated, encoding: (msg as any).encoding, mimeType: (msg as any).mimeType });
             }
           } else if ((msg as any).type === "create_directory_result") {
             const m = msg as any;
@@ -530,7 +530,7 @@ export function useSocket(url: string): UseSocketReturn {
   );
 
   const readFile = useCallback(
-    (machineId: string, path: string): Promise<{ path: string; content?: string; error?: string; truncated?: { totalLines: number; headLines: number; tailLines: number } }> => {
+    (machineId: string, path: string): Promise<{ path: string; content?: string; error?: string; truncated?: { totalLines: number; headLines: number; tailLines: number }; encoding?: "base64"; mimeType?: string }> => {
       const ws = wsRef.current;
       if (!ws || ws.readyState !== WebSocket.OPEN) {
         return Promise.resolve({ path, error: "Not connected" });

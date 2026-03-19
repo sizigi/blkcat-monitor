@@ -125,6 +125,8 @@ export interface AgentFileContentMessage {
   content?: string;
   error?: string;
   truncated?: { totalLines: number; headLines: number; tailLines: number };
+  encoding?: "base64";
+  mimeType?: string;
 }
 
 export interface AgentDeployResultMessage {
@@ -382,6 +384,8 @@ export interface ServerFileContentMessage {
   content?: string;
   error?: string;
   truncated?: { totalLines: number; headLines: number; tailLines: number };
+  encoding?: "base64";
+  mimeType?: string;
 }
 
 export interface ServerDeployResultMessage {

@@ -341,7 +341,13 @@ export class TmuxCapture {
     return { entries };
   }
 
-  readFile(path: string): { content: string; truncated?: { totalLines: number; headLines: number; tailLines: number } } | { error: string } {
+  private static IMAGE_EXTS = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico"]);
+  private static MIME_MAP: Record<string, string> = {
+    png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif",
+    webp: "image/webp", svg: "image/svg+xml", bmp: "image/bmp", ico: "image/x-icon",
+  };
+
+  readFile(path: string): { content: string; truncated?: { totalLines: number; headLines: number; tailLines: number }; encoding?: "base64"; mimeType?: string } | { error: string } {
     const resolved = path.startsWith("~")
       ? path.replace("~", process.env.HOME ?? "/root")
       : path;
@@ -355,6 +361,19 @@ export class TmuxCapture {
     if (isNaN(fileSize)) return { error: "Cannot determine file size" };
 
     const MAX_SIZE = 1_000_000; // 1MB
+    const MAX_IMAGE_SIZE = 10_000_000; // 10MB for images
+
+    // Check if it's an image file
+    const ext = resolved.split(".").pop()?.toLowerCase() ?? "";
+    const isImage = TmuxCapture.IMAGE_EXTS.has(ext);
+
+    if (isImage) {
+      if (fileSize > MAX_IMAGE_SIZE) return { error: "Image too large (>10MB)" };
+      const cmd = [...this.sshPrefix, "base64", resolved];
+      const result = this.exec(cmd);
+      if (!result.success) return { error: "Failed to read image" };
+      return { content: result.stdout.replace(/\n/g, ""), encoding: "base64", mimeType: TmuxCapture.MIME_MAP[ext] || "image/png" };
+    }
 
     if (fileSize <= MAX_SIZE) {
       // Read entire file

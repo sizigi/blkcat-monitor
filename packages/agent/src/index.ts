@@ -343,7 +343,7 @@ async function main() {
     if ("error" in result) {
       conn.sendFileContent(config.machineId, requestId, resolved, undefined, result.error);
     } else {
-      conn.sendFileContent(config.machineId, requestId, resolved, result.content, undefined, result.truncated);
+      conn.sendFileContent(config.machineId, requestId, resolved, result.content, undefined, result.truncated, result.encoding, result.mimeType);
     }
   }
 
@@ -416,7 +416,7 @@ async function main() {
     sendScrollback(sessionId: string, lines: string[]): void;
     sendHookEvent(event: AgentHookEventMessage): void;
     sendDirectoryListing(machineId: string, requestId: string, path: string, entries: { name: string; isDir: boolean }[], error?: string): void;
-    sendFileContent(machineId: string, requestId: string, path: string, content?: string, error?: string, truncated?: { totalLines: number; headLines: number; tailLines: number }): void;
+    sendFileContent(machineId: string, requestId: string, path: string, content?: string, error?: string, truncated?: { totalLines: number; headLines: number; tailLines: number }, encoding?: "base64", mimeType?: string): void;
     sendDeployResult(requestId: string, success: boolean, error?: string): void;
     sendSettingsSnapshot(requestId: string, settings: Record<string, unknown>, scope: "global" | "project", deployedSkills?: string[]): void;
     sendSettingsResult(requestId: string, success: boolean, error?: string): void;
