@@ -16,7 +16,10 @@ export function FileViewer({ machineId, filePath, readFile, onClose, onBack }: F
   const [encoding, setEncoding] = useState<"base64" | undefined>();
   const [mimeType, setMimeType] = useState<string | undefined>();
   const [zoom, setZoom] = useState(1);
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
   const imgContainerRef = useRef<HTMLDivElement>(null);
+  const pinchRef = useRef<{ startDist: number; startZoom: number } | null>(null);
+  const panRef = useRef<{ startX: number; startY: number; startOx: number; startOy: number; moved: boolean } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -27,6 +30,7 @@ export function FileViewer({ machineId, filePath, readFile, onClose, onBack }: F
     setEncoding(undefined);
     setMimeType(undefined);
     setZoom(1);
+    setPanOffset({ x: 0, y: 0 });
 
     readFile(machineId, filePath).then((result) => {
       if (cancelled) return;
@@ -55,9 +59,48 @@ export function FileViewer({ machineId, filePath, readFile, onClose, onBack }: F
 
   // Wheel zoom on image container
   const handleWheel = useCallback((e: React.WheelEvent) => {
-    if (!isImage) return;
     e.preventDefault();
     setZoom((z) => Math.min(10, Math.max(0.1, z * (e.deltaY < 0 ? 1.15 : 1 / 1.15))));
+  }, []);
+
+  // Pinch-to-zoom + pan for touch devices
+  const getTouchDist = (t1: React.Touch, t2: React.Touch) =>
+    Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      // Pinch start
+      const dist = getTouchDist(e.touches[0], e.touches[1]);
+      pinchRef.current = { startDist: dist, startZoom: zoom };
+      panRef.current = null;
+    } else if (e.touches.length === 1 && zoom > 1) {
+      // Pan start (only when zoomed in)
+      const t = e.touches[0];
+      panRef.current = { startX: t.clientX, startY: t.clientY, startOx: panOffset.x, startOy: panOffset.y, moved: false };
+    }
+  }, [zoom, panOffset]);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length === 2 && pinchRef.current) {
+      e.preventDefault();
+      const dist = getTouchDist(e.touches[0], e.touches[1]);
+      const scale = dist / pinchRef.current.startDist;
+      setZoom(Math.min(10, Math.max(0.1, pinchRef.current.startZoom * scale)));
+    } else if (e.touches.length === 1 && panRef.current && zoom > 1) {
+      const t = e.touches[0];
+      const dx = t.clientX - panRef.current.startX;
+      const dy = t.clientY - panRef.current.startY;
+      if (Math.abs(dx) > 5 || Math.abs(dy) > 5) panRef.current.moved = true;
+      if (panRef.current.moved) {
+        e.preventDefault();
+        setPanOffset({ x: panRef.current.startOx + dx, y: panRef.current.startOy + dy });
+      }
+    }
+  }, [zoom]);
+
+  const handleTouchEnd = useCallback(() => {
+    pinchRef.current = null;
+    panRef.current = null;
   }, []);
 
   const fileName = filePath.split("/").pop() || filePath;
@@ -119,9 +162,9 @@ export function FileViewer({ machineId, filePath, readFile, onClose, onBack }: F
           flexShrink: 0,
         }}>
           <button onClick={() => setZoom((z) => Math.max(0.1, z / 1.5))} style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: 4, padding: "2px 10px", color: "var(--text-primary)", cursor: "pointer", fontSize: 14 }}>−</button>
-          <button onClick={() => setZoom(1)} style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: 4, padding: "2px 8px", color: "var(--text-primary)", cursor: "pointer", fontSize: 11 }}>1:1</button>
+          <button onClick={() => { setZoom(1); setPanOffset({ x: 0, y: 0 }); }} style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: 4, padding: "2px 8px", color: "var(--text-primary)", cursor: "pointer", fontSize: 11 }}>1:1</button>
           <button onClick={() => setZoom((z) => Math.min(10, z * 1.5))} style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: 4, padding: "2px 10px", color: "var(--text-primary)", cursor: "pointer", fontSize: 14 }}>+</button>
-          <button onClick={() => setZoom(0)} style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: 4, padding: "2px 8px", color: "var(--text-primary)", cursor: "pointer", fontSize: 11 }}>Fit</button>
+          <button onClick={() => { setZoom(0); setPanOffset({ x: 0, y: 0 }); }} style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: 4, padding: "2px 8px", color: "var(--text-primary)", cursor: "pointer", fontSize: 11 }}>Fit</button>
         </div>
       )}
 
@@ -129,7 +172,10 @@ export function FileViewer({ machineId, filePath, readFile, onClose, onBack }: F
       <div
         ref={imgContainerRef}
         onWheel={isImage ? handleWheel : undefined}
-        style={{ flex: 1, overflow: "auto", padding: 0 }}
+        onTouchStart={isImage ? handleTouchStart : undefined}
+        onTouchMove={isImage ? handleTouchMove : undefined}
+        onTouchEnd={isImage ? handleTouchEnd : undefined}
+        style={{ flex: 1, overflow: isImage && zoom > 1 ? "hidden" : "auto", padding: 0, touchAction: isImage ? "none" : "auto" }}
       >
         {loading && <div style={{ padding: 16, color: "var(--text-secondary)" }}>Loading {fileName}...</div>}
         {error && <div style={{ padding: 16, color: "#e55" }}>Error: {error}</div>}
@@ -140,10 +186,12 @@ export function FileViewer({ machineId, filePath, readFile, onClose, onBack }: F
             justifyContent: "center",
             padding: 16,
             minHeight: "100%",
+            transform: zoom > 1 ? `translate(${panOffset.x}px, ${panOffset.y}px)` : undefined,
           }}>
             <img
               src={`data:${mimeType};base64,${content}`}
               alt={fileName}
+              draggable={false}
               style={zoom === 0
                 ? { maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }
                 : { width: `${zoom * 100}%`, objectFit: "contain" }
