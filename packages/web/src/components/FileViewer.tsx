@@ -180,23 +180,49 @@ export function FileViewer({ machineId, filePath, readFile, onClose, onBack }: F
         {loading && <div style={{ padding: 16, color: "var(--text-secondary)" }}>Loading {fileName}...</div>}
         {error && <div style={{ padding: 16, color: "#e55" }}>Error: {error}</div>}
         {!loading && !error && isImage && content && (
-          <div style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: 16,
-            minHeight: "100%",
-            transform: zoom > 1 ? `translate(${panOffset.x}px, ${panOffset.y}px)` : undefined,
-          }}>
-            <img
-              src={`data:${mimeType};base64,${content}`}
-              alt={fileName}
-              draggable={false}
-              style={zoom === 0
-                ? { maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }
-                : { width: `${zoom * 100}%`, objectFit: "contain" }
-              }
-            />
+          <div style={{ position: "relative", minHeight: "100%" }}>
+            {/* Floating close button */}
+            <button
+              onClick={onClose}
+              style={{
+                position: "sticky",
+                top: 8,
+                float: "right",
+                marginRight: 8,
+                zIndex: 10,
+                width: 36,
+                height: 36,
+                borderRadius: "50%",
+                background: "rgba(0,0,0,0.6)",
+                border: "1px solid rgba(255,255,255,0.2)",
+                color: "#fff",
+                fontSize: 20,
+                lineHeight: 1,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                backdropFilter: "blur(4px)",
+              }}
+            >×</button>
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 16,
+              minHeight: "100%",
+              transform: zoom > 1 ? `translate(${panOffset.x}px, ${panOffset.y}px)` : undefined,
+            }}>
+              <img
+                src={`data:${mimeType};base64,${content}`}
+                alt={fileName}
+                draggable={false}
+                style={zoom === 0
+                  ? { maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }
+                  : { width: `${zoom * 100}%`, objectFit: "contain" }
+                }
+              />
+            </div>
           </div>
         )}
         {!loading && !error && !isImage && content !== null && (
