@@ -132,7 +132,7 @@ export function FileViewer({ machineId, filePath, readFile, onClose, onBack }: F
             {Math.round(zoom * 100)}%
           </span>
         )}
-        <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer", fontSize: 18, lineHeight: 1, padding: "0 4px", flexShrink: 0 }}>
+        <button onClick={onBack ?? onClose} style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer", fontSize: 18, lineHeight: 1, padding: "0 4px", flexShrink: 0 }}>
           ×
         </button>
       </div>
@@ -181,9 +181,9 @@ export function FileViewer({ machineId, filePath, readFile, onClose, onBack }: F
         {error && <div style={{ padding: 16, color: "#e55" }}>Error: {error}</div>}
         {!loading && !error && isImage && content && (
           <div style={{ position: "relative", minHeight: "100%" }}>
-            {/* Floating close button */}
+            {/* Floating close button — goes back to directory if available */}
             <button
-              onClick={onClose}
+              onClick={onBack ?? onClose}
               style={{
                 position: "sticky",
                 top: 8,
