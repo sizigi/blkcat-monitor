@@ -135,11 +135,15 @@ export class TmuxCapture {
           this.exec([...this.sshPrefix, "tmux", "resize-window", "-x", String(targetCols), "-y", String(targetRows), "-t", window]);
         }
       }
-      // Force tmux to deliver SIGWINCH to processes in background windows
-      // by briefly selecting the target window then switching back.
-      // Without this, pty dimensions stay stale for non-active windows.
-      this.exec([...this.sshPrefix, "tmux", "select-window", "-t", window]);
-      this.exec([...this.sshPrefix, "tmux", "last-window", "-t", session]);
+      // Force tmux to deliver SIGWINCH by briefly selecting the target window.
+      // Save and restore the actual active window (not last-window, which
+      // can point to the wrong tab and confuse byobu).
+      const activeResult = this.exec([...this.sshPrefix, "tmux", "display-message", "-p", "-t", session, "#{window_index}"]);
+      const activeWindow = activeResult.success ? activeResult.stdout.trim() : null;
+      if (activeWindow !== null && `${session}:${activeWindow}` !== window) {
+        this.exec([...this.sshPrefix, "tmux", "select-window", "-t", window]);
+        this.exec([...this.sshPrefix, "tmux", "select-window", "-t", `${session}:${activeWindow}`]);
+      }
     }
     return ok;
   }
