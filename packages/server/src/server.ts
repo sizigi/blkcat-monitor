@@ -220,7 +220,35 @@ export function createServer(opts: ServerOptions) {
       }
       broadcastToDashboards(msg);
       if (opts.notifyCommand && NOTIFY_HOOK_EVENTS.has(msg.hookEventName)) {
-        console.log(`[notify] ${msg.hookEventName} from ${msg.machineId}/${msg.sessionId ?? "?"}`);
+        // Resolve session name from machine state
+        const sessionName = (() => {
+          const m = machines.get(msg.machineId);
+          if (!m || !msg.sessionId) return msg.sessionId ?? "";
+          const displayName = opts.displayNames?.[`${msg.machineId}:${msg.sessionId}`];
+          if (displayName) return displayName;
+          const session = m.sessions.find((s) => s.id === msg.sessionId);
+          return session?.name ?? msg.sessionId;
+        })();
+        // Extract detail from hook event data
+        const detail = (() => {
+          const data = msg.data as Record<string, unknown> | undefined;
+          if (msg.hookEventName === "Stop") {
+            // Use last_assistant_message from Claude Code's Stop hook payload
+            if (data?.last_assistant_message && typeof data.last_assistant_message === "string") {
+              return data.last_assistant_message;
+            }
+            return String(data?.stop_hook_reason ?? "");
+          }
+          if (!data) return "";
+          if (msg.hookEventName === "Notification") {
+            const title = data.title ? String(data.title) : "";
+            const message = data.message ? String(data.message) : "";
+            return title && message ? `${title}: ${message}` : title || message;
+          }
+          if (msg.hookEventName === "PermissionRequest") return String(data.tool_name ?? "");
+          return "";
+        })();
+        console.log(`[notify] ${msg.hookEventName} from ${msg.machineId}/${sessionName}${detail ? ` (${detail})` : ""}`);
         Bun.spawn(["sh", "-c", opts.notifyCommand], {
           stdout: "ignore",
           stderr: "ignore",
@@ -230,6 +258,8 @@ export function createServer(opts: ServerOptions) {
             BLKCAT_MACHINE_ID: msg.machineId,
             BLKCAT_SESSION_ID: msg.sessionId ?? "",
             BLKCAT_HOOK_EVENT: msg.hookEventName,
+            BLKCAT_SESSION_NAME: sessionName,
+            BLKCAT_EVENT_DETAIL: detail,
           },
         });
       }
@@ -767,6 +797,10 @@ export function createServer(opts: ServerOptions) {
 
       if (url.pathname === "/api/health" && req.method === "GET") {
         return handleHealthApi();
+      }
+
+      if (url.pathname === "/icon.png" && opts.staticDir) {
+        return new Response(Bun.file(opts.staticDir + "/blkcat.png"));
       }
 
       // In split mode, only agent WS and health on the main port

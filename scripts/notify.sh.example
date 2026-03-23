@@ -1,0 +1,24 @@
+#!/bin/bash
+# Bark push notification for blkcat-monitor
+# Copy to ~/.blkcat/notify.sh and fill in your BARK_KEY
+# Then set "notifyCommand": "/path/to/.blkcat/notify.sh" in ~/.blkcat/server.json
+BARK_KEY="YOUR_BARK_KEY_HERE"
+ICON="https://i.imgur.com/VdsREOk.png"
+
+TITLE="${BLKCAT_MACHINE_ID}:${BLKCAT_SESSION_NAME}"
+EVENT_LABEL="${BLKCAT_HOOK_EVENT}"
+[ "$EVENT_LABEL" = "Stop" ] && EVENT_LABEL="Output"
+BODY="${EVENT_LABEL}: ${BLKCAT_EVENT_DETAIL:-no detail}"
+
+# Truncate body to 200 chars for push notification
+BODY="${BODY:0:200}"
+
+curl -s -X POST "https://api.day.app/push" \
+  -H "Content-Type: application/json; charset=utf-8" \
+  -d "$(jq -n \
+    --arg key "$BARK_KEY" \
+    --arg title "$TITLE" \
+    --arg body "$BODY" \
+    --arg icon "$ICON" \
+    '{device_key: $key, title: $title, body: $body, icon: $icon}'
+  )" >/dev/null 2>&1

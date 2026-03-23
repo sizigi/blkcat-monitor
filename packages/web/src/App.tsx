@@ -50,6 +50,31 @@ export default function App() {
   const isMobile = useIsMobile();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
+  // Request browser notification permission on mount
+  useEffect(() => {
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+  }, []);
+
+  // Browser notifications for Stop events
+  useEffect(() => {
+    return subscribeHookEvents((event) => {
+      if (event.hookEventName !== "Stop") return;
+      if (!("Notification" in window) || Notification.permission !== "granted") return;
+      const machineName = getMachineName(event.machineId) ?? event.machineId;
+      const sessionName = event.sessionId
+        ? getSessionName(event.machineId, event.sessionId, event.sessionId)
+        : "unknown";
+      const reason = String((event.data as any)?.stop_hook_reason ?? "task complete");
+      new Notification(`${machineName} — ${sessionName}`, {
+        body: reason,
+        tag: `stop-${event.machineId}-${event.sessionId}`,
+        icon: "/favicon.png",
+      });
+    });
+  }, [subscribeHookEvents, getMachineName, getSessionName]);
+
   // Reset mobile-specific state and force terminal refit on mode transition
   useEffect(() => {
     if (!isMobile) setDrawerOpen(false);

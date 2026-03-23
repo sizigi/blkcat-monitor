@@ -752,9 +752,18 @@ export function Sidebar({
                   }}
                   onDrop={(e) => {
                     e.preventDefault();
-                    const zone = (dropTarget?.machineId === machine.machineId && dropTarget?.sessionId === session.id) ? dropTarget.zone : "center";
                     setDropTarget(null);
+                    // Recalculate zone from drop coordinates to avoid stale React state
                     const src = dragRef.current;
+                    const sameGroup = src && src.machineId === machine.machineId && src.group === group;
+                    let zone: "above" | "below" | "center" = "center";
+                    if (sameGroup) {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      const y = e.clientY - rect.top;
+                      const edgeSize = Math.min(8, rect.height * 0.3);
+                      if (y < edgeSize) zone = "above";
+                      else if (y > rect.height - edgeSize) zone = "below";
+                    }
                     if (!src || (src.machineId === machine.machineId && src.sessionId === session.id)) return;
                     dragRef.current = null;
                     // Shift + terminal → CLI = attach under that CLI
