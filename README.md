@@ -175,6 +175,7 @@ Open http://localhost:5173 — select a session from the sidebar to view termina
 | `BLKCAT_DASHBOARD_HOST` | `127.0.0.1` | Dashboard bind address (only used when `BLKCAT_DASHBOARD_PORT` is set) |
 | `BLKCAT_DASHBOARD_TLS_CERT` | — | TLS certificate for the dashboard port (PEM) |
 | `BLKCAT_DASHBOARD_TLS_KEY` | — | TLS private key for the dashboard port (PEM) |
+| `BLKCAT_AUTH_TOKEN` | — | Shared secret for agent authentication. See [Authentication](#authentication) |
 
 Server options can also be set in `~/.blkcat/server.json` (environment variables take precedence):
 
@@ -190,7 +191,8 @@ Server options can also be set in `~/.blkcat/server.json` (environment variables
   "dashboardPort": 3001,
   "dashboardHostname": "127.0.0.1",
   "dashboardTlsCert": "/path/to/dashboard.crt",
-  "dashboardTlsKey": "/path/to/dashboard.key"
+  "dashboardTlsKey": "/path/to/dashboard.key",
+  "authToken": "your-secret-token"
 }
 ```
 
@@ -204,6 +206,7 @@ Server options can also be set in `~/.blkcat/server.json` (environment variables
 | `BLKCAT_CONFIG` | — | Path to JSON config file |
 | `BLKCAT_LISTEN_PORT` | — | Port to listen on for incoming server connections (listener mode) |
 | `BLKCAT_HOOKS_PORT` | `3001` | HTTP port for Claude Code hooks server |
+| `BLKCAT_AUTH_TOKEN` | — | Shared secret for server authentication (must match server's token) |
 
 #### Config file
 
@@ -667,6 +670,71 @@ If certificates exist in `~/.blkcat/certs/` but you want to run without TLS, set
 ```bash
 BLKCAT_TLS_CERT= BLKCAT_TLS_KEY= bun packages/server/src/index.ts
 ```
+
+## Authentication
+
+By default, anyone with network access to the agent port can connect as an agent. When the agent port is exposed to the internet (e.g. with [Dual Port Mode](#dual-port-mode)), you should enable token authentication to prevent unauthorized connections.
+
+### How it works
+
+Set the same `BLKCAT_AUTH_TOKEN` on the server and all agents. The token is sent as a `?token=` query parameter during the WebSocket handshake. The server rejects connections with a missing or incorrect token (HTTP 401). Token comparison uses constant-time equality to prevent timing attacks.
+
+When `BLKCAT_AUTH_TOKEN` is not set, no authentication is required (backward compatible).
+
+### Setup
+
+**1. Generate a token**
+
+```bash
+openssl rand -hex 32
+```
+
+**2. Configure the server**
+
+Add the token to `~/.blkcat/server.json`:
+
+```json
+{
+  "authToken": "your-generated-token"
+}
+```
+
+Or set it as an environment variable:
+
+```bash
+BLKCAT_AUTH_TOKEN=your-generated-token bun packages/server/src/index.ts
+```
+
+The server logs `Agent authentication enabled` on startup when a token is configured.
+
+**3. Configure each agent**
+
+Set the same token on every agent:
+
+```bash
+BLKCAT_AUTH_TOKEN=your-generated-token \
+BLKCAT_SERVER_URL=wss://your-server:443/ws/agent \
+bun packages/agent/src/index.ts
+```
+
+For agents in listener mode, the same token protects incoming connections from the server:
+
+```bash
+BLKCAT_AUTH_TOKEN=your-generated-token \
+BLKCAT_LISTEN_PORT=4000 \
+bun packages/agent/src/index.ts
+```
+
+### What is protected
+
+| Endpoint | Without token | With token |
+|----------|--------------|------------|
+| Server `/ws/agent` | Anyone can connect as an agent | Requires valid token |
+| Agent listener port | Anyone can send commands | Requires valid token |
+| Server `/ws/dashboard` | Not protected (use network isolation) | Not protected |
+| Server `/api/health` | Open | Open |
+
+The dashboard WebSocket is not protected by the token — it is intended to be accessed on a private network (localhost, Tailscale, or SSH tunnel). Use [Dual Port Mode](#dual-port-mode) to keep the dashboard off the public internet.
 
 ## Troubleshooting
 
