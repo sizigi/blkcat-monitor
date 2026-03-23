@@ -14,6 +14,7 @@ export interface AgentConfig {
   targets: TargetConfig[];
   listenPort?: number;
   hooksPort: number;
+  authToken?: string;
 }
 
 export async function loadConfig(): Promise<AgentConfig> {
@@ -38,5 +39,6 @@ export async function loadConfig(): Promise<AgentConfig> {
     targets,
     listenPort,
     hooksPort: parseInt(process.env.BLKCAT_HOOKS_PORT ?? "3001"),
+    authToken: process.env.BLKCAT_AUTH_TOKEN,
   };
 }

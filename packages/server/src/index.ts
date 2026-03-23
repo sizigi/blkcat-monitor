@@ -28,6 +28,7 @@ const server = createServer({
   dashboardHostname: config.dashboardHostname,
   dashboardTlsCert: config.dashboardTlsCert,
   dashboardTlsKey: config.dashboardTlsKey,
+  authToken: config.authToken,
 });
 
 // Connect saved agents (as "api" source so they continue to be persisted)
@@ -48,6 +49,9 @@ if (config.agents?.length) {
 }
 if (savedAgents.length) {
   console.log(`Restoring saved agents: ${savedAgents.join(", ")}`);
+}
+if (config.authToken) {
+  console.log("Agent authentication enabled");
 }
 if (config.notifyCommand) {
   console.log(`Notify command: ${config.notifyCommand}`);

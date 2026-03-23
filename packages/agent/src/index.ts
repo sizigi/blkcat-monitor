@@ -429,6 +429,7 @@ async function main() {
     const listener = new AgentListener({
       port: config.listenPort,
       machineId: config.machineId,
+      authToken: config.authToken,
       onInput: handleInput,
       onStartSession: handleStartSession,
       onCloseSession: handleCloseSession,
@@ -460,6 +461,7 @@ async function main() {
     const connection = new AgentConnection({
       serverUrl: config.serverUrl,
       machineId: config.machineId,
+      authToken: config.authToken,
       onInput: handleInput,
       onStartSession: handleStartSession,
       onCloseSession: handleCloseSession,

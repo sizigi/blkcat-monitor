@@ -30,6 +30,7 @@ export interface ServerConfig {
   dashboardHostname?: string;
   dashboardTlsCert?: string;
   dashboardTlsKey?: string;
+  authToken?: string;
 }
 
 export async function loadServerConfig(): Promise<ServerConfig> {
@@ -59,6 +60,7 @@ export async function loadServerConfig(): Promise<ServerConfig> {
     dashboardHostname: env("BLKCAT_DASHBOARD_HOST") ?? str(file.dashboardHostname) ?? "127.0.0.1",
     dashboardTlsCert: env("BLKCAT_DASHBOARD_TLS_CERT") ?? str(file.dashboardTlsCert),
     dashboardTlsKey: env("BLKCAT_DASHBOARD_TLS_KEY") ?? str(file.dashboardTlsKey),
+    authToken: env("BLKCAT_AUTH_TOKEN") ?? str(file.authToken),
   };
 }
 

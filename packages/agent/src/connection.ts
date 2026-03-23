@@ -3,6 +3,7 @@ import type { SessionInfo, ServerToAgentMessage, AgentHookEventMessage, CliTool 
 interface AgentConnectionOptions {
   serverUrl: string;
   machineId: string;
+  authToken?: string;
   onInput: (msg: { sessionId: string; text?: string; key?: string; data?: string }) => void;
   onStartSession?: (args?: string, cwd?: string, name?: string, cliTool?: CliTool) => void;
   onCloseSession?: (sessionId: string) => void;
@@ -47,7 +48,12 @@ export class AgentConnection {
     onFirstOpen?: () => void,
     onFirstFail?: (err: Error) => void,
   ) {
-    const ws = new WebSocket(this.opts.serverUrl);
+    let url = this.opts.serverUrl;
+    if (this.opts.authToken) {
+      const sep = url.includes("?") ? "&" : "?";
+      url = `${url}${sep}token=${encodeURIComponent(this.opts.authToken)}`;
+    }
+    const ws = new WebSocket(url);
     this.ws = ws;
 
     ws.addEventListener("open", () => {

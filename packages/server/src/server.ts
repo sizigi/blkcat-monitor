@@ -11,6 +11,13 @@ import {
 } from "@blkcat/shared";
 import type { DisplayNames } from "./display-names-store";
 import { cpus, totalmem, freemem } from "os";
+import { timingSafeEqual as cryptoTimingSafeEqual } from "crypto";
+
+/** Constant-time string comparison to prevent timing attacks on token validation. */
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  return cryptoTimingSafeEqual(Buffer.from(a), Buffer.from(b));
+}
 
 interface ServerOptions {
   port: number;
@@ -34,6 +41,8 @@ interface ServerOptions {
   dashboardHostname?: string;
   dashboardTlsCert?: string;
   dashboardTlsKey?: string;
+  /** Shared secret for agent authentication. When set, agents must provide this token. */
+  authToken?: string;
 }
 
 interface WsData {
@@ -277,7 +286,10 @@ export function createServer(opts: ServerOptions) {
       if (entry.removed) return;
       entry.status = "connecting";
 
-      const ws = new WebSocket(`ws://${address}`);
+      const wsUrl = opts.authToken
+        ? `ws://${address}?token=${encodeURIComponent(opts.authToken)}`
+        : `ws://${address}`;
+      const ws = new WebSocket(wsUrl);
       entry.ws = ws;
       const agent: AgentSocket = {
         send(data: string) { if (ws.readyState === WebSocket.OPEN) ws.send(data); },
@@ -332,6 +344,13 @@ export function createServer(opts: ServerOptions) {
   // --- Shared fetch/websocket handlers ---
 
   function upgradeAgent(req: Request, server: any): Response | undefined {
+    if (opts.authToken) {
+      const url = new URL(req.url);
+      const token = url.searchParams.get("token");
+      if (!token || !timingSafeEqual(token, opts.authToken)) {
+        return new Response("Unauthorized", { status: 401 });
+      }
+    }
     const ok = server.upgrade(req, { data: { role: "agent" } as WsData });
     return ok ? undefined : new Response("Upgrade failed", { status: 500 });
   }

@@ -1,8 +1,16 @@
 import type { SessionInfo, ServerToAgentMessage, AgentHookEventMessage, CliTool } from "@blkcat/shared";
 
+import { timingSafeEqual as cryptoTimingSafeEqual } from "crypto";
+
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  return cryptoTimingSafeEqual(Buffer.from(a), Buffer.from(b));
+}
+
 interface AgentListenerOptions {
   port: number;
   machineId: string;
+  authToken?: string;
   onInput: (msg: { sessionId: string; text?: string; key?: string; data?: string }) => void;
   onStartSession?: (args?: string, cwd?: string, name?: string, cliTool?: CliTool) => void;
   onCloseSession?: (sessionId: string) => void;
@@ -39,6 +47,13 @@ export class AgentListener {
     this.server = Bun.serve({
       port: opts.port,
       fetch(req, server) {
+        if (opts.authToken) {
+          const url = new URL(req.url);
+          const token = url.searchParams.get("token");
+          if (!token || !timingSafeEqual(token, opts.authToken)) {
+            return new Response("Unauthorized", { status: 401 });
+          }
+        }
         const ok = server.upgrade(req);
         return ok ? undefined : new Response("Upgrade failed", { status: 500 });
       },
