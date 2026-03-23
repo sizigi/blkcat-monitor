@@ -171,6 +171,10 @@ Open http://localhost:5173 — select a session from the sidebar to view termina
 | `BLKCAT_SKILLS_DIR` | — | Directory containing skill subdirectories to make available for deployment to agents |
 | `BLKCAT_TLS_CERT` | auto-detect | Path to TLS certificate file (PEM). See [HTTPS / TLS](#https--tls-optional) |
 | `BLKCAT_TLS_KEY` | auto-detect | Path to TLS private key file (PEM) |
+| `BLKCAT_DASHBOARD_PORT` | — | Separate port for the dashboard. See [Dual Port Mode](#dual-port-mode) |
+| `BLKCAT_DASHBOARD_HOST` | `127.0.0.1` | Dashboard bind address (only used when `BLKCAT_DASHBOARD_PORT` is set) |
+| `BLKCAT_DASHBOARD_TLS_CERT` | — | TLS certificate for the dashboard port (PEM) |
+| `BLKCAT_DASHBOARD_TLS_KEY` | — | TLS private key for the dashboard port (PEM) |
 
 Server options can also be set in `~/.blkcat/server.json` (environment variables take precedence):
 
@@ -182,7 +186,11 @@ Server options can also be set in `~/.blkcat/server.json` (environment variables
   "agents": ["host1:4000", "host2:4000"],
   "skillsDir": "/path/to/skills",
   "tlsCert": "/path/to/server.crt",
-  "tlsKey": "/path/to/server.key"
+  "tlsKey": "/path/to/server.key",
+  "dashboardPort": 3001,
+  "dashboardHostname": "127.0.0.1",
+  "dashboardTlsCert": "/path/to/dashboard.crt",
+  "dashboardTlsKey": "/path/to/dashboard.key"
 }
 ```
 
@@ -472,6 +480,118 @@ Fix: unset the variable before launching:
 ```bash
 unset CLAUDECODE && claude
 ```
+
+## Dual Port Mode
+
+By default the server runs on a single port that handles both agent WebSocket connections and the dashboard UI. Dual port mode splits these onto separate ports, so you can expose the agent port publicly (with TLS) while keeping the dashboard on a private network.
+
+### Why use dual port mode?
+
+- **Security** — the agent port (`/ws/agent`, `/api/health`) is the only thing exposed to the internet. The dashboard (UI, `/ws/dashboard`, `/api/*`) stays on localhost or a private Tailscale IP.
+- **Simplified firewall rules** — open only the agent port in your cloud firewall. The dashboard is accessed via SSH tunnel or Tailscale, never directly from the internet.
+- **Independent TLS** — the agent port can use a public certificate (e.g. Let's Encrypt) while the dashboard uses a Tailscale certificate, or no TLS at all.
+
+### Quick start
+
+Set `dashboardPort` in `~/.blkcat/server.json` (or `BLKCAT_DASHBOARD_PORT` env var):
+
+```json
+{
+  "port": 443,
+  "hostname": "0.0.0.0",
+  "dashboardPort": 3000,
+  "dashboardHostname": "100.x.x.x"
+}
+```
+
+Or with environment variables:
+
+```bash
+BLKCAT_PORT=443 BLKCAT_HOST=0.0.0.0 \
+BLKCAT_DASHBOARD_PORT=3000 BLKCAT_DASHBOARD_HOST=100.x.x.x \
+bun packages/server/src/index.ts
+```
+
+The server will print both URLs on startup:
+
+```
+blkcat-monitor agent port: https://0.0.0.0:443
+blkcat-monitor dashboard: http://100.x.x.x:3000
+```
+
+### How it works
+
+In dual port mode, two `Bun.serve()` instances share the same in-memory state:
+
+| Port | Binds to | Serves | TLS |
+|------|----------|--------|-----|
+| Agent port (`port`) | `hostname` (e.g. `0.0.0.0`) | `/ws/agent`, `/api/health` | `tlsCert` / `tlsKey` |
+| Dashboard port (`dashboardPort`) | `dashboardHostname` (default `127.0.0.1`) | `/ws/dashboard`, `/api/*`, static files | `dashboardTlsCert` / `dashboardTlsKey` (optional) |
+
+When `dashboardPort` is **not** set, the server runs in single-port mode and all routes are served on the same port — this is the default and requires no configuration changes.
+
+### Example: public agent port with TLS, private dashboard
+
+This is the most common dual port setup. The agent port listens on all interfaces with a TLS certificate so remote agents can connect securely. The dashboard listens on the Tailscale IP without TLS (Tailscale already encrypts traffic).
+
+```json
+{
+  "port": 443,
+  "hostname": "0.0.0.0",
+  "tlsCert": "/home/user/.blkcat/certs/server.crt",
+  "tlsKey": "/home/user/.blkcat/certs/server.key",
+  "dashboardPort": 3000,
+  "dashboardHostname": "100.x.x.x"
+}
+```
+
+Agents connect with:
+
+```bash
+BLKCAT_SERVER_URL=wss://your-public-ip:443/ws/agent bun packages/agent/src/index.ts
+```
+
+Access the dashboard at `http://100.x.x.x:3000` via Tailscale.
+
+### Example: TLS on both ports
+
+If you want TLS on the dashboard too (e.g. for PWA install support), add dashboard TLS certificates:
+
+```json
+{
+  "port": 443,
+  "hostname": "0.0.0.0",
+  "tlsCert": "/home/user/.blkcat/certs/server.crt",
+  "tlsKey": "/home/user/.blkcat/certs/server.key",
+  "dashboardPort": 3000,
+  "dashboardHostname": "100.x.x.x",
+  "dashboardTlsCert": "/home/user/.blkcat/certs/server.crt",
+  "dashboardTlsKey": "/home/user/.blkcat/certs/server.key"
+}
+```
+
+Access the dashboard at `https://your-machine.tailnet.ts.net:3000`.
+
+### Binding to port 443
+
+Port 443 is a privileged port (below 1024). On Linux, grant the Bun binary the capability to bind to it without root:
+
+```bash
+sudo setcap cap_net_bind_service=+ep $(which bun)
+```
+
+This is a one-time setup. The capability persists across restarts but must be re-applied if Bun is upgraded.
+
+### Configuration reference
+
+| Config key | Env var | Default | Description |
+|------------|---------|---------|-------------|
+| `port` | `BLKCAT_PORT` | `3000` | Agent port (or single-port mode when `dashboardPort` is unset) |
+| `hostname` | `BLKCAT_HOST` | Tailscale IP or `127.0.0.1` | Agent port bind address |
+| `dashboardPort` | `BLKCAT_DASHBOARD_PORT` | — | Dashboard port. Enables dual port mode when set |
+| `dashboardHostname` | `BLKCAT_DASHBOARD_HOST` | `127.0.0.1` | Dashboard port bind address |
+| `dashboardTlsCert` | `BLKCAT_DASHBOARD_TLS_CERT` | — | TLS cert for dashboard port |
+| `dashboardTlsKey` | `BLKCAT_DASHBOARD_TLS_KEY` | — | TLS key for dashboard port |
 
 ## HTTPS / TLS (optional)
 
