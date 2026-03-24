@@ -835,9 +835,12 @@ export function Sidebar({
                   <button
                     onClick={() => onSelectSession(machine.machineId, session.id)}
                     onDoubleClick={(e) => {
-                      // Don't fire if double-click originated on the session name (rename handler)
-                      if ((e.target as HTMLElement).closest?.("[data-rename-target]")) return;
-                      onSelectSessionDirect?.(machine.machineId, session.id);
+                      if (!onRenameSession) return;
+                      e.stopPropagation();
+                      setEditingId(`session:${machine.machineId}:${session.id}`);
+                      setEditValue(
+                        getSessionName ? getSessionName(machine.machineId, session.id, session.windowName ?? session.name) : (session.windowName ?? session.name),
+                      );
                     }}
                     data-testid={`session-${session.id}`}
                     style={{
@@ -885,21 +888,27 @@ export function Sidebar({
                     </>) : (
                       <span className="terminal-badge">{">_"}</span>
                     )}
-                    {editingId === `session:${session.id}` ? (
+                    {editingId === `session:${machine.machineId}:${session.id}` ? (
                       <input
                         autoFocus
+                        ref={(el) => { if (el) requestAnimationFrame(() => el.focus()); }}
                         value={editValue}
                         onChange={(e) => setEditValue(e.target.value)}
                         onClick={(e) => e.stopPropagation()}
-                        onBlur={() => {
-                          const currentName = getSessionName
-                            ? getSessionName(machine.machineId, session.id, session.windowName ?? session.name)
-                            : session.name;
-                          const trimmed = editValue.trim();
-                          if (trimmed && trimmed !== currentName) {
-                            onRenameSession?.(machine.machineId, session.id, trimmed);
-                          }
-                          setEditingId(null);
+                        onBlur={(e) => {
+                          // Delay blur to avoid race with autoFocus after session selection
+                          const input = e.currentTarget;
+                          requestAnimationFrame(() => {
+                            if (document.activeElement === input) return; // re-focused, ignore
+                            const currentName = getSessionName
+                              ? getSessionName(machine.machineId, session.id, session.windowName ?? session.name)
+                              : session.name;
+                            const trimmed = editValue.trim();
+                            if (trimmed && trimmed !== currentName) {
+                              onRenameSession?.(machine.machineId, session.id, trimmed);
+                            }
+                            setEditingId(null);
+                          });
                         }}
                         onKeyDown={(e) => {
                           if (e.key === "Enter") {
@@ -922,15 +931,6 @@ export function Sidebar({
                       />
                     ) : (
                       <span
-                        data-rename-target
-                        onDoubleClick={(e) => {
-                          if (!onRenameSession) return;
-                          e.stopPropagation();
-                          setEditingId(`session:${session.id}`);
-                          setEditValue(
-                            getSessionName ? getSessionName(machine.machineId, session.id, session.windowName ?? session.name) : (session.windowName ?? session.name),
-                          );
-                        }}
                         title="Double-click to rename"
                       >
                         {getSessionName ? getSessionName(machine.machineId, session.id, session.windowName ?? session.name) : (session.windowName ?? session.name)}
