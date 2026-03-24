@@ -217,10 +217,10 @@ export class TmuxCapture {
   }
 
   /**
-   * Move a window to before/after another window within the same tmux session
-   * using sequential adjacent swaps (bubble approach).
+   * Move a window to before/after another window. Supports both same-session
+   * and cross-session moves.
    * @param src Full pane target (e.g. "main:2.0")
-   * @param dst Full pane target (e.g. "main:0.0")
+   * @param dst Full pane target (e.g. "main:0.0" or "other:3.0")
    * @param before true = insert before dst's window, false = insert after
    */
   moveWindow(src: string, dst: string, before: boolean): boolean {
@@ -228,12 +228,32 @@ export class TmuxCapture {
     const dstWin = dst.replace(/\.\d+$/, "");
     if (srcWin === dstWin) return true;
 
-    const sessionName = srcWin.split(":")[0];
+    const srcSession = srcWin.split(":")[0];
+    const dstSession = dstWin.split(":")[0];
     const srcWinIdx = parseInt(srcWin.split(":")[1], 10);
     const dstWinIdx = parseInt(dstWin.split(":")[1], 10);
 
-    // Get ordered list of window indices
-    const allPanes = this.listPanes(sessionName);
+    if (srcSession !== dstSession) {
+      // Cross-session move: use tmux move-window to transfer the window
+      // Find a free window index in the destination session
+      const dstPanes = this.listPanes(dstSession);
+      const dstWindowIndices = [...new Set(
+        dstPanes.map((p) => parseInt(p.replace(/\.\d+$/, "").split(":")[1], 10))
+      )].sort((a, b) => a - b);
+      const maxIdx = dstWindowIndices.length > 0 ? dstWindowIndices[dstWindowIndices.length - 1] : 0;
+      const freeIdx = maxIdx + 1;
+
+      // Move window to destination session at the free index
+      const ok = this.exec([...this.sshPrefix, "tmux", "move-window",
+        "-s", srcWin, "-t", `${dstSession}:${freeIdx}`]);
+      if (!ok.success) return false;
+
+      // Now reorder within the destination session to place it correctly
+      return this.moveWindow(`${dstSession}:${freeIdx}.0`, dst, before);
+    }
+
+    // Same-session move: bubble sort via adjacent swaps
+    const allPanes = this.listPanes(srcSession);
     const windowIndices = [...new Set(
       allPanes.map((p) => parseInt(p.replace(/\.\d+$/, "").split(":")[1], 10))
     )].sort((a, b) => a - b);
@@ -252,11 +272,11 @@ export class TmuxCapture {
 
     if (srcPos < targetPos) {
       for (let i = srcPos; i < targetPos; i++) {
-        this.swapWindow(`${sessionName}:${windowIndices[i]}`, `${sessionName}:${windowIndices[i + 1]}`);
+        this.swapWindow(`${srcSession}:${windowIndices[i]}`, `${srcSession}:${windowIndices[i + 1]}`);
       }
     } else {
       for (let i = srcPos; i > targetPos; i--) {
-        this.swapWindow(`${sessionName}:${windowIndices[i]}`, `${sessionName}:${windowIndices[i - 1]}`);
+        this.swapWindow(`${srcSession}:${windowIndices[i]}`, `${srcSession}:${windowIndices[i - 1]}`);
       }
     }
     return true;

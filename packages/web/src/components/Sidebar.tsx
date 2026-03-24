@@ -729,11 +729,9 @@ export function Sidebar({
                     if (sameGroup) {
                       const rect = e.currentTarget.getBoundingClientRect();
                       const y = e.clientY - rect.top;
-                      const edgeSize = Math.min(8, rect.height * 0.3);
                       let zone: "above" | "below" | "center";
-                      if (y < edgeSize) zone = "above";
-                      else if (y > rect.height - edgeSize) zone = "below";
-                      else zone = "center";
+                      if (y < rect.height / 2) zone = "above";
+                      else zone = "below";
                       e.dataTransfer.dropEffect = zone === "center" ? "copy" : "move";
                       if (dropTarget?.machineId !== machine.machineId || dropTarget?.sessionId !== session.id || dropTarget.zone !== zone) {
                         setDropTarget({ machineId: machine.machineId, sessionId: session.id, zone });
@@ -760,9 +758,8 @@ export function Sidebar({
                     if (sameGroup) {
                       const rect = e.currentTarget.getBoundingClientRect();
                       const y = e.clientY - rect.top;
-                      const edgeSize = Math.min(8, rect.height * 0.3);
-                      if (y < edgeSize) zone = "above";
-                      else if (y > rect.height - edgeSize) zone = "below";
+                      if (y < rect.height / 2) zone = "above";
+                      else zone = "below";
                     }
                     if (!src || (src.machineId === machine.machineId && src.sessionId === session.id)) return;
                     dragRef.current = null;
@@ -837,7 +834,11 @@ export function Sidebar({
                   </span>
                   <button
                     onClick={() => onSelectSession(machine.machineId, session.id)}
-                    onDoubleClick={() => onSelectSessionDirect?.(machine.machineId, session.id)}
+                    onDoubleClick={(e) => {
+                      // Don't fire if double-click originated on the session name (rename handler)
+                      if ((e.target as HTMLElement).closest?.("[data-rename-target]")) return;
+                      onSelectSessionDirect?.(machine.machineId, session.id);
+                    }}
                     data-testid={`session-${session.id}`}
                     style={{
                       flex: 1,
@@ -921,6 +922,7 @@ export function Sidebar({
                       />
                     ) : (
                       <span
+                        data-rename-target
                         onDoubleClick={(e) => {
                           if (!onRenameSession) return;
                           e.stopPropagation();

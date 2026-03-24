@@ -66,9 +66,11 @@ export default function App() {
       const sessionName = event.sessionId
         ? getSessionName(event.machineId, event.sessionId, event.sessionId)
         : "unknown";
-      const reason = String((event.data as any)?.stop_hook_reason ?? "task complete");
-      new Notification(`${machineName} — ${sessionName}`, {
-        body: reason,
+      const cwd = (event.data as any)?.cwd;
+      const cwdName = cwd ? cwd.split("/").pop() : "";
+      const body = String((event.data as any)?.last_assistant_message ?? (event.data as any)?.stop_hook_reason ?? "task complete");
+      new Notification(`${machineName} — ${sessionName}${cwdName ? ` (${cwdName})` : ""}`, {
+        body,
         tag: `stop-${event.machineId}-${event.sessionId}`,
         icon: "/favicon.png",
       });

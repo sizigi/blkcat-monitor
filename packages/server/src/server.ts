@@ -260,6 +260,7 @@ export function createServer(opts: ServerOptions) {
             BLKCAT_HOOK_EVENT: msg.hookEventName,
             BLKCAT_SESSION_NAME: sessionName,
             BLKCAT_EVENT_DETAIL: detail,
+            BLKCAT_CWD: typeof (msg.data as any)?.cwd === "string" ? (msg.data as any).cwd : "",
           },
         });
       }
@@ -713,6 +714,7 @@ export function createServer(opts: ServerOptions) {
           }));
         }
       } else if (msg.type === "move_pane") {
+        console.log(`[move] move_pane ${msg.machineId} ${msg.sessionId} -> ${msg.targetSessionId} before=${msg.before}`);
         const machine = machines.get(msg.machineId);
         if (machine) {
           machine.agent.send(JSON.stringify({
@@ -723,6 +725,7 @@ export function createServer(opts: ServerOptions) {
           }));
         }
       } else if (msg.type === "move_window") {
+        console.log(`[move] move_window ${msg.machineId} ${msg.sessionId} -> ${msg.targetSessionId} before=${msg.before}`);
         const machine = machines.get(msg.machineId);
         if (machine) {
           machine.agent.send(JSON.stringify({
