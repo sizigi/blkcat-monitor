@@ -130,14 +130,6 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
     }
   }, []);
 
-  /** Schedule a render on the next animation frame (coalesces multiple calls). */
-  const scheduleRender = useCallback(() => {
-    if (scrollRafRef.current) return;
-    scrollRafRef.current = requestAnimationFrame(() => {
-      scrollRafRef.current = 0;
-      renderScrollView();
-    });
-  }, [renderScrollView]);
 
   const exitScrollMode = useCallback(() => {
     const term = termRef.current;
@@ -161,19 +153,25 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
     term.focus();
   }, []);
 
-  /** Adjust scroll offset by `delta` lines (positive = up) and schedule render.
-   *  Auto-exits scroll mode when scrolling down reaches the bottom (offset 0). */
-  const scrollBy = useCallback((delta: number) => {
-    if (!scrollModeRef.current) return;
+  /** Adjust scroll offset by `delta` lines (positive = up) and render immediately.
+   *  Returns true if position changed. Auto-exits only when user scrolls down
+   *  while already at offset 0 (deliberate exit, not overshoot). */
+  const scrollBy = useCallback((delta: number): boolean => {
+    if (!scrollModeRef.current) return false;
     const rows = termRef.current?.rows ?? 24;
     const maxOffset = Math.max(0, scrollAllRef.current.length - rows);
-    scrollOffsetRef.current = Math.max(0, Math.min(maxOffset, scrollOffsetRef.current + delta));
-    if (delta < 0 && scrollOffsetRef.current === 0) {
+    const prev = scrollOffsetRef.current;
+    // Exit only when already at the bottom and trying to scroll further down
+    if (delta < 0 && prev === 0) {
       exitScrollMode();
-      return;
+      return false;
     }
-    scheduleRender();
-  }, [scheduleRender, exitScrollMode]);
+    scrollOffsetRef.current = Math.max(0, Math.min(maxOffset, prev + delta));
+    // Render directly — avoids 1-frame rAF delay for snappier touch response.
+    // renderScrollView deduplicates via lastRenderedOffsetRef.
+    renderScrollView();
+    return scrollOffsetRef.current !== prev;
+  }, [renderScrollView, exitScrollMode]);
 
   /** Named scroll actions — delegates to scrollBy. */
   const scrollNav = useCallback((action: "pageUp" | "pageDown" | "top" | "bottom" | "lineUp" | "lineDown") => {
@@ -387,18 +385,37 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
     let touchLastTime = 0;
     let touchAccum = 0;
     let touchEntryAccum = 0;
-    let touchVelocity = 0;
     let momentumRaf = 0;
-    const LINE_PX = 12;
-    const ENTRY_THRESHOLD = 40;
+    const LINE_PX = 16; // ~actual terminal line height (fontSize 13 * ~1.2 line-height)
+    const ENTRY_THRESHOLD = 30;
+    // Sliding window for velocity — avoids losing momentum when finger slows just before lift
+    const VELOCITY_WINDOW = 100; // ms
+    let velocitySamples: { dy: number; dt: number; t: number }[] = [];
 
+    const getVelocity = (): number => {
+      const now = Date.now();
+      // Discard samples older than window
+      velocitySamples = velocitySamples.filter(s => now - s.t < VELOCITY_WINDOW);
+      if (velocitySamples.length === 0) return 0;
+      let totalDy = 0, totalDt = 0;
+      for (const s of velocitySamples) { totalDy += s.dy; totalDt += s.dt; }
+      return totalDt > 0 ? totalDy / totalDt : 0;
+    };
+
+    let wasMomentumActive = false;
+    let didScrollThisTouch = false; // tracks whether any lines actually scrolled during this gesture
+    let isFirstMove = false; // true after touchStart in scroll mode — reduces dead zone on resume
     const stopMomentum = () => { if (momentumRaf) { cancelAnimationFrame(momentumRaf); momentumRaf = 0; } };
 
     const onTouchStart = (e: TouchEvent) => {
+      wasMomentumActive = momentumRaf !== 0;
+      isFirstMove = scrollModeRef.current;
+      didScrollThisTouch = false;
       stopMomentum();
       touchStartY = touchLastY = e.touches[0].clientY;
       touchLastTime = Date.now();
-      touchAccum = touchEntryAccum = touchVelocity = 0;
+      touchAccum = touchEntryAccum = 0;
+      velocitySamples = [];
     };
 
     const onTouchMove = (e: TouchEvent) => {
@@ -408,40 +425,64 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
       const dy = y - touchLastY;
       const now = Date.now();
       const dt = now - touchLastTime;
-      if (dt > 0) touchVelocity = dy / dt;
+      if (dt > 0) velocitySamples.push({ dy, dt, t: now });
       touchLastY = y;
       touchLastTime = now;
 
       if (!scrollModeRef.current) {
-        if (dy > 0) touchEntryAccum += dy;
-        else touchEntryAccum = 0;
+        touchEntryAccum = Math.max(0, touchEntryAccum + dy);
         if (touchEntryAccum > ENTRY_THRESHOLD) {
           enterScrollMode();
-          scrollBy(termRef.current?.rows ?? 24); // start one page up
+          const entryLines = Math.min(2, Math.max(1, Math.floor(touchEntryAccum / LINE_PX)));
+          scrollBy(entryLines);
+          didScrollThisTouch = true;
+          // Carry over excess movement so pixels aren't wasted
+          touchAccum = touchEntryAccum - entryLines * LINE_PX;
+          isFirstMove = true;
         }
         return;
+      }
+      // First significant move after resume: half-line head start to reduce dead zone.
+      // Only consume the flag on significant movement — ignore jitter (≤2px).
+      if (isFirstMove) {
+        if (Math.abs(dy) > 2) {
+          isFirstMove = false;
+          touchAccum += dy > 0 ? LINE_PX * 0.5 : -LINE_PX * 0.5;
+        }
+        // Keep isFirstMove true until we get a significant move
+      }
+      // Direction change: decay instead of hard reset to avoid losing progress on wobble
+      if ((touchAccum > 0 && dy < 0) || (touchAccum < 0 && dy > 0)) {
+        touchAccum *= 0.5; // halve instead of zeroing — keeps some progress
       }
       touchAccum += dy;
       const n = Math.floor(Math.abs(touchAccum) / LINE_PX);
       if (n > 0) {
         scrollBy(touchAccum > 0 ? n : -n);
         touchAccum %= LINE_PX;
+        didScrollThisTouch = true;
       }
     };
 
     const onTouchEnd = () => {
       if (!scrollModeRef.current) return;
-      // Tap to exit (minimal movement)
-      if (Math.abs(touchLastY - touchStartY) < 10) { exitScrollMode(); return; }
-      // Momentum
-      const v = touchVelocity;
-      if (Math.abs(v) < 0.3) return;
-      let remaining = v * 300;
+      // Tap to exit: only if no lines scrolled during this touch and not stopping momentum
+      if (!didScrollThisTouch && !wasMomentumActive) {
+        exitScrollMode();
+        return;
+      }
+      // Momentum — use windowed velocity for reliable flick detection
+      const v = getVelocity();
+      if (Math.abs(v) < 0.15) return;
+      let remaining = v * 400;
       const step = () => {
         if (!scrollModeRef.current || Math.abs(remaining) < LINE_PX) { momentumRaf = 0; return; }
+        // Stop at boundaries — don't let momentum trigger scroll mode exit
+        if (remaining < 0 && scrollOffsetRef.current === 0) { momentumRaf = 0; return; }
         const n = Math.max(1, Math.floor(Math.abs(remaining) / LINE_PX / 8));
-        scrollBy(remaining > 0 ? n : -n);
-        remaining *= 0.92;
+        const moved = scrollBy(remaining > 0 ? n : -n);
+        if (!moved) { momentumRaf = 0; return; } // hit boundary, stop gracefully
+        remaining *= 0.95;
         momentumRaf = requestAnimationFrame(step);
       };
       momentumRaf = requestAnimationFrame(step);
@@ -450,6 +491,7 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
     container.addEventListener("touchstart", onTouchStart, { passive: true });
     container.addEventListener("touchmove", onTouchMove, { passive: false });
     container.addEventListener("touchend", onTouchEnd, { passive: true });
+    container.addEventListener("touchcancel", onTouchEnd, { passive: true });
 
     // Double-click to exit scroll mode (desktop)
     const onDblClick = () => {
@@ -499,6 +541,7 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
       container.removeEventListener("touchstart", onTouchStart);
       container.removeEventListener("touchmove", onTouchMove);
       container.removeEventListener("touchend", onTouchEnd);
+      container.removeEventListener("touchcancel", onTouchEnd);
       container.removeEventListener("dblclick", onDblClick);
       container.removeEventListener("paste", onPaste);
       stopMomentum();
@@ -518,11 +561,16 @@ export const TerminalOutput = forwardRef<TerminalOutputHandle, TerminalOutputPro
       const data = scrollbackMapRefRef.current?.current?.get(key);
       if (!data) return;
       if (scrollModeRef.current) {
+        // Adjust offset to preserve viewport position: new data prepends history,
+        // so shift offset up by the number of lines added.
+        const oldLen = scrollAllRef.current.length;
         scrollAllRef.current = data;
         const term = termRef.current;
         if (term) {
+          const growth = data.length - oldLen;
+          const adjusted = scrollOffsetRef.current + (growth > 0 ? growth : 0);
           const maxOffset = Math.max(0, data.length - term.rows);
-          scrollOffsetRef.current = Math.min(scrollOffsetRef.current, maxOffset);
+          scrollOffsetRef.current = Math.min(adjusted, maxOffset);
         }
         lastRenderedOffsetRef.current = -1; // force re-render
         setScrollbackLoading(false);
