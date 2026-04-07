@@ -597,17 +597,18 @@ async function main() {
     }
   }
 
-  let polling = false;
-  setInterval(async () => {
-    if (polling) return;
-    polling = true;
-    try {
+  // Poll panes sequentially with async I/O so the event loop can process
+  // WebSocket input messages between each pane.  Runs as a continuous loop
+  // with pollInterval sleep between cycles.
+  (async () => {
+    for (;;) {
       const paneIds = [...captures.keys()];
-      await Promise.all(paneIds.map((id) => pollPaneAsync(id).catch(() => {})));
-    } finally {
-      polling = false;
+      for (const id of paneIds) {
+        await pollPaneAsync(id).catch(() => {});
+      }
+      await new Promise((r) => setTimeout(r, config.pollInterval));
     }
-  }, config.pollInterval);
+  })();
 
   if (hasAutoTarget) {
     setInterval(() => triggerRediscovery(), 10_000);

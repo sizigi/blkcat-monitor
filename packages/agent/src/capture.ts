@@ -31,7 +31,10 @@ export class TmuxCapture {
     private sshPrefix: string[] = [],
     asyncExec?: AsyncExecFn,
   ) {
-    this.asyncExec = asyncExec ?? bunExecAsync;
+    // If no async exec provided, wrap the sync exec so tests with mock exec work
+    this.asyncExec = asyncExec ?? (exec !== bunExec
+      ? async (cmd: string[]) => exec(cmd)
+      : bunExecAsync);
   }
 
   capturePane(target: string): string[] {
@@ -108,12 +111,13 @@ export class TmuxCapture {
 
   sendText(target: string, text: string): void {
     const cmd = [...this.sshPrefix, "tmux", "send-keys", "-l", "-t", target, text];
-    this.exec(cmd);
+    // Fire-and-forget async to avoid blocking event loop on loaded machines
+    this.asyncExec(cmd);
   }
 
   sendKey(target: string, key: string): void {
     const cmd = [...this.sshPrefix, "tmux", "send-keys", "-t", target, key];
-    this.exec(cmd);
+    this.asyncExec(cmd);
   }
 
   sendRaw(target: string, data: string): void {
