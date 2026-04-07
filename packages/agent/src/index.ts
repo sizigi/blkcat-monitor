@@ -79,7 +79,7 @@ async function main() {
     // Burst-poll after input to reduce keystroke-to-screen latency.
     // Multiple polls catch both fast programs (shell echo) and slower ones (claude, vim).
     for (const delay of [5, 30, 80]) {
-      setTimeout(() => pollPane(sessionId), delay);
+      setTimeout(() => pollPaneAsync(sessionId), delay);
     }
   }
 
