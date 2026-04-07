@@ -6,6 +6,7 @@ export interface ExecResult {
 }
 
 export type ExecFn = (cmd: string[]) => ExecResult;
+export type AsyncExecFn = (cmd: string[]) => Promise<ExecResult>;
 
 export function bunExec(cmd: string[]): ExecResult {
   const result = Bun.spawnSync(cmd);
@@ -15,11 +16,23 @@ export function bunExec(cmd: string[]): ExecResult {
   };
 }
 
+export async function bunExecAsync(cmd: string[]): Promise<ExecResult> {
+  const proc = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe" });
+  const stdout = await new Response(proc.stdout).text();
+  const exitCode = await proc.exited;
+  return { success: exitCode === 0, stdout: stdout ?? "" };
+}
+
 export class TmuxCapture {
+  private asyncExec: AsyncExecFn;
+
   constructor(
     private exec: ExecFn = bunExec,
     private sshPrefix: string[] = [],
-  ) {}
+    asyncExec?: AsyncExecFn,
+  ) {
+    this.asyncExec = asyncExec ?? bunExecAsync;
+  }
 
   capturePane(target: string): string[] {
     const cmd = [...this.sshPrefix, "tmux", "capture-pane", "-p", "-e", "-t", target];
@@ -37,6 +50,28 @@ export class TmuxCapture {
   getCursorPos(target: string): { x: number; y: number } | null {
     const cmd = [...this.sshPrefix, "tmux", "display-message", "-p", "-t", target, "#{cursor_x},#{cursor_y}"];
     const result = this.exec(cmd);
+    if (!result.success) return null;
+    const [xStr, yStr] = result.stdout.trim().split(",");
+    const x = parseInt(xStr);
+    const y = parseInt(yStr);
+    if (isNaN(x) || isNaN(y)) return null;
+    return { x, y };
+  }
+
+  /** Async version of capturePane — does not block the event loop. */
+  async capturePaneAsync(target: string): Promise<string[]> {
+    const cmd = [...this.sshPrefix, "tmux", "capture-pane", "-p", "-e", "-t", target];
+    const result = await this.asyncExec(cmd);
+    if (!result.success) return [];
+    const lines = result.stdout.split("\n");
+    while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+    return lines;
+  }
+
+  /** Async version of getCursorPos — does not block the event loop. */
+  async getCursorPosAsync(target: string): Promise<{ x: number; y: number } | null> {
+    const cmd = [...this.sshPrefix, "tmux", "display-message", "-p", "-t", target, "#{cursor_x},#{cursor_y}"];
+    const result = await this.asyncExec(cmd);
     if (!result.success) return null;
     const [xStr, yStr] = result.stdout.trim().split(",");
     const x = parseInt(xStr);
@@ -448,6 +483,6 @@ export class TmuxCapture {
       "-o", "StrictHostKeyChecking=no"];
     if (key) sshCmd.push("-i", key);
     sshCmd.push(host);
-    return new TmuxCapture(bunExec, sshCmd);
+    return new TmuxCapture(bunExec, sshCmd, bunExecAsync);
   }
 }

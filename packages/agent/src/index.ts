@@ -576,12 +576,14 @@ async function main() {
     return false;
   }
 
-  function pollPane(paneId: string) {
+  async function pollPaneAsync(paneId: string) {
     const cap = captures.get(paneId);
     if (!cap) return;
-    const lines = cap.capturePane(paneId);
+    const [lines, cursor] = await Promise.all([
+      cap.capturePaneAsync(paneId),
+      cap.getCursorPosAsync(paneId),
+    ]);
     const prev = prevLines.get(paneId) ?? [];
-    const cursor = cap.getCursorPos(paneId);
     const cursorKey = cursor ? `${cursor.y},${cursor.x}` : "";
     const linesChanged = hasChanged(prev, lines);
     const cursorChanged = cursorKey !== (prevCursors.get(paneId) ?? "");
@@ -595,9 +597,15 @@ async function main() {
     }
   }
 
-  setInterval(() => {
-    for (const [paneId] of captures) {
-      pollPane(paneId);
+  let polling = false;
+  setInterval(async () => {
+    if (polling) return;
+    polling = true;
+    try {
+      const paneIds = [...captures.keys()];
+      await Promise.all(paneIds.map((id) => pollPaneAsync(id).catch(() => {})));
+    } finally {
+      polling = false;
     }
   }, config.pollInterval);
 
