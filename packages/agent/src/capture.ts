@@ -83,6 +83,44 @@ export class TmuxCapture {
     return { x, y };
   }
 
+  /**
+   * Batch-capture multiple panes + cursors in a single subprocess.
+   * Returns a Map from paneId to { lines, cursor }.
+   */
+  async captureAllPanesAsync(targets: string[]): Promise<Map<string, { lines: string[]; cursor: { x: number; y: number } | null }>> {
+    if (targets.length === 0) return new Map();
+    // Build a shell script that captures all panes and cursors with delimiters
+    const script = targets.map((t) =>
+      `echo "@@PANE:${t}@@" && tmux capture-pane -p -e -t "${t}" && echo "@@CURSOR:${t}@@" && tmux display-message -p -t "${t}" "#{cursor_x},#{cursor_y}"`
+    ).join(" && ");
+    const cmd = [...this.sshPrefix, "bash", "-c", script];
+    const result = await this.asyncExec(cmd);
+    const output = result.stdout;
+    const results = new Map<string, { lines: string[]; cursor: { x: number; y: number } | null }>();
+    for (const target of targets) {
+      const paneMarker = `@@PANE:${target}@@`;
+      const cursorMarker = `@@CURSOR:${target}@@`;
+      const paneStart = output.indexOf(paneMarker);
+      const cursorStart = output.indexOf(cursorMarker);
+      if (paneStart < 0 || cursorStart < 0) {
+        results.set(target, { lines: [], cursor: null });
+        continue;
+      }
+      const paneContent = output.slice(paneStart + paneMarker.length + 1, cursorStart);
+      const lines = paneContent.split("\n");
+      while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+      // Parse cursor
+      const nextMarkerIdx = output.indexOf("@@PANE:", cursorStart);
+      const cursorLine = output.slice(cursorStart + cursorMarker.length + 1, nextMarkerIdx >= 0 ? nextMarkerIdx : undefined).trim().split("\n")[0];
+      const [xStr, yStr] = cursorLine.split(",");
+      const x = parseInt(xStr);
+      const y = parseInt(yStr);
+      const cursor = (!isNaN(x) && !isNaN(y)) ? { x, y } : null;
+      results.set(target, { lines, cursor });
+    }
+    return results;
+  }
+
   captureScrollback(target: string): string[] {
     const cmd = [...this.sshPrefix, "tmux", "capture-pane", "-p", "-e", "-S", "-", "-t", target];
     const result = this.exec(cmd);

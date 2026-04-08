@@ -576,6 +576,7 @@ async function main() {
     return false;
   }
 
+  /** Poll a single pane (used for burst-poll after input). */
   async function pollPaneAsync(paneId: string) {
     const cap = captures.get(paneId);
     if (!cap) return;
@@ -583,6 +584,11 @@ async function main() {
       cap.capturePaneAsync(paneId),
       cap.getCursorPosAsync(paneId),
     ]);
+    processPollResult(paneId, lines, cursor);
+  }
+
+  /** Process poll results and send output if changed. */
+  function processPollResult(paneId: string, lines: string[], cursor: { x: number; y: number } | null) {
     const prev = prevLines.get(paneId) ?? [];
     const cursorKey = cursor ? `${cursor.y},${cursor.x}` : "";
     const linesChanged = hasChanged(prev, lines);
@@ -597,15 +603,27 @@ async function main() {
     }
   }
 
-  // Poll panes sequentially with async I/O so the event loop can process
-  // WebSocket input messages between each pane.  Runs as a continuous loop
-  // with pollInterval sleep between cycles.
+  // Batch-poll all panes in a single subprocess to minimize process spawning
+  // on high-load machines.  Groups panes by TmuxCapture instance (local vs SSH).
   (async () => {
     for (;;) {
-      const paneIds = [...captures.keys()];
-      for (const id of paneIds) {
-        await pollPaneAsync(id).catch(() => {});
+      // Group panes by their capture instance
+      const groups = new Map<TmuxCapture, string[]>();
+      for (const [paneId, cap] of captures) {
+        const list = groups.get(cap) ?? [];
+        list.push(paneId);
+        groups.set(cap, list);
       }
+      // Batch-capture each group in a single subprocess
+      const promises = [...groups.entries()].map(async ([cap, paneIds]) => {
+        try {
+          const results = await cap.captureAllPanesAsync(paneIds);
+          for (const [paneId, { lines, cursor }] of results) {
+            processPollResult(paneId, lines, cursor);
+          }
+        } catch {}
+      });
+      await Promise.all(promises);
       await new Promise((r) => setTimeout(r, config.pollInterval));
     }
   })();
