@@ -631,7 +631,11 @@ async function main() {
         } catch {}
       });
       await Promise.all(promises);
-      await new Promise((r) => setTimeout(r, config.pollInterval));
+      // Use longer poll interval when many panes are active to reduce
+      // output volume on high-latency links
+      const activePanes = captures.size;
+      const interval = activePanes > 5 ? Math.max(config.pollInterval, 500) : config.pollInterval;
+      await new Promise((r) => setTimeout(r, interval));
     }
   })();
 
