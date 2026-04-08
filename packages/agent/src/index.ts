@@ -620,6 +620,8 @@ async function main() {
           const results = await cap.captureAllPanesAsync(paneIds);
           for (const [paneId, { lines, cursor }] of results) {
             processPollResult(paneId, lines, cursor);
+            // Yield to event loop between each pane so WebSocket messages get processed
+            await new Promise((r) => setTimeout(r, 0));
           }
         } catch {}
       });
