@@ -157,6 +157,10 @@ export function createServer(opts: ServerOptions) {
     return Math.round((1 - dIdle / dTotal) * 1000) / 10; // one decimal %
   }
 
+  // Output broadcast throttle: per-session rate limiting
+  const outputBroadcastTimes = new Map<string, number>();
+  const outputBroadcastTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
   function broadcastToDashboards(msg: object) {
     const data = JSON.stringify(msg);
     for (const ws of dashboards) {
@@ -195,7 +199,25 @@ export function createServer(opts: ServerOptions) {
         machine.lastSeen = Date.now();
         machine.lastOutputs.set(msg.sessionId, msg);
       }
-      broadcastToDashboards(msg);
+      // Throttle output broadcasts to dashboards: per-session, max once per 200ms.
+      // Reduces browser-side JS load which blocks keyboard input processing.
+      const outputKey = `${msg.machineId}:${msg.sessionId}`;
+      const now = Date.now();
+      const lastBroadcast = outputBroadcastTimes.get(outputKey) ?? 0;
+      if (now - lastBroadcast >= 200) {
+        outputBroadcastTimes.set(outputKey, now);
+        broadcastToDashboards(msg);
+      } else if (!outputBroadcastTimers.has(outputKey)) {
+        // Schedule a delayed broadcast with the latest data
+        outputBroadcastTimers.set(outputKey, setTimeout(() => {
+          outputBroadcastTimers.delete(outputKey);
+          const latest = machine?.lastOutputs.get(msg.sessionId);
+          if (latest) {
+            outputBroadcastTimes.set(outputKey, Date.now());
+            broadcastToDashboards(latest);
+          }
+        }, 200 - (now - lastBroadcast)));
+      }
     } else if (msg.type === "sessions") {
       const machine = machines.get(msg.machineId);
       if (machine) {
