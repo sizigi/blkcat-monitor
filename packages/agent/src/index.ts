@@ -586,18 +586,12 @@ async function main() {
   }
 
   /** Process poll results and send output if changed. */
-  let sendCount = 0;
-  setInterval(() => { if (sendCount > 0) { console.log(`[poll] sent ${sendCount} outputs last interval`); sendCount = 0; } }, 5000);
-
   function processPollResult(paneId: string, lines: string[], cursor: { x: number; y: number } | null) {
     const prev = prevLines.get(paneId) ?? [];
     const cursorKey = cursor ? `${cursor.y},${cursor.x}` : "";
     const linesChanged = hasChanged(prev, lines);
     const cursorChanged = cursorKey !== (prevCursors.get(paneId) ?? "");
     if (linesChanged || cursorChanged) {
-      // Skip output when WebSocket has backpressure to avoid blocking input
-      if (conn.backpressure) return;
-      sendCount++;
       const allSess = [...autoSessions, ...manualSessions];
       const sess = allSess.find((s) => s.id === paneId);
       const waitingForInput = sess?.cliTool ? detectWaitingForInput(lines) : false;
@@ -631,11 +625,7 @@ async function main() {
         } catch {}
       });
       await Promise.all(promises);
-      // Use longer poll interval when many panes are active to reduce
-      // output volume on high-latency links
-      const activePanes = captures.size;
-      const interval = activePanes > 5 ? Math.max(config.pollInterval, 500) : config.pollInterval;
-      await new Promise((r) => setTimeout(r, interval));
+      await new Promise((r) => setTimeout(r, config.pollInterval));
     }
   })();
 

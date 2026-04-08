@@ -101,7 +101,6 @@ export class AgentConnection {
       try {
         const msg: ServerToAgentMessage = JSON.parse(ev.data as string);
         if (msg.type === "input") {
-          if ((msg as any).ts) console.log(`[input-lag] server→agent: ${Date.now() - (msg as any).ts}ms`);
           this.opts.onInput({ sessionId: msg.sessionId, text: msg.text, key: msg.key, data: msg.data });
         } else if (msg.type === "start_session") {
           this.opts.onStartSession?.(msg.args, msg.cwd, msg.name, msg.cliTool);
@@ -150,9 +149,25 @@ export class AgentConnection {
     }
   }
 
-  /** Returns true if the WebSocket send buffer has significant backpressure. */
-  get backpressure(): boolean {
-    return this.ws?.bufferedAmount > 64 * 1024; // >64KB queued
+  // Output queue: buffer output messages and drain them with delays
+  // to avoid TCP backpressure blocking input on high-latency links.
+  private outputQueue: string[] = [];
+  private draining = false;
+
+  private queueOutput(data: string) {
+    this.outputQueue.push(data);
+    if (!this.draining) this.drainOutputQueue();
+  }
+
+  private async drainOutputQueue() {
+    this.draining = true;
+    while (this.outputQueue.length > 0) {
+      const msg = this.outputQueue.shift()!;
+      this.safeSend(msg);
+      // Wait 15ms between sends to let TCP flush and allow input processing
+      await new Promise((r) => setTimeout(r, 15));
+    }
+    this.draining = false;
   }
 
   waitForOpen(): Promise<void> { return this.openPromise; }
@@ -175,7 +190,7 @@ export class AgentConnection {
     };
     if (waitingForInput) msg.waitingForInput = true;
     if (cursor) msg.cursor = cursor;
-    this.safeSend(JSON.stringify(msg));
+    this.queueOutput(JSON.stringify(msg));
   }
 
   updateSessions(sessions: SessionInfo[]) {
