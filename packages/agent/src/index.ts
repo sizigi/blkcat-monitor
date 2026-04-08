@@ -76,9 +76,11 @@ async function main() {
     if (data) cap.sendRaw(sessionId, data);
     else if (text) cap.sendText(sessionId, text);
     if (key) cap.sendKey(sessionId, key);
-    // Burst-poll disabled on high-latency links — the per-pane subprocess
-    // spawning under load causes more harm (TCP backpressure from output
-    // responses) than the ~150ms poll latency it saves.
+    // Burst-poll after input to reduce keystroke-to-screen latency.
+    // Multiple polls catch both fast programs (shell echo) and slower ones (claude, vim).
+    for (const delay of [5, 30, 80]) {
+      setTimeout(() => pollPane(sessionId), delay);
+    }
   }
 
   function handleCloseSession(sessionId: string) {
@@ -574,20 +576,12 @@ async function main() {
     return false;
   }
 
-  /** Poll a single pane (used for burst-poll after input). */
-  async function pollPaneAsync(paneId: string) {
+  function pollPane(paneId: string) {
     const cap = captures.get(paneId);
     if (!cap) return;
-    const [lines, cursor] = await Promise.all([
-      cap.capturePaneAsync(paneId),
-      cap.getCursorPosAsync(paneId),
-    ]);
-    processPollResult(paneId, lines, cursor);
-  }
-
-  /** Process poll results and send output if changed. */
-  function processPollResult(paneId: string, lines: string[], cursor: { x: number; y: number } | null) {
+    const lines = cap.capturePane(paneId);
     const prev = prevLines.get(paneId) ?? [];
+    const cursor = cap.getCursorPos(paneId);
     const cursorKey = cursor ? `${cursor.y},${cursor.x}` : "";
     const linesChanged = hasChanged(prev, lines);
     const cursorChanged = cursorKey !== (prevCursors.get(paneId) ?? "");
@@ -601,33 +595,11 @@ async function main() {
     }
   }
 
-  // Batch-poll all panes in a single subprocess to minimize process spawning
-  // on high-load machines.  Groups panes by TmuxCapture instance (local vs SSH).
-  (async () => {
-    for (;;) {
-      // Group panes by their capture instance
-      const groups = new Map<TmuxCapture, string[]>();
-      for (const [paneId, cap] of captures) {
-        const list = groups.get(cap) ?? [];
-        list.push(paneId);
-        groups.set(cap, list);
-      }
-      // Batch-capture each group in a single subprocess
-      const promises = [...groups.entries()].map(async ([cap, paneIds]) => {
-        try {
-          const results = await cap.captureAllPanesAsync(paneIds);
-          for (const [paneId, { lines, cursor }] of results) {
-            processPollResult(paneId, lines, cursor);
-            // Stagger sends to avoid TCP backpressure on high-latency links.
-            // 10ms between panes gives TCP time to flush each message.
-            await new Promise((r) => setTimeout(r, 10));
-          }
-        } catch {}
-      });
-      await Promise.all(promises);
-      await new Promise((r) => setTimeout(r, config.pollInterval));
+  setInterval(() => {
+    for (const [paneId] of captures) {
+      pollPane(paneId);
     }
-  })();
+  }, config.pollInterval);
 
   if (hasAutoTarget) {
     setInterval(() => triggerRediscovery(), 10_000);

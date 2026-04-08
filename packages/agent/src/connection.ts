@@ -149,29 +149,6 @@ export class AgentConnection {
     }
   }
 
-  // Per-session output throttle: on high-latency links, rapid ws.send()
-  // fills the TCP buffer and blocks input.  Keep only the latest output
-  // per session and flush at a fixed interval.
-  private pendingOutputs = new Map<string, string>(); // sessionId → latest JSON
-  private outputFlushTimer: ReturnType<typeof setInterval> | null = null;
-  private readonly OUTPUT_FLUSH_INTERVAL = 100; // ms between flushes
-
-  private queueOutput(sessionId: string, data: string) {
-    // Always keep only the latest output per session (newer overwrites older)
-    this.pendingOutputs.set(sessionId, data);
-    if (!this.outputFlushTimer) {
-      this.outputFlushTimer = setInterval(() => this.flushOutputs(), this.OUTPUT_FLUSH_INTERVAL);
-    }
-  }
-
-  private flushOutputs() {
-    if (this.pendingOutputs.size === 0) return;
-    // Send one session per flush to spread writes over time
-    const [sessionId, data] = this.pendingOutputs.entries().next().value!;
-    this.pendingOutputs.delete(sessionId);
-    this.safeSend(data);
-  }
-
   waitForOpen(): Promise<void> { return this.openPromise; }
 
   register(sessions: SessionInfo[]) {
@@ -192,7 +169,7 @@ export class AgentConnection {
     };
     if (waitingForInput) msg.waitingForInput = true;
     if (cursor) msg.cursor = cursor;
-    this.queueOutput(sessionId, JSON.stringify(msg));
+    this.safeSend(JSON.stringify(msg));
   }
 
   updateSessions(sessions: SessionInfo[]) {

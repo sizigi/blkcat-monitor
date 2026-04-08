@@ -6,7 +6,6 @@ export interface ExecResult {
 }
 
 export type ExecFn = (cmd: string[]) => ExecResult;
-export type AsyncExecFn = (cmd: string[]) => Promise<ExecResult>;
 
 export function bunExec(cmd: string[]): ExecResult {
   const result = Bun.spawnSync(cmd);
@@ -16,26 +15,11 @@ export function bunExec(cmd: string[]): ExecResult {
   };
 }
 
-export async function bunExecAsync(cmd: string[]): Promise<ExecResult> {
-  const proc = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe" });
-  const stdout = await new Response(proc.stdout).text();
-  const exitCode = await proc.exited;
-  return { success: exitCode === 0, stdout: stdout ?? "" };
-}
-
 export class TmuxCapture {
-  private asyncExec: AsyncExecFn;
-
   constructor(
     private exec: ExecFn = bunExec,
     private sshPrefix: string[] = [],
-    asyncExec?: AsyncExecFn,
-  ) {
-    // If no async exec provided, wrap the sync exec so tests with mock exec work
-    this.asyncExec = asyncExec ?? (exec !== bunExec
-      ? async (cmd: string[]) => exec(cmd)
-      : bunExecAsync);
-  }
+  ) {}
 
   capturePane(target: string): string[] {
     const cmd = [...this.sshPrefix, "tmux", "capture-pane", "-p", "-e", "-t", target];
@@ -59,66 +43,6 @@ export class TmuxCapture {
     const y = parseInt(yStr);
     if (isNaN(x) || isNaN(y)) return null;
     return { x, y };
-  }
-
-  /** Async version of capturePane — does not block the event loop. */
-  async capturePaneAsync(target: string): Promise<string[]> {
-    const cmd = [...this.sshPrefix, "tmux", "capture-pane", "-p", "-e", "-t", target];
-    const result = await this.asyncExec(cmd);
-    if (!result.success) return [];
-    const lines = result.stdout.split("\n");
-    while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-    return lines;
-  }
-
-  /** Async version of getCursorPos — does not block the event loop. */
-  async getCursorPosAsync(target: string): Promise<{ x: number; y: number } | null> {
-    const cmd = [...this.sshPrefix, "tmux", "display-message", "-p", "-t", target, "#{cursor_x},#{cursor_y}"];
-    const result = await this.asyncExec(cmd);
-    if (!result.success) return null;
-    const [xStr, yStr] = result.stdout.trim().split(",");
-    const x = parseInt(xStr);
-    const y = parseInt(yStr);
-    if (isNaN(x) || isNaN(y)) return null;
-    return { x, y };
-  }
-
-  /**
-   * Batch-capture multiple panes + cursors in a single subprocess.
-   * Returns a Map from paneId to { lines, cursor }.
-   */
-  async captureAllPanesAsync(targets: string[]): Promise<Map<string, { lines: string[]; cursor: { x: number; y: number } | null }>> {
-    if (targets.length === 0) return new Map();
-    // Build a shell script that captures all panes and cursors with delimiters
-    const script = targets.map((t) =>
-      `echo "@@PANE:${t}@@" && tmux capture-pane -p -e -t "${t}" && echo "@@CURSOR:${t}@@" && tmux display-message -p -t "${t}" "#{cursor_x},#{cursor_y}"`
-    ).join(" && ");
-    const cmd = [...this.sshPrefix, "bash", "-c", script];
-    const result = await this.asyncExec(cmd);
-    const output = result.stdout;
-    const results = new Map<string, { lines: string[]; cursor: { x: number; y: number } | null }>();
-    for (const target of targets) {
-      const paneMarker = `@@PANE:${target}@@`;
-      const cursorMarker = `@@CURSOR:${target}@@`;
-      const paneStart = output.indexOf(paneMarker);
-      const cursorStart = output.indexOf(cursorMarker);
-      if (paneStart < 0 || cursorStart < 0) {
-        results.set(target, { lines: [], cursor: null });
-        continue;
-      }
-      const paneContent = output.slice(paneStart + paneMarker.length + 1, cursorStart);
-      const lines = paneContent.split("\n");
-      while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-      // Parse cursor
-      const nextMarkerIdx = output.indexOf("@@PANE:", cursorStart);
-      const cursorLine = output.slice(cursorStart + cursorMarker.length + 1, nextMarkerIdx >= 0 ? nextMarkerIdx : undefined).trim().split("\n")[0];
-      const [xStr, yStr] = cursorLine.split(",");
-      const x = parseInt(xStr);
-      const y = parseInt(yStr);
-      const cursor = (!isNaN(x) && !isNaN(y)) ? { x, y } : null;
-      results.set(target, { lines, cursor });
-    }
-    return results;
   }
 
   captureScrollback(target: string): string[] {
@@ -149,13 +73,12 @@ export class TmuxCapture {
 
   sendText(target: string, text: string): void {
     const cmd = [...this.sshPrefix, "tmux", "send-keys", "-l", "-t", target, text];
-    // Fire-and-forget async to avoid blocking event loop on loaded machines
-    this.asyncExec(cmd);
+    this.exec(cmd);
   }
 
   sendKey(target: string, key: string): void {
     const cmd = [...this.sshPrefix, "tmux", "send-keys", "-t", target, key];
-    this.asyncExec(cmd);
+    this.exec(cmd);
   }
 
   sendRaw(target: string, data: string): void {
@@ -525,6 +448,6 @@ export class TmuxCapture {
       "-o", "StrictHostKeyChecking=no"];
     if (key) sshCmd.push("-i", key);
     sshCmd.push(host);
-    return new TmuxCapture(bunExec, sshCmd, bunExecAsync);
+    return new TmuxCapture(bunExec, sshCmd);
   }
 }
