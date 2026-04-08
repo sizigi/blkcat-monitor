@@ -524,6 +524,7 @@ export function createServer(opts: ServerOptions) {
           if (msg.text) fwd.text = msg.text;
           if (msg.key) fwd.key = msg.key;
           if (msg.data) fwd.data = msg.data;
+          fwd.ts = Date.now();
           machine.agent.send(JSON.stringify(fwd));
         }
       } else if (msg.type === "start_session") {

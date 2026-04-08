@@ -101,6 +101,7 @@ export class AgentConnection {
       try {
         const msg: ServerToAgentMessage = JSON.parse(ev.data as string);
         if (msg.type === "input") {
+          if ((msg as any).ts) console.log(`[input-lag] server→agent: ${Date.now() - (msg as any).ts}ms`);
           this.opts.onInput({ sessionId: msg.sessionId, text: msg.text, key: msg.key, data: msg.data });
         } else if (msg.type === "start_session") {
           this.opts.onStartSession?.(msg.args, msg.cwd, msg.name, msg.cliTool);
