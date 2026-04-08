@@ -149,25 +149,27 @@ export class AgentConnection {
     }
   }
 
-  // Output queue: buffer output messages and drain them with delays
-  // to avoid TCP backpressure blocking input on high-latency links.
-  private outputQueue: string[] = [];
-  private draining = false;
+  // Per-session output throttle: on high-latency links, rapid ws.send()
+  // fills the TCP buffer and blocks input.  Keep only the latest output
+  // per session and flush at a fixed interval.
+  private pendingOutputs = new Map<string, string>(); // sessionId → latest JSON
+  private outputFlushTimer: ReturnType<typeof setInterval> | null = null;
+  private readonly OUTPUT_FLUSH_INTERVAL = 100; // ms between flushes
 
-  private queueOutput(data: string) {
-    this.outputQueue.push(data);
-    if (!this.draining) this.drainOutputQueue();
+  private queueOutput(sessionId: string, data: string) {
+    // Always keep only the latest output per session (newer overwrites older)
+    this.pendingOutputs.set(sessionId, data);
+    if (!this.outputFlushTimer) {
+      this.outputFlushTimer = setInterval(() => this.flushOutputs(), this.OUTPUT_FLUSH_INTERVAL);
+    }
   }
 
-  private async drainOutputQueue() {
-    this.draining = true;
-    while (this.outputQueue.length > 0) {
-      const msg = this.outputQueue.shift()!;
-      this.safeSend(msg);
-      // Wait 15ms between sends to let TCP flush and allow input processing
-      await new Promise((r) => setTimeout(r, 15));
-    }
-    this.draining = false;
+  private flushOutputs() {
+    if (this.pendingOutputs.size === 0) return;
+    // Send one session per flush to spread writes over time
+    const [sessionId, data] = this.pendingOutputs.entries().next().value!;
+    this.pendingOutputs.delete(sessionId);
+    this.safeSend(data);
   }
 
   waitForOpen(): Promise<void> { return this.openPromise; }
@@ -190,7 +192,7 @@ export class AgentConnection {
     };
     if (waitingForInput) msg.waitingForInput = true;
     if (cursor) msg.cursor = cursor;
-    this.queueOutput(JSON.stringify(msg));
+    this.queueOutput(sessionId, JSON.stringify(msg));
   }
 
   updateSessions(sessions: SessionInfo[]) {
