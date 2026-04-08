@@ -595,6 +595,8 @@ async function main() {
     const linesChanged = hasChanged(prev, lines);
     const cursorChanged = cursorKey !== (prevCursors.get(paneId) ?? "");
     if (linesChanged || cursorChanged) {
+      // Skip output when WebSocket has backpressure to avoid blocking input
+      if (conn.backpressure) return;
       sendCount++;
       const allSess = [...autoSessions, ...manualSessions];
       const sess = allSess.find((s) => s.id === paneId);

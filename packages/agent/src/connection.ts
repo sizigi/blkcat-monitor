@@ -150,6 +150,11 @@ export class AgentConnection {
     }
   }
 
+  /** Returns true if the WebSocket send buffer has significant backpressure. */
+  get backpressure(): boolean {
+    return this.ws?.bufferedAmount > 64 * 1024; // >64KB queued
+  }
+
   waitForOpen(): Promise<void> { return this.openPromise; }
 
   register(sessions: SessionInfo[]) {
