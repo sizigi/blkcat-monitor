@@ -76,11 +76,9 @@ async function main() {
     if (data) cap.sendRaw(sessionId, data);
     else if (text) cap.sendText(sessionId, text);
     if (key) cap.sendKey(sessionId, key);
-    // Burst-poll after input to reduce keystroke-to-screen latency.
-    // Multiple polls catch both fast programs (shell echo) and slower ones (claude, vim).
-    for (const delay of [5, 30, 80]) {
-      setTimeout(() => pollPaneAsync(sessionId), delay);
-    }
+    // Burst-poll disabled on high-latency links — the per-pane subprocess
+    // spawning under load causes more harm (TCP backpressure from output
+    // responses) than the ~150ms poll latency it saves.
   }
 
   function handleCloseSession(sessionId: string) {
