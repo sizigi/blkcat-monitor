@@ -588,12 +588,16 @@ async function main() {
   }
 
   /** Process poll results and send output if changed. */
+  let sendCount = 0;
+  setInterval(() => { if (sendCount > 0) { console.log(`[poll] sent ${sendCount} outputs last interval`); sendCount = 0; } }, 5000);
+
   function processPollResult(paneId: string, lines: string[], cursor: { x: number; y: number } | null) {
     const prev = prevLines.get(paneId) ?? [];
     const cursorKey = cursor ? `${cursor.y},${cursor.x}` : "";
     const linesChanged = hasChanged(prev, lines);
     const cursorChanged = cursorKey !== (prevCursors.get(paneId) ?? "");
     if (linesChanged || cursorChanged) {
+      sendCount++;
       const allSess = [...autoSessions, ...manualSessions];
       const sess = allSess.find((s) => s.id === paneId);
       const waitingForInput = sess?.cliTool ? detectWaitingForInput(lines) : false;
