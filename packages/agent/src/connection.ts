@@ -34,6 +34,7 @@ export class AgentConnection {
   private openPromise: Promise<void>;
   private connected = false;
   private closed = false;
+  private _lastInputTime = 0;
   private delay = 1000;
   private readonly MAX_DELAY = 30000;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -101,6 +102,12 @@ export class AgentConnection {
       try {
         const msg: ServerToAgentMessage = JSON.parse(ev.data as string);
         if (msg.type === "input") {
+          const now = Date.now();
+          if (this._lastInputTime) {
+            const gap = now - this._lastInputTime;
+            if (gap > 500) console.log(`[input-gap] ${gap}ms between inputs`);
+          }
+          this._lastInputTime = now;
           this.opts.onInput({ sessionId: msg.sessionId, text: msg.text, key: msg.key, data: msg.data });
         } else if (msg.type === "start_session") {
           this.opts.onStartSession?.(msg.args, msg.cwd, msg.name, msg.cliTool);

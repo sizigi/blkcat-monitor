@@ -122,6 +122,7 @@ async function readSkillsDir(dir: string): Promise<{ name: string; files: { path
 
 export function createServer(opts: ServerOptions) {
   const machines = new Map<string, MachineState>();
+  const inputTimestamps: Record<string, number> = {};
   const dashboards = new Set<any>();
   const outboundAgents = new Map<string, OutboundAgent>();
   const inboundAgents = new WeakMap<object, AgentSocket>();
@@ -509,6 +510,13 @@ export function createServer(opts: ServerOptions) {
       if (!msg) return;
 
       if (msg.type === "input") {
+        const now = Date.now();
+        const lastKey = `input:${msg.machineId}:${msg.sessionId}`;
+        const lastTime = (inputTimestamps as any)[lastKey] ?? 0;
+        if (lastTime && now - lastTime > 500) {
+          console.log(`[input-gap] browser→server: ${now - lastTime}ms for ${msg.machineId}`);
+        }
+        (inputTimestamps as any)[lastKey] = now;
         const machine = machines.get(msg.machineId);
         if (machine) {
           // Track this dashboard as the active resize owner for this session
