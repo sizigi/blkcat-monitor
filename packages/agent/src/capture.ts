@@ -342,7 +342,8 @@ export class TmuxCapture {
     const target = result.stdout.trim();
     // Unset CLAUDECODE so Claude Code doesn't refuse to start when blkcat
     // itself is running inside a Claude Code session.
-    this.sendText(target, `unset CLAUDECODE; ${fullCmd}`);
+    // Disable adaptive thinking to reduce token usage.
+    this.sendText(target, `unset CLAUDECODE; CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING=1 ${fullCmd}`);
     this.sendKey(target, "Enter");
     return target;
   }
