@@ -61,3 +61,36 @@ When adding new features, changing configuration options, or modifying the WebSo
 - Display names in `useDisplayNames` are scoped by `machineId:sessionId` to prevent cross-machine collisions in localStorage
 - Agent auto-installs Claude Code hooks on startup (`hooks-install.ts`) to forward hook events (Stop, Notification, PermissionRequest) to the dashboard
 - **Agents must always run inside a tmux session**, never via `nohup &` or bare background processes. Use `tmux send-keys` to start/restart agents on remote machines. Agent config uses env vars (`BLKCAT_LISTEN_PORT`, `BLKCAT_HOOKS_PORT`), not CLI flags.
+- Agent config can also be set via `~/.blkcat/agent.json` (serverUrl, authToken, hooksPort, etc.) to keep secrets out of command lines and shell history. Env vars take precedence over the config file.
+
+## Deploying Agent on Compute Nodes (Enroot/Slurm)
+
+Compute nodes inside enroot containers don't have bun or tmux pre-installed. After getting an interactive job (`srun`), set up the agent:
+
+```bash
+# 1. Install bun
+curl -fsSL https://bun.sh/install | bash
+export PATH="$HOME/.bun/bin:$PATH"
+
+# 2. Install tmux (no root needed — use AppImage + extract for FUSE-less containers)
+curl -fsSL https://github.com/nelsonenzo/tmux-appimage/releases/download/3.5a/tmux.appimage -o ~/tmux-appimage && chmod +x ~/tmux-appimage
+~/tmux-appimage --appimage-extract
+mv squashfs-root/usr/bin/tmux ~/tmux-bin
+rm -rf squashfs-root ~/tmux-appimage
+ln -s ~/tmux-bin ~/tmux   # or ln -s ~/tmux-bin /usr/local/bin/tmux if you have write access
+export PATH="$HOME:$PATH"
+
+# 3. Clone repo and install deps
+git clone git@github.com:sizigi/blkcat-monitor.git ~/blkcat-monitor
+cd ~/blkcat-monitor && bun install
+
+# 4. Start tmux and agent
+mkdir -p /tmp/tmux-$(id -u)
+tmux new-session -d -s blkcat-agent
+tmux send-keys -t blkcat-agent \
+  "cd ~/blkcat-monitor && BLKCAT_SERVER_URL=wss://<server-ip>:443/ws/agent BLKCAT_AUTH_TOKEN=<token> bun packages/agent/src/index.ts" Enter
+```
+
+To persist across jobs, commit these tools into the enroot container image.
+
+**Verify:** `tmux capture-pane -t blkcat-agent -p -S -5` should show `Connected to wss://...`.
